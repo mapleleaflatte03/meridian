@@ -635,7 +635,35 @@ _PUBLIC_PAYLOAD_WORDING_REPLACEMENTS = (
     ('founding_service_only', 'host_bound_service_only'),
     ('founding_workspace_local', 'host_bound_workspace_local'),
     ('founding_locked', 'host_bound_locked'),
+    ('founding-locked', 'host-bound-locked'),
+    ('founding-only', 'host-bound only'),
+    ('founding only', 'host-bound only'),
+    ('founding institution only', 'host-bound institution only'),
+    ('founding institution', 'host-bound institution'),
+    ('founding_default', 'configured_default'),
     ('Founder-Backed Build', 'Maintainer-Backed Build'),
+)
+
+_PUBLIC_STATUS_KEY_REPLACEMENTS = {
+    'pilot_intake': 'community_intake',
+    'public_checkout_paths': 'public_support_paths',
+    'checkout_claimed_count': 'support_claimed_count',
+    'checkout_capture_path': 'capture_path',
+    'checkout_capture': 'capture',
+    'subscription_preview': 'service_preview',
+    'checkout_preview_publication_enabled': 'support_preview_publication_enabled',
+    'pilot_intake_requested': 'community_intake_requested',
+    'pilot_intake_reviewed': 'community_intake_reviewed',
+}
+
+_PUBLIC_STATUS_VALUE_REPLACEMENTS = (
+    ('public_checkout', 'public_support'),
+    ('checkout preview', 'support preview'),
+    ('checkout capture', 'support capture'),
+    ('checkout-capture', 'capture-deprecated'),
+    ('pilot_intake', 'community_intake'),
+    ('/api/pilot/intake', '/api/intake/deprecated'),
+    ('/api/subscriptions/checkout-capture', '/api/subscriptions/capture/deprecated'),
 )
 
 
@@ -650,6 +678,42 @@ def _normalize_public_payload_wording(value):
             normalized = normalized.replace(source, target)
         return normalized
     return value
+
+
+def _sanitize_public_status_payload(payload):
+    normalized = _normalize_public_payload_wording(payload)
+
+    def _walk(value):
+        if isinstance(value, dict):
+            rewritten = {}
+            for key, raw in value.items():
+                key_name = _PUBLIC_STATUS_KEY_REPLACEMENTS.get(key, key)
+                rewritten[key_name] = _walk(raw)
+            return rewritten
+        if isinstance(value, list):
+            return [_walk(item) for item in value]
+        if isinstance(value, str):
+            text = value
+            for source, target in _PUBLIC_STATUS_VALUE_REPLACEMENTS:
+                text = text.replace(source, target)
+            return text
+        return value
+
+    cleaned = _walk(normalized)
+    service_state = cleaned.get('service_state')
+    if isinstance(service_state, dict):
+        community = service_state.get('community_intake')
+        if isinstance(community, dict):
+            request_paths = dict(community.get('request_paths') or {})
+            if request_paths:
+                request_paths['submit'] = '/api/intake/deprecated'
+                request_paths['inspect'] = '/api/intake/deprecated'
+                request_paths['operator_inspect'] = '/api/intake/deprecated/operator'
+                request_paths['operator_review'] = '/api/intake/deprecated/operator/review'
+                community['request_paths'] = request_paths
+            if isinstance(community.get('meta'), dict):
+                community['meta']['offer_scope'] = 'open_source_support_intake_deprecated'
+    return cleaned
 
 
 def _institution_template_snapshot(org_id, org=None):
@@ -4038,7 +4102,7 @@ def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expi
 
 # ── API data builders ────────────────────────────────────────────────────────
 
-def api_status(context_source='founding_default', institution_context=None):
+def api_status(context_source='configured_default', institution_context=None):
     if institution_context is not None:
         inst_ctx = institution_context
     else:
@@ -5027,7 +5091,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         if path == '/' or path == '/workspace':
             return self._html(DASHBOARD_HTML)
         elif path == '/api/status':
-            return self._json(api_status(institution_context=inst_ctx))
+            return self._json(_sanitize_public_status_payload(api_status(institution_context=inst_ctx)))
         elif path == '/api/context':
             host_identity, admission_registry = _runtime_host_state(org_id)
             response = {

@@ -474,8 +474,10 @@ class GatewayStatusCacheConsistencyTests(unittest.TestCase):
 
         self.assertIn("setup_intake", normalized["service_state"])
         self.assertNotIn("pilot_intake", normalized["service_state"])
+        self.assertIn("service_preview", normalized["service_state"])
+        self.assertNotIn("subscription_preview", normalized["service_state"])
         self.assertEqual(
-            normalized["service_state"]["subscription_preview"]["queue_paths"]["capture"],
+            normalized["service_state"]["service_preview"]["queue_paths"]["capture"],
             "deprecated_open_source_mode",
         )
         self.assertIn(

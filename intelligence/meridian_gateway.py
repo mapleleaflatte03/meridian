@@ -10419,9 +10419,9 @@ def _status_payload_repair_treasury(payload: dict[str, Any]) -> dict[str, Any]:
 _STATUS_WORDING_REPLACEMENTS: tuple[tuple[str, str], ...] = (
     ("founder_led_pilot_with_public_paid_checkout", "open_source_setup_only"),
     ("pilot_intake_with_public_checkout_preview", "deprecated_intake_open_source_mode"),
-    ("/api/pilot/intake/operator/review", "/pilot"),
-    ("/api/pilot/intake/operator", "/pilot"),
-    ("/api/pilot/intake", "/pilot"),
+    ("/api/pilot/intake/operator/review", "/setup"),
+    ("/api/pilot/intake/operator", "/setup"),
+    ("/api/pilot/intake", "/setup"),
     ("/api/subscriptions/checkout-capture", "deprecated_capture_open_source_mode"),
     ("Deliver brief through the current honest customer path", "Deliver brief through the current honest operator path"),
     (
@@ -10440,9 +10440,15 @@ _STATUS_WORDING_REPLACEMENTS: tuple[tuple[str, str], ...] = (
 )
 
 _STATUS_KEY_REPLACEMENTS: dict[str, str] = {
+    "pilot_intake": "community_intake",
+    "subscription_preview": "service_preview",
     "public_checkout_paths": "public_support_paths",
+    "checkout_preview_publication_enabled": "support_preview_publication_enabled",
     "checkout_claimed_count": "support_claimed_count",
     "checkout_capture_path": "capture_path",
+    "checkout_capture": "capture",
+    "pilot_intake_requested": "community_intake_requested",
+    "pilot_intake_reviewed": "community_intake_reviewed",
 }
 
 
@@ -10476,28 +10482,28 @@ def _normalize_status_payload_for_open_source(payload: dict[str, Any]) -> dict[s
 
     service_state = normalized.get("service_state")
     if isinstance(service_state, dict):
-        if isinstance(service_state.get("pilot_intake"), dict):
+        if isinstance(service_state.get("community_intake"), dict):
             service_state["setup_intake"] = {
                 "status": "deprecated",
                 "reason": "open_source_mode",
                 "message": "Public intake preview routes are deprecated in open-source mode.",
-                "setup_path": "/pilot",
+                "setup_path": "/setup",
             }
-            service_state.pop("pilot_intake", None)
+            service_state.pop("community_intake", None)
 
         subscriptions_state = service_state.get("subscriptions")
         if isinstance(subscriptions_state, dict):
             subscriptions_state["public_support_paths"] = {}
             subscriptions_state["open_source_mode"] = True
 
-        preview_state = service_state.get("subscription_preview")
+        preview_state = service_state.get("service_preview")
         if isinstance(preview_state, dict):
-            preview_state["public_intake_path"] = "/pilot"
+            preview_state["public_intake_path"] = "/setup"
             queue_paths = preview_state.get("queue_paths")
             if isinstance(queue_paths, dict):
-                queue_paths["public_intake"] = "/pilot"
-                queue_paths["source_review"] = "/pilot"
-                queue_paths.pop("checkout_capture", None)
+                queue_paths["public_intake"] = "/setup"
+                queue_paths["source_review"] = "/setup"
+                queue_paths.pop("capture", None)
                 queue_paths["capture"] = "deprecated_open_source_mode"
 
     observability = normalized.get("observability")
@@ -10510,9 +10516,9 @@ def _normalize_status_payload_for_open_source(payload: dict[str, Any]) -> dict[s
                 if isinstance(actions, dict):
                     remapped_actions: dict[str, Any] = {}
                     for key, value in actions.items():
-                        if key == "pilot_intake_requested":
+                        if key in {"pilot_intake_requested", "community_intake_requested"}:
                             remapped_actions["setup_intake_requested_deprecated"] = value
-                        elif key == "pilot_intake_reviewed":
+                        elif key in {"pilot_intake_reviewed", "community_intake_reviewed"}:
                             remapped_actions["setup_intake_reviewed_deprecated"] = value
                         else:
                             remapped_actions[key] = value
