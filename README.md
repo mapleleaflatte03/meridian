@@ -15,6 +15,9 @@ Legacy repositories are now mirrors for backward compatibility:
 - `meridian-kernel` -> `meridian/kernel`
 - `meridian-intelligence` -> `meridian/intelligence`
 
+Archived mirror and redirect details:
+- `docs/REPO_MIGRATION_MAP.md`
+
 ## Vision Lock
 
 Meridian exists to advance open research and public infrastructure for governed digital labor:
