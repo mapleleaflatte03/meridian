@@ -1,6 +1,6 @@
 # Meridian (Monorepo)
 
-Meridian is an open-source, governance-first stack for local AI labor:
+Meridian is an open research platform for governed local AI agents:
 
 - `loom/` — sovereign local runtime and PoGE execution layer (Rust)
 - `kernel/` — constitutional governance core (Institution, Agent, Authority, Treasury, Court + 3-ledger economy)
@@ -14,6 +14,21 @@ Legacy repositories are now mirrors for backward compatibility:
 - `meridian-loom` -> `meridian/loom`
 - `meridian-kernel` -> `meridian/kernel`
 - `meridian-intelligence` -> `meridian/intelligence`
+
+## Vision Lock
+
+Meridian exists to advance open research and public infrastructure for governed digital labor:
+
+- local-first runtime execution
+- constitutional governance primitives
+- verifiable proof and auditability
+- contribution-first open-source collaboration
+
+## Non-Goals
+
+- no commercial lock-in path in public onboarding
+- no mandatory paid checkout flow
+- no closed governance modules hidden from community review
 
 ## Why Monorepo
 
