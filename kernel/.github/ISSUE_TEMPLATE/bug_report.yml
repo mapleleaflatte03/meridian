@@ -1,0 +1,67 @@
+name: Bug Report
+description: Report a bug in the Meridian Constitutional Kernel
+labels: ["bug", "triage"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened? What did you expect to happen?
+      placeholder: Describe the bug clearly and concisely.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this?
+      placeholder: |
+        1. Run quickstart.py
+        2. Navigate to ...
+        3. Click on ...
+        4. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened instead?
+    validations:
+      required: true
+  - type: input
+    id: python-version
+    attributes:
+      label: Python Version
+      description: Output of `python3 --version`
+      placeholder: "3.11.4"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      placeholder: "Ubuntu 22.04 / macOS 14 / Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant Logs
+      description: Paste any error messages or logs.
+      render: shell
+  - type: dropdown
+    id: primitive
+    attributes:
+      label: Affected Primitive
+      description: Which kernel primitive is affected?
+      options:
+        - Institution
+        - Agent
+        - Authority
+        - Treasury
+        - Court
+        - Economy Layer
+        - Workspace
+        - Quickstart
+        - Other

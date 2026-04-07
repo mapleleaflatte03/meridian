@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Meridian Kernel surface panels</title>
+  <desc id="desc">Three dark panels showing the five primitives, public proof surface, and runtime boundary.</desc>
+  <defs>
+    <style>
+      .bg { fill: #05070b; }
+      .panel { fill: #0c1117; stroke: #253240; stroke-width: 2; }
+      .soft { fill: #0f1720; }
+      .line { fill: #e6edf5; font: 600 20px/1 "JetBrains Mono", monospace; }
+      .body { fill: #8ca0b3; font: 500 18px/1.45 "JetBrains Mono", monospace; }
+      .title { fill: #f3f7fb; font: 700 26px/1 "Space Grotesk", Inter, sans-serif; letter-spacing: 1.2px; }
+      .tag { fill: #4fc3f7; font: 700 14px/1 "JetBrains Mono", monospace; letter-spacing: 2px; text-transform: uppercase; }
+      .ok { fill: #8ce99a; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .warn { fill: #ffd166; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .rail { fill: #4fc3f7; opacity: .9; }
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="720" rx="28"/>
+  <rect class="panel" x="32" y="32" width="1136" height="656" rx="24"/>
+  <rect class="soft" x="64" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="432" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="800" y="72" width="336" height="576" rx="20"/>
+  <rect class="rail" x="64" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="432" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="800" y="72" width="336" height="6" rx="3"/>
+
+  <text x="88" y="118" class="tag">Five Primitives</text>
+  <text x="88" y="160" class="title">Institution, Authority, Treasury, Court</text>
+  <text x="88" y="208" class="body">Institution          charter and lifecycle</text>
+  <text x="88" y="240" class="body">Agent                identity, scope, budget</text>
+  <text x="88" y="272" class="body">Authority            warrants, kill switch</text>
+  <text x="88" y="304" class="body">Treasury             reserve floor, runway</text>
+  <text x="88" y="336" class="body">Court                cases, sanctions, appeals</text>
+  <text x="88" y="388" class="ok">KERNEL IS REAL TODAY</text>
+  <text x="88" y="420" class="body">Runtime-neutral governance surfaces.</text>
+
+  <text x="456" y="118" class="tag">Public Proof</text>
+  <text x="456" y="160" class="title">docs/PROOF_MATRIX.md</text>
+  <text x="456" y="208" class="body">public bundle        three-host federation summary</text>
+  <text x="456" y="240" class="body">reference adapter    Legacy compatibility proof</text>
+  <text x="456" y="272" class="body">live receipt         optional founding-host manifest</text>
+  <text x="456" y="324" class="ok">PROOF EXISTS</text>
+  <text x="456" y="356" class="body">Not all runtime claims are proven.</text>
+
+  <text x="824" y="118" class="tag">Runtime Boundary</text>
+  <text x="824" y="160" class="title">Kernel above runtimes</text>
+  <text x="824" y="208" class="body">local_kernel         built-in reference path</text>
+  <text x="824" y="240" class="body">legacy_v1_compatible  tested adapter seam</text>
+  <text x="824" y="272" class="body">loom_native         primary runtime surface</text>
+  <text x="824" y="320" class="warn">KERNEL IS NOT A RUNNER</text>
+  <text x="824" y="352" class="body">Execution remains a separate program.</text>
+</svg>

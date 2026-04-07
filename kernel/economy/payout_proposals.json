@@ -1,0 +1,72 @@
+{
+  "proposals": {},
+  "state_machine": {
+    "states": [
+      "draft",
+      "submitted",
+      "under_review",
+      "approved",
+      "dispute_window",
+      "executed",
+      "rejected",
+      "cancelled"
+    ],
+    "transitions": {
+      "draft": [
+        "submitted",
+        "cancelled"
+      ],
+      "submitted": [
+        "under_review",
+        "rejected",
+        "cancelled"
+      ],
+      "under_review": [
+        "approved",
+        "rejected"
+      ],
+      "approved": [
+        "dispute_window"
+      ],
+      "dispute_window": [
+        "executed",
+        "rejected"
+      ],
+      "executed": [],
+      "rejected": [],
+      "cancelled": []
+    },
+    "dispute_window_hours": 72,
+    "notes": "Proposals require evidence of contribution, a reviewer, and owner approval. 72-hour dispute window between approval and execution."
+  },
+  "proposal_schema": {
+    "id": "string -- unique proposal ID",
+    "contributor_id": "string -- references contributors.json",
+    "amount_usd": "number -- payout amount",
+    "currency": "string -- USDC or other",
+    "contribution_type": "string -- from contribution_types list",
+    "evidence": {
+      "pr_urls": [
+        "list of PR URLs"
+      ],
+      "commit_hashes": [
+        "list of commit hashes"
+      ],
+      "issue_refs": [
+        "list of issue references"
+      ],
+      "description": "string -- summary of contribution"
+    },
+    "recipient_wallet_id": "string -- references wallets.json, must be Level 3+",
+    "proposed_by": "string -- who created the proposal",
+    "reviewed_by": "string -- who reviewed",
+    "approved_by": "string -- who approved (must be owner or delegated authority)",
+    "status": "string -- from state_machine.states",
+    "created_at": "ISO 8601 timestamp",
+    "updated_at": "ISO 8601 timestamp",
+    "dispute_window_ends_at": "ISO 8601 timestamp or null",
+    "executed_at": "ISO 8601 timestamp or null",
+    "tx_hash": "string or null -- on-chain transaction hash"
+  },
+  "updatedAt": "2026-03-20T00:00:00Z"
+}

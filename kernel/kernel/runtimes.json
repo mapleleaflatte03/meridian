@@ -1,0 +1,254 @@
+{
+  "runtimes": {
+    "local_kernel": {
+      "id": "local_kernel",
+      "label": "Local Kernel Runtime",
+      "description": "Built-in local runtime used by the Meridian quickstart and governed workspace demo. Agents run in the same process or via subprocess on the local machine.",
+      "type": "local",
+      "protocol_support": [
+        "custom"
+      ],
+      "identity_mode": "string_id",
+      "execution_ownership": "meridian",
+      "capability_exposure": [
+        "research",
+        "write",
+        "qa",
+        "execute",
+        "compress",
+        "manage"
+      ],
+      "contract_compliance": {
+        "agent_identity": true,
+        "action_envelope": true,
+        "cost_attribution": true,
+        "approval_hook": true,
+        "audit_emission": true,
+        "sanction_controls": true,
+        "budget_gate": true
+      },
+      "integration": {
+        "treasury": "full",
+        "audit": "full",
+        "court": "full"
+      },
+      "adapter_available": true,
+      "status": "active",
+      "transport_contract": {
+        "supported_protocols": ["custom"],
+        "auth_shapes": ["none"],
+        "remote_audit_required": false,
+        "external_cost_attribution_required": false,
+        "admission_policy": "kernel_local"
+      },
+      "notes": "Reference implementation. All seven contract requirements satisfied natively. Used by kernel/workspace.py and examples/intelligence/."
+    },
+    "loom_native": {
+      "id": "loom_native",
+      "label": "Meridian Loom Runtime",
+      "description": "Meridian-native execution runtime in Rust. Primary runtime for the Meridian stack with session management, capability dispatch, and governed worker execution.",
+      "type": "hosted",
+      "protocol_support": [
+        "custom",
+        "MCP"
+      ],
+      "identity_mode": "string_id",
+      "execution_ownership": "meridian",
+      "capability_exposure": [
+        "research",
+        "write",
+        "qa",
+        "execute",
+        "compress",
+        "manage",
+        "deliver"
+      ],
+      "contract_compliance": {
+        "agent_identity": true,
+        "action_envelope": true,
+        "cost_attribution": true,
+        "approval_hook": true,
+        "audit_emission": true,
+        "sanction_controls": true,
+        "budget_gate": true
+      },
+      "integration": {
+        "treasury": "full",
+        "audit": "full",
+        "court": "full"
+      },
+      "adapter_available": false,
+      "status": "active",
+      "transport_contract": {
+        "supported_protocols": ["openai_rest", "codex_session", "ollama_local", "mcp", "custom_http"],
+        "auth_shapes": ["none", "bearer_token", "oauth_session", "static_header"],
+        "remote_audit_required": true,
+        "external_cost_attribution_required": true,
+        "admission_policy": "loom_first"
+      },
+      "notes": "Primary Meridian runtime. Loom provides native 7/7 contract compliance through governed capability dispatch, session provenance, and PoGE receipts."
+    },
+    "openfang_compatible": {
+      "id": "openfang_compatible",
+      "label": "OpenFang-Compatible Runtime",
+      "description": "Open-source agentic runtime placeholder. Meridian can govern agents from OpenFang-compatible runtimes once an adapter satisfying the constitutional contract is implemented.",
+      "type": "hosted",
+      "protocol_support": [
+        "custom"
+      ],
+      "identity_mode": "string_id",
+      "execution_ownership": "runtime",
+      "capability_exposure": [],
+      "contract_compliance": {
+        "agent_identity": null,
+        "action_envelope": null,
+        "cost_attribution": null,
+        "approval_hook": null,
+        "audit_emission": null,
+        "sanction_controls": null,
+        "budget_gate": null
+      },
+      "integration": {
+        "treasury": "planned",
+        "audit": "planned",
+        "court": "planned"
+      },
+      "adapter_available": false,
+      "status": "planned",
+      "notes": "Placeholder. No adapter implemented yet. Contract compliance unknown pending runtime API review."
+    },
+    "mcp_generic": {
+      "id": "mcp_generic",
+      "label": "Generic MCP Runtime",
+      "description": "Any agent runtime that exposes tools and context via the Model Context Protocol (MCP, EIP 2024). Agent identity maps to MCP client ID. Actions map to tool calls.",
+      "type": "mcp_app",
+      "protocol_support": [
+        "MCP"
+      ],
+      "identity_mode": "mcp_client_id",
+      "execution_ownership": "runtime",
+      "capability_exposure": [
+        "tool_call",
+        "resource_read",
+        "prompt"
+      ],
+      "contract_compliance": {
+        "agent_identity": true,
+        "action_envelope": true,
+        "cost_attribution": null,
+        "approval_hook": null,
+        "audit_emission": null,
+        "sanction_controls": null,
+        "budget_gate": null
+      },
+      "integration": {
+        "treasury": "none",
+        "audit": "none",
+        "court": "none"
+      },
+      "adapter_available": false,
+      "status": "planned",
+      "notes": "MCP provides agent identity via client ID and action envelope via tool call schema. Cost attribution, approval hooks, audit emission, sanction controls, and budget gate all require a Meridian MCP middleware adapter. Planned for v0.2."
+    },
+    "a2a_generic": {
+      "id": "a2a_generic",
+      "label": "Generic A2A Runtime",
+      "description": "Any agent-to-agent capable runtime implementing the A2A interoperability protocol. Agent identity maps to A2A agent card. Inter-agent calls map to the action envelope.",
+      "type": "a2a_agent",
+      "protocol_support": [
+        "A2A"
+      ],
+      "identity_mode": "a2a_agent_card",
+      "execution_ownership": "runtime",
+      "capability_exposure": [
+        "task",
+        "stream",
+        "push_notify"
+      ],
+      "contract_compliance": {
+        "agent_identity": true,
+        "action_envelope": null,
+        "cost_attribution": null,
+        "approval_hook": null,
+        "audit_emission": null,
+        "sanction_controls": null,
+        "budget_gate": null
+      },
+      "integration": {
+        "treasury": "none",
+        "audit": "none",
+        "court": "none"
+      },
+      "adapter_available": false,
+      "status": "planned",
+      "notes": "A2A provides stable agent identity via agent card. Action envelope mapping from A2A task schema is partial. All treasury, audit, court integration requires a Meridian A2A adapter. Planned for v0.2."
+    },
+    "legacy_v1_compatible": {
+      "id": "legacy_v1_compatible",
+      "label": "Legacy V1 Compatibility Bridge",
+      "description": "Kernel-side compatibility bridge for pre-Loom integration paths. Used only for bounded legacy federation and adapter proof paths.",
+      "type": "hosted",
+      "protocol_support": [
+        "custom"
+      ],
+      "identity_mode": "string_id",
+      "execution_ownership": "runtime",
+      "capability_exposure": [
+        "research",
+        "write",
+        "qa",
+        "execute",
+        "compress",
+        "manage"
+      ],
+      "contract_compliance": {
+        "agent_identity": null,
+        "action_envelope": null,
+        "cost_attribution": null,
+        "approval_hook": null,
+        "audit_emission": null,
+        "sanction_controls": null,
+        "budget_gate": null
+      },
+      "integration": {
+        "treasury": "adapter",
+        "audit": "adapter",
+        "court": "adapter"
+      },
+      "adapter_available": true,
+      "status": "active",
+      "transport_contract": {
+        "supported_protocols": ["custom"],
+        "auth_shapes": ["none"],
+        "remote_audit_required": true,
+        "external_cost_attribution_required": true,
+        "admission_policy": "adapter_bridge"
+      },
+      "adapter_proof": {
+        "type": "reference_library",
+        "module": "adapters.legacy_v1_compatible",
+        "verification": [
+          "python3 kernel/tests/test_legacy_v1_adapter.py",
+          "python3 kernel/runtime_adapter.py check-proof --runtime_id legacy_v1_compatible"
+        ],
+        "notes": "Kernel-side bridge that keeps bounded legacy integration paths governable while Loom remains the primary Meridian runtime."
+      },
+      "notes": "Compatibility-only runtime seam. Not the primary Meridian runtime."
+    }
+  },
+  "contract_requirements": {
+    "agent_identity": "Runtime must provide a stable, unique agent ID that maps to a Meridian agent record. Identity must persist across sessions.",
+    "action_envelope": "Runtime must wrap each governed action with: agent_id, action_type, resource, estimated_cost_usd. Envelope is the input to check_authority() and check_budget().",
+    "cost_attribution": "Runtime must report actual cost post-action via spend reporting hook so Meridian can update metering records.",
+    "approval_hook": "Runtime must call check_authority(agent_id, action) before executing privileged actions and must block if the result is False.",
+    "audit_emission": "Runtime must emit structured audit events that Meridian can ingest into audit_log.jsonl. Minimum fields: timestamp, agent_id, action, outcome.",
+    "sanction_controls": "Runtime must query get_restrictions(agent_id) before each agent session and must disable or restrict agents under active sanctions.",
+    "budget_gate": "Runtime must call check_budget(agent_id, cost) before cost-bearing operations and must block if the result is False."
+  },
+  "compliance_thresholds": {
+    "compliant": 7,
+    "partial": 4,
+    "non_compliant": 0
+  },
+  "updatedAt": "2026-03-23T00:00:00Z"
+}

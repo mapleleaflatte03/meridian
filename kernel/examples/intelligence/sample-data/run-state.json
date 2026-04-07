@@ -1,0 +1,19 @@
+{
+  "jobs": [
+    {
+      "name": "deliver",
+      "state": {
+        "lastRunStatus": "ok",
+        "lastDelivered": true,
+        "lastRunAtMs": 1774003200000
+      }
+    },
+    {
+      "name": "qa",
+      "state": {
+        "lastRunStatus": "ok",
+        "lastRunAtMs": 1774001400000
+      }
+    }
+  ]
+}

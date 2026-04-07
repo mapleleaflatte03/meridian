@@ -1,0 +1,51 @@
+{
+  "accounts": {
+    "automated_loom_settlement": {
+      "balance_usd": 0.0,
+      "id": "automated_loom_settlement",
+      "label": "Automated Loom Settlement",
+      "notes": "Dedicated execution source for automated federation and x402 settlement flows.",
+      "purpose": "Legally segregated automated settlement hot wallet for Loom and x402 execution.",
+      "registered_by": "ops:provision_hot_wallet",
+      "reserve_floor_usd": 0.0,
+      "status": "active",
+      "wallet_id": "automated_loom_settlement_v1"
+    },
+    "company_treasury": {
+      "balance_usd": 0.0,
+      "id": "company_treasury",
+      "label": "Company Treasury",
+      "notes": "Authoritative balance is economy/ledger.json treasury.cash_usd. This file tracks account separation policy.",
+      "purpose": "Main pool for all inflows. Owner capital, customer payments, and sponsorship land here first.",
+      "reserve_floor_usd": 50.0,
+      "status": "active",
+      "wallet_id": "company_treasury_v1"
+    },
+    "contributor_payout_pool": {
+      "balance_usd": 0.0,
+      "id": "contributor_payout_pool",
+      "label": "Contributor Payout Pool",
+      "notes": "No wallet assigned. Requires owner approval to fund via transfer from company_treasury.",
+      "purpose": "Allocated funds for contributor bounties and payouts. Funded by transfer from company_treasury.",
+      "reserve_floor_usd": 0.0,
+      "status": "unfunded",
+      "wallet_id": null
+    },
+    "maintainer_support": {
+      "balance_usd": 0.0,
+      "id": "maintainer_support",
+      "label": "Maintainer Support",
+      "notes": "No wallet assigned. Requires owner approval to fund via transfer from company_treasury.",
+      "purpose": "Allocated funds for maintainer payouts. Funded by transfer from company_treasury.",
+      "reserve_floor_usd": 0.0,
+      "status": "unfunded",
+      "wallet_id": null
+    }
+  },
+  "transfer_policy": {
+    "audit_required": true,
+    "must_maintain_reserve": true,
+    "requires_owner_approval": true
+  },
+  "updatedAt": "2026-03-26T14:07:01Z"
+}

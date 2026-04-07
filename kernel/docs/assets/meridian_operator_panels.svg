@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Meridian operator panels</title>
+  <desc id="desc">Three dark panels showing doctor and health, proof bundle output, and Loom operator grammar.</desc>
+  <defs>
+    <style>
+      .bg { fill: #05070b; }
+      .panel { fill: #0c1117; stroke: #253240; stroke-width: 2; }
+      .soft { fill: #0f1720; }
+      .title { fill: #f3f7fb; font: 700 26px/1 "Space Grotesk", Inter, sans-serif; letter-spacing: 1.2px; }
+      .tag { fill: #4fc3f7; font: 700 14px/1 "JetBrains Mono", monospace; letter-spacing: 2px; text-transform: uppercase; }
+      .body { fill: #8ca0b3; font: 500 18px/1.45 "JetBrains Mono", monospace; }
+      .ok { fill: #8ce99a; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .warn { fill: #ffd166; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .rail { fill: #4fc3f7; opacity: .9; }
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="720" rx="28"/>
+  <rect class="panel" x="32" y="32" width="1136" height="656" rx="24"/>
+  <rect class="soft" x="64" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="432" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="800" y="72" width="336" height="576" rx="20"/>
+  <rect class="rail" x="64" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="432" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="800" y="72" width="336" height="6" rx="3"/>
+
+  <text x="88" y="118" class="tag">Doctor / Health</text>
+  <text x="88" y="160" class="title">Fast operator truth</text>
+  <text x="88" y="208" class="body">Meridian Loom // DOCTOR</text>
+  <text x="88" y="240" class="body">phase                official first-party runtime</text>
+  <text x="88" y="272" class="body">next_step            run exact follow-up</text>
+  <text x="88" y="324" class="ok">DIAGNOSE FIRST</text>
+
+  <text x="456" y="118" class="tag">Proof Surface</text>
+  <text x="456" y="160" class="title">Receipts, manifests, bundles</text>
+  <text x="456" y="208" class="body">proof matrix         what is proven</text>
+  <text x="456" y="240" class="body">manifest             what is merely declared</text>
+  <text x="456" y="272" class="body">attestation          future, not faked today</text>
+  <text x="456" y="324" class="ok">CLAIMS BOUND TO EVIDENCE</text>
+
+  <text x="824" y="118" class="tag">Loom Grammar</text>
+  <text x="824" y="160" class="title">Operator language, not log spam</text>
+  <text x="824" y="208" class="body">Meridian Loom // INIT</text>
+  <text x="824" y="240" class="body">Meridian Loom // SHADOW REPORT</text>
+  <text x="824" y="272" class="body">Meridian Loom // PARITY REPORT</text>
+  <text x="824" y="324" class="warn">DESIGNED BEFORE TUI</text>
+</svg>

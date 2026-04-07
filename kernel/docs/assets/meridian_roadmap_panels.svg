@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Meridian roadmap panels</title>
+  <desc id="desc">Three dark panels showing the current kernel, Loom scaffold, and future capsule/operator programs.</desc>
+  <defs>
+    <style>
+      .bg { fill: #05070b; }
+      .panel { fill: #0c1117; stroke: #253240; stroke-width: 2; }
+      .soft { fill: #0f1720; }
+      .title { fill: #f3f7fb; font: 700 26px/1 "Space Grotesk", Inter, sans-serif; letter-spacing: 1.2px; }
+      .tag { fill: #4fc3f7; font: 700 14px/1 "JetBrains Mono", monospace; letter-spacing: 2px; text-transform: uppercase; }
+      .body { fill: #8ca0b3; font: 500 18px/1.45 "JetBrains Mono", monospace; }
+      .ok { fill: #8ce99a; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .warn { fill: #ffd166; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .rail { fill: #4fc3f7; opacity: .9; }
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="720" rx="28"/>
+  <rect class="panel" x="32" y="32" width="1136" height="656" rx="24"/>
+  <rect class="soft" x="64" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="432" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="800" y="72" width="336" height="576" rx="20"/>
+  <rect class="rail" x="64" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="432" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="800" y="72" width="336" height="6" rx="3"/>
+
+  <text x="88" y="118" class="tag">Current</text>
+  <text x="88" y="160" class="title">Kernel + workspace + proof</text>
+  <text x="88" y="208" class="body">five primitives       live in OSS today</text>
+  <text x="88" y="240" class="body">proof matrix          public reruns exist</text>
+  <text x="88" y="272" class="body">live host             founding-only truth</text>
+  <text x="88" y="324" class="ok">BUILT NOW</text>
+
+  <text x="456" y="118" class="tag">Near-term</text>
+  <text x="456" y="160" class="title">Loom scaffold and shadow path</text>
+  <text x="456" y="208" class="body">public repo           meridian-loom</text>
+  <text x="456" y="240" class="body">operator rehearsal    init, doctor, parity</text>
+  <text x="456" y="272" class="body">proof boundary        still 0/7 proven hooks</text>
+  <text x="456" y="324" class="warn">PUBLIC, NOT MATURE</text>
+
+  <text x="824" y="118" class="tag">Future Programs</text>
+  <text x="824" y="160" class="title">Capsule, operator, runtime</text>
+  <text x="824" y="208" class="body">capsule               portable governed unit</text>
+  <text x="824" y="240" class="body">operator language     terminal-first doctrine</text>
+  <text x="824" y="272" class="body">native runtime        governed worker supervisor</text>
+  <text x="824" y="324" class="warn">DESIGNED NOW, PROVEN LATER</text>
+</svg>

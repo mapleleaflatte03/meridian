@@ -1,0 +1,20 @@
+{
+  "maintainers": {
+    "son_nguyen": {
+      "id": "son_nguyen",
+      "name": "Son Nguyen The",
+      "github": "mapleleaflatte03",
+      "role": "bdfl",
+      "status": "active",
+      "payout_wallet_id": null,
+      "added_at": "2026-03-20T00:00:00Z",
+      "notes": "Founder. No SIWE-verified wallet on file yet. Payout wallet assignment requires Level 3+ verification."
+    }
+  },
+  "roles": {
+    "bdfl": "Benevolent Dictator For Life -- final authority on project direction and treasury",
+    "core": "Core maintainer with merge rights and payout eligibility",
+    "maintainer": "Active maintainer with review and triage rights"
+  },
+  "updatedAt": "2026-03-20T00:00:00Z"
+}

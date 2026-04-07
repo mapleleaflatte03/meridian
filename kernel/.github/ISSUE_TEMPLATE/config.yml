@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions and Discussion
+    url: https://github.com/mapleleaflatte03/meridian-kernel/discussions
+    about: Ask questions and discuss ideas in GitHub Discussions
+  - name: Security Vulnerability
+    url: https://github.com/mapleleaflatte03/meridian-kernel/blob/main/SECURITY.md
+    about: Report security vulnerabilities privately (do not open a public issue)

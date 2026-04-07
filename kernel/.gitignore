@@ -1,0 +1,77 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# State files (generated at runtime)
+kernel/organizations.json
+kernel/agent_registry.json
+kernel/authority_queue.json
+kernel/court_records.json
+kernel/audit_log.jsonl
+kernel/metering.jsonl
+economy/authority_queue.json
+economy/court_records.json
+economy/ledger.json
+economy/revenue.json
+economy/transactions.jsonl
+economy/auto_score.log
+economy/subscriptions.json
+economy/subscriptions.json.bak
+economy/.subscriptions.lock
+economy/.accounting.lock
+economy/owner_ledger.json
+economy/federation_inbox.json
+economy/.federation_inbox.lock
+economy/settlement_adapters.json
+economy/*.lock
+economy/*.json.lock
+economy/*.db
+economy/payment_events.log
+economy/payment_monitor_state.json
+economy/runtime_budget_reservations.json
+economy/payout_execution_queue.json
+economy/payout_plan_approval_candidate_queue.json
+economy/payout_plan_preview_queue.json
+economy/pilot_intake.json
+economy/subscription_preview_queue.json
+economy/user_session_scores.json
+economy/warrants.json
+economy/cases.json
+economy/commitments.json
+economy/funding_sources.json
+economy/capsules/
+kernel/runtime_audit/
+capsules/
+treasury/funding_sources.json
+
+# Runtime
+.openclaw/
+.meridian/
+.claude/
+.env
+.hot-wallet-secrets/
+*.key
+*.pem
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+capsules/
+kernel-rs-explore/target/

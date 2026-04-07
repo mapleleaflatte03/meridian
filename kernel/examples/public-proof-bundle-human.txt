@@ -1,0 +1,59 @@
+Meridian Kernel // PUBLIC PROOF BUNDLE
+======================================
+generated_at:    2026-03-23T18:18:52+00:00
+bundle_version:  3
+reference_scope: oss_kernel_reference
+phase:           oss reference proofs + optional live host receipts
+boundary:        proves kernel reference surfaces; does not imply broad live deployment
+
+Reference proofs
+================
+three_host_federation:               PROVEN
+  boundary_name:                     
+  local_kernel_runtime_declared:     False
+  witness_archive_total_records:     0
+legacy_reference_adapter:            PROVEN
+  adapter_kind:                      reference_adapter
+  scope:                             kernel_side_reference_seam
+  action_gate_stage:                 ok
+  execution_message_type:            execution_request
+  audit_outcome:                     success
+
+Live receipts
+=============
+Live host manifest receipt
+--------------------------
+status:      NOT_REQUESTED
+route:       (none)
+reason:      no_live_manifest_url_supplied
+
+Live runtime proof receipt
+--------------------------
+status:      NOT_REQUESTED
+route:       (none)
+reason:      no_live_runtime_proof_url_supplied
+
+Local Loom runtime receipt
+--------------------------
+status:      CAPTURED
+route:       /tmp/meridian-kernel/kernel/runtime_audit/loom_runtime_events.jsonl
+fetched_at:  2026-03-23T18:16:57Z
+body_sha256: 
+runtime_evt: loom.runtime.v1::org_b7d95bae::agent_atlas::research::web_search::denied::budget_gate::job__org_b7d95bae__agent_atlas__research__f1f3d722543922af::execution__job__org_b7d95bae__agent_atlas__research__f1f3d722543922af__budget_gate__denied
+job_id:      job::org_b7d95bae::agent_atlas::research::f1f3d722543922af
+execution:   execution::job__org_b7d95bae__agent_atlas__research__f1f3d722543922af::budget_gate::denied
+parity_id:   parity::job__org_b7d95bae__agent_atlas__research__f1f3d722543922af::execution__job__org_b7d95bae__agent_atlas__research__f1f3d722543922af__budget_gate__denied::match
+budget:      decision_denied
+
+Not live proven
+===============
+- live multi-host federation between independent deployments
+- live end-to-end hosted runtime wiring
+- live non-internal settlement execution
+
+Next
+====
+1. Re-run with --format json when you need a machine-readable artifact.
+2. Pass --live-manifest-url to attach a truthful live host receipt.
+3. Treat every missing live receipt as boundary evidence, not a formatting bug.
+

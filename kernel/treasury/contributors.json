@@ -1,0 +1,21 @@
+{
+  "contributors": {},
+  "contribution_types": [
+    "code",
+    "documentation",
+    "security_report",
+    "bug_report",
+    "design",
+    "vertical_example",
+    "test_coverage",
+    "review",
+    "community"
+  ],
+  "registration_requirements": {
+    "github_account": true,
+    "signed_commits": false,
+    "payout_wallet_level": 3,
+    "notes": "Contributors register by submitting accepted PRs. Payout eligibility requires a Level 3+ verified wallet."
+  },
+  "updatedAt": "2026-03-20T00:00:00Z"
+}
