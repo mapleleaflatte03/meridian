@@ -13,9 +13,9 @@ PUBLIC_SURFACE_GET_ROUTES = (
     ('/api/context', 'Bound institution/runtime context'),
     ('/api/runtimes', 'Runtime registry with contract compliance and binding usage'),
     ('/api/institution/template', 'Institution template contract for constitutional deployments'),
-    ('/api/institution/license/catalog', 'Institution-license catalog with pricing and boundary notes'),
+    ('/api/institution/license/catalog', 'Deprecated (410): institution-license catalog disabled in open-source mode'),
     ('/api/subscriptions', 'Subscription service state'),
-    ('/api/pilot/intake', 'Public pilot intake queue snapshot'),
+    ('/api/pilot/intake', 'Deprecated (410): pilot intake disabled in open-source mode'),
     ('/api/federation/manifest', 'Public host federation manifest'),
     ('/api/runtime-proof', 'Public live Loom runtime proof receipt'),
     ('/api/runtime-proof-contract', 'Public bounded Loom surface-proof contract'),
@@ -23,9 +23,9 @@ PUBLIC_SURFACE_GET_ROUTES = (
 )
 
 PUBLIC_SURFACE_POST_ROUTES = (
-    ('/api/pilot/intake', 'Public pilot intake submission with optional checkout preview publication'),
-    ('/api/subscriptions/checkout-capture', 'Customer-initiated captured checkout activation with payment-evidence validation'),
-    ('/api/institution/license/checkout-capture', 'Customer-initiated institution-license capture with payment-evidence validation'),
+    ('/api/pilot/intake', 'Deprecated (410): pilot intake submission disabled in open-source mode'),
+    ('/api/subscriptions/checkout-capture', 'Deprecated (410): subscription checkout capture disabled in open-source mode'),
+    ('/api/institution/license/checkout-capture', 'Deprecated (410): institution-license checkout capture disabled in open-source mode'),
     ('/api/federation/receive', 'Inbound federation envelope validation/receipt'),
 )
 

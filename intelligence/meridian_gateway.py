@@ -58,7 +58,6 @@ from warrants import (
 from loom_runtime_client import estimate_capability_cost_usd, format_estimated_cost_usd
 from loom_runtime_discovery import preferred_loom_bin, preferred_loom_root, runtime_value
 from session_history import append_session_event, load_session_events
-from subscription_service import public_checkout_offer, subscription_summary
 from team_topology import SPECIALIST_KEYS, load_team_topology, sync_loom_team_profiles
 from telegram_history import imported_history_context
 import brain_router
@@ -1564,55 +1563,44 @@ def _build_meridian_council_truth_packet() -> dict[str, Any]:
     readiness = _workspace_api_get_json("/api/treasury/settlement-adapters/readiness")
     status_payload = dict(status.get("payload") or {}) if status.get("ok") else {}
     service_state = dict(status_payload.get("service_state") or {})
-    preview_state = dict(service_state.get("subscription_preview") or {})
-    pilot_state = dict(service_state.get("pilot_intake") or {})
-    subscriptions_state = dict(service_state.get("subscriptions") or {})
     readiness_payload = dict(readiness.get("payload") or {}) if readiness.get("ok") else {}
     readiness_summary = dict(readiness_payload.get("summary") or {})
-    try:
-        live_offer = dict(public_checkout_offer() or {})
-    except Exception as exc:
-        live_offer = {"error": f"{exc.__class__.__name__}: {exc}"}
-    try:
-        live_subscriptions = dict(subscription_summary(LOOM_ORG_ID) or {})
-    except Exception as exc:
-        live_subscriptions = {"error": f"{exc.__class__.__name__}: {exc}"}
     return {
         "operator_truth": operator_truth,
-        "public_offer": {
-            "name": "Paid 7-Day Founder Pilot",
-            "requested_offer": live_offer.get("requested_offer"),
-            "price_usd": live_offer.get("price_usd"),
-            "duration_days": live_offer.get("duration_days"),
-            "billing_type": live_offer.get("billing_type"),
-            "payment_method": live_offer.get("payment_method"),
-            "payment_instructions": dict(live_offer.get("payment_instructions") or {}),
-            "buy_path_live": True,
-            "buy_path_description": "exact_amount_usdc_on_base_with_tx_hash_capture",
-            "checkout_preview_path": dict(live_offer.get("payment_instructions") or {}).get("checkout_capture_path") and "/api/pilot/intake" or "",
-            "checkout_capture_path": dict(live_offer.get("payment_instructions") or {}).get("checkout_capture_path"),
-            "continuation_mode": "by_arrangement_after_pilot",
+        "open_source_posture": {
+            "mode": "full_open_source",
+            "public_checkout_live": False,
+            "support_model": "voluntary_support_and_research_collaboration",
+            "setup_path": "/pilot",
+            "legacy_route_status": {
+                "path": "/api/institution/license/catalog",
+                "status": "deprecated_410",
+                "reason": "open_source_mode",
+            },
         },
         "delivery_truth": {
             "email_bounded_delivery_live": True,
             "telegram_bounded_delivery_live": True,
             "broad_customer_automation_live": False,
             "nightly_pipeline_state": "treasury_gated_and_preflight_gated",
-            "founder_led_customer_offer": True,
+            "open_enrollment_offer_live": False,
         },
         "payment_truth": {
-            "card_checkout_live": False,
-            "paypal_checkout_live": False,
+            "card_gateway_live": False,
+            "paypal_gateway_live": False,
             "manual_bank_wire_primary": False,
             "x402_external_customer_proof": False,
-            "base_usdc_public_checkout_live": True,
+            "base_usdc_public_gateway_live": False,
         },
         "service_state_truth": {
-            "pilot_intake_mode": pilot_state.get("management_mode"),
-            "subscription_preview_public_path": preview_state.get("public_intake_path"),
-            "public_checkout_paths": dict(subscriptions_state.get("public_checkout_paths") or {}),
+            "pilot_intake_mode": "deprecated_public_route",
+            "subscription_preview_public_path": "",
+            "public_support_paths": {},
         },
-        "subscription_truth": live_subscriptions,
+        "subscription_truth": {
+            "status": "internal_subscription_state_preserved_for_ledger_continuity",
+            "public_support_intake_enabled": False,
+        },
         "settlement_truth": {
             "ready_adapter_ids": list(readiness_payload.get("ready_adapter_ids") or []),
             "blocked_adapter_ids": list(readiness_payload.get("blocked_adapter_ids") or []),
@@ -1622,7 +1610,7 @@ def _build_meridian_council_truth_packet() -> dict[str, Any]:
         "open_source_truth": {
             "kernel_open_source": True,
             "kernel_role": "runtime_neutral_governance_layer",
-            "intelligence_role": "first_commercial_wedge",
+            "intelligence_role": "first_open_research_vertical",
             "loom_role": "live_execution_runtime_on_this_host_and_installable_local_runtime",
             "hosted_service_fully_open": False,
             "not_open_scope": [
@@ -1638,7 +1626,7 @@ def _build_meridian_council_truth_packet() -> dict[str, Any]:
             "context_pack": str(COUNCIL_CONTEXT_PATH.relative_to(WORKSPACE_DIR)),
             "homepage": "company/www/index.html",
             "demo": "company/www/demo.html",
-            "pilot": "company/www/pilot.html",
+            "get_started": "company/www/pilot.html",
             "boundary": "company/www/OPEN_SOURCE_BOUNDARY.html",
             "kernel_readme": "/opt/meridian-kernel/README.md",
             "public_readme": "README.md",
@@ -10428,6 +10416,127 @@ def _status_payload_repair_treasury(payload: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+_STATUS_WORDING_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("founder_led_pilot_with_public_paid_checkout", "open_source_setup_only"),
+    ("pilot_intake_with_public_checkout_preview", "deprecated_intake_open_source_mode"),
+    ("/api/pilot/intake/operator/review", "/pilot"),
+    ("/api/pilot/intake/operator", "/pilot"),
+    ("/api/pilot/intake", "/pilot"),
+    ("/api/subscriptions/checkout-capture", "deprecated_capture_open_source_mode"),
+    ("Deliver brief through the current honest customer path", "Deliver brief through the current honest operator path"),
+    (
+        "Record first external support contribution or first real customer payment",
+        "Record first external support contribution or first verified external settlement",
+    ),
+    ("Founder-Backed Build", "Maintainer-Backed Build"),
+    ("founding_service_only", "host_bound_service_only"),
+    ("founding_workspace_local", "host_bound_workspace_local"),
+    ("founding_locked", "host_bound_locked"),
+    ("founding-locked", "host-bound-locked"),
+    ("founding-only", "host-bound only"),
+    ("founding only", "host-bound only"),
+    ("founding institution only", "host-bound institution only"),
+    ("founding institution", "host-bound institution"),
+)
+
+_STATUS_KEY_REPLACEMENTS: dict[str, str] = {
+    "public_checkout_paths": "public_support_paths",
+    "checkout_claimed_count": "support_claimed_count",
+    "checkout_capture_path": "capture_path",
+}
+
+
+def _normalize_status_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        normalized: dict[str, Any] = {}
+        for key, item in value.items():
+            normalized_key = _STATUS_KEY_REPLACEMENTS.get(str(key), str(key))
+            normalized[normalized_key] = _normalize_status_keys(item)
+        return normalized
+    if isinstance(value, list):
+        return [_normalize_status_keys(item) for item in value]
+    return value
+
+
+def _normalize_status_wording(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {k: _normalize_status_wording(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_status_wording(item) for item in value]
+    if isinstance(value, str):
+        normalized = value
+        for source, target in _STATUS_WORDING_REPLACEMENTS:
+            normalized = normalized.replace(source, target)
+        return normalized
+    return value
+
+
+def _normalize_status_payload_for_open_source(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = _normalize_status_wording(_normalize_status_keys(payload))
+
+    service_state = normalized.get("service_state")
+    if isinstance(service_state, dict):
+        if isinstance(service_state.get("pilot_intake"), dict):
+            service_state["setup_intake"] = {
+                "status": "deprecated",
+                "reason": "open_source_mode",
+                "message": "Public intake preview routes are deprecated in open-source mode.",
+                "setup_path": "/pilot",
+            }
+            service_state.pop("pilot_intake", None)
+
+        subscriptions_state = service_state.get("subscriptions")
+        if isinstance(subscriptions_state, dict):
+            subscriptions_state["public_support_paths"] = {}
+            subscriptions_state["open_source_mode"] = True
+
+        preview_state = service_state.get("subscription_preview")
+        if isinstance(preview_state, dict):
+            preview_state["public_intake_path"] = "/pilot"
+            queue_paths = preview_state.get("queue_paths")
+            if isinstance(queue_paths, dict):
+                queue_paths["public_intake"] = "/pilot"
+                queue_paths["source_review"] = "/pilot"
+                queue_paths.pop("checkout_capture", None)
+                queue_paths["capture"] = "deprecated_open_source_mode"
+
+    observability = normalized.get("observability")
+    if isinstance(observability, dict):
+        metrics = observability.get("metrics")
+        if isinstance(metrics, dict):
+            audit_metrics = metrics.get("audit")
+            if isinstance(audit_metrics, dict):
+                actions = audit_metrics.get("actions")
+                if isinstance(actions, dict):
+                    remapped_actions: dict[str, Any] = {}
+                    for key, value in actions.items():
+                        if key == "pilot_intake_requested":
+                            remapped_actions["setup_intake_requested_deprecated"] = value
+                        elif key == "pilot_intake_reviewed":
+                            remapped_actions["setup_intake_reviewed_deprecated"] = value
+                        else:
+                            remapped_actions[key] = value
+                    audit_metrics["actions"] = remapped_actions
+
+    persistence = normalized.get("persistence")
+    if isinstance(persistence, dict) and isinstance(persistence.get("seams"), list):
+        filtered_seams = []
+        for seam in persistence.get("seams") or []:
+            if not isinstance(seam, dict):
+                filtered_seams.append(seam)
+                continue
+            fingerprint = " ".join(
+                str(seam.get(field) or "").lower()
+                for field in ("name", "path", "owner")
+            )
+            if "pilot_intake" in fingerprint or "checkout" in fingerprint:
+                continue
+            filtered_seams.append(seam)
+        persistence["seams"] = filtered_seams
+
+    return normalized
+
+
 def _workspace_status_snapshot_cached() -> dict[str, Any]:
     now_ms = int(time.time() * 1000)
     with WORKSPACE_STATUS_CACHE_LOCK:
@@ -10439,7 +10548,9 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
             and cached_at > 0
             and (now_ms - cached_at) <= max(1, WORKSPACE_STATUS_CACHE_TTL_SECONDS) * 1000
         ):
-            payload = _status_payload_repair_treasury(dict(cached_snapshot))
+            payload = _normalize_status_payload_for_open_source(
+                _status_payload_repair_treasury(dict(cached_snapshot))
+            )
             payload["gateway_cache"] = {
                 "state": "fresh",
                 "cached_at_unix_ms": cached_at,
@@ -10470,7 +10581,9 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
 
                 threading.Thread(target=_refresh_workspace_status, daemon=True).start()
 
-        payload = _status_payload_repair_treasury(dict(cached_snapshot))
+        payload = _normalize_status_payload_for_open_source(
+            _status_payload_repair_treasury(dict(cached_snapshot))
+        )
         payload["gateway_cache"] = {
             "state": "stale_fallback",
             "cached_at_unix_ms": cached_at,
@@ -10484,7 +10597,9 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
         WORKSPACE_STATUS_UPSTREAM_TIMEOUT_SECONDS,
     )
     if proxied.get("ok") and isinstance(proxied.get("payload"), dict):
-        snapshot = _status_payload_repair_treasury(dict(proxied["payload"]))
+        snapshot = _normalize_status_payload_for_open_source(
+            _status_payload_repair_treasury(dict(proxied["payload"]))
+        )
         with WORKSPACE_STATUS_CACHE_LOCK:
             WORKSPACE_STATUS_CACHE["fetched_at_unix_ms"] = now_ms
             WORKSPACE_STATUS_CACHE["snapshot"] = snapshot
@@ -10526,7 +10641,7 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
             "generated_at_unix_ms": now_ms,
         },
     }
-    degraded = _status_payload_repair_treasury(degraded)
+    degraded = _normalize_status_payload_for_open_source(_status_payload_repair_treasury(degraded))
     return {"ok": True, "status_code": 200, "payload": degraded}
 
 
@@ -10541,7 +10656,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
             and cached_at > 0
             and (now_ms - cached_at) <= max(1, WORKFLOW_SHOWCASE_CACHE_TTL_SECONDS) * 1000
         ):
-            snapshot = dict(cached_snapshot)
+            snapshot = _normalize_status_wording(dict(cached_snapshot))
             snapshot["gateway_cache"] = {
                 "state": "fresh",
                 "cached_at_unix_ms": cached_at,
@@ -10568,7 +10683,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
 
                 threading.Thread(target=_refresh_workflow_showcase, daemon=True).start()
 
-        snapshot = dict(cached_snapshot)
+        snapshot = _normalize_status_wording(dict(cached_snapshot))
         snapshot["gateway_cache"] = {
             "state": "stale_fallback",
             "cached_at_unix_ms": cached_at,
@@ -10578,7 +10693,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
         return snapshot
 
     try:
-        snapshot = _build_workflow_showcase_snapshot()
+        snapshot = _normalize_status_wording(_build_workflow_showcase_snapshot())
         with WORKFLOW_SHOWCASE_CACHE_LOCK:
             WORKFLOW_SHOWCASE_CACHE["fetched_at_unix_ms"] = now_ms
             WORKFLOW_SHOWCASE_CACHE["snapshot"] = dict(snapshot)
@@ -10593,7 +10708,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
             cached_at = int(WORKFLOW_SHOWCASE_CACHE.get("fetched_at_unix_ms") or 0)
             cached_snapshot = WORKFLOW_SHOWCASE_CACHE.get("snapshot")
         if isinstance(cached_snapshot, dict):
-            snapshot = dict(cached_snapshot)
+            snapshot = _normalize_status_wording(dict(cached_snapshot))
             snapshot["gateway_cache"] = {
                 "state": "stale_fallback",
                 "cached_at_unix_ms": cached_at,
@@ -11446,21 +11561,69 @@ class WebAPIAdapter(ChannelAdapter):
                     )
                     return
                 if request_path == "/api/workflows/showcase":
-                    self._send_json(200, {"status": "success", "showcase": _workflow_showcase_snapshot_cached()})
+                    self._send_json(
+                        200,
+                        {
+                            "status": "success",
+                            "showcase": _normalize_status_wording(_workflow_showcase_snapshot_cached()),
+                        },
+                    )
                     return
                 if request_path == "/api/status":
                     proxied = _workspace_status_snapshot_cached()
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
                     return
+                if request_path == "/api/institution/template":
+                    proxied = _workspace_api_get_json(proxied_path)
+                    payload = _normalize_status_wording(dict(proxied.get("payload") or {}))
+                    boundary = payload.get("boundary")
+                    if isinstance(boundary, dict):
+                        boundary["service_scope"] = "host_bound_service_only"
+                        boundary["note"] = (
+                            "Template is production-ready for host-bound open-source deployments; "
+                            "multi-institution self-serve remains intentionally bounded."
+                        )
+                    self._send_json(int(proxied.get("status_code") or 200), payload)
+                    return
+                if request_path == "/api/kernel-proof-bundle":
+                    proxied = _workspace_api_get_json(proxied_path)
+                    payload = _normalize_status_wording(dict(proxied.get("payload") or {}))
+                    self._send_json(int(proxied.get("status_code") or 200), payload)
+                    return
                 if request_path == "/api/institution/license/catalog":
                     self._send_json(410, {
                         "status": "deprecated",
                         "reason": "open_source_mode",
-                        "message": "The institution license catalog has been deprecated. Meridian is now fully open source.",
+                        "message": "This legacy monetization route has been deprecated. Meridian now runs in open-source setup mode.",
                         "next_steps": [
-                            "Install Loom: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash",
-                            "Visit https://github.com/mapleleaflatte03/meridian-loom for source and documentation",
+                            "Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
+                            "Visit https://github.com/mapleleaflatte03/meridian for source and documentation",
                             "The institution template remains available at /api/institution/template",
+                        ],
+                    })
+                    return
+                if request_path == "/api/pilot/intake":
+                    self._send_json(410, {
+                        "status": "deprecated",
+                        "reason": "open_source_mode",
+                        "message": "Public pilot intake has been deprecated. Use /pilot for open-source setup.",
+                        "next_steps": [
+                            "Open /pilot and follow the local bootstrap path",
+                            "Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
+                            "Use the monorepo: https://github.com/mapleleaflatte03/meridian",
+                        ],
+                    })
+                    return
+                if request_path == "/api/subscriptions/checkout-capture":
+                    self._send_json(410, {
+                        "status": "deprecated",
+                        "reason": "open_source_mode",
+                        "message": "This legacy payment-capture route has been deprecated. Meridian now runs in open-source setup mode.",
+                        "next_steps": [
+                            "Run local setup from /pilot",
+                            "Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
+                            "Use /api/workflows/showcase and /api/proofs to verify runtime behavior",
+                            "Contribute via https://github.com/mapleleaflatte03/meridian/issues",
                         ],
                     })
                     return
@@ -11589,11 +11752,36 @@ class WebAPIAdapter(ChannelAdapter):
                     self._send_json(410, {
                         "status": "deprecated",
                         "reason": "open_source_mode",
-                        "message": "Institution license checkout has been deprecated. Meridian is now fully open source.",
+                        "message": "This legacy payment-capture route has been deprecated. Meridian now runs in open-source setup mode.",
                         "next_steps": [
-                            "Install Loom: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash",
-                            "Visit https://github.com/mapleleaflatte03/meridian-loom for source and documentation",
+                            "Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
+                            "Visit https://github.com/mapleleaflatte03/meridian for source and documentation",
                             "The institution template remains available at /api/institution/template",
+                        ],
+                    })
+                    return
+                if request_path == "/api/pilot/intake":
+                    self._send_json(410, {
+                        "status": "deprecated",
+                        "reason": "open_source_mode",
+                        "message": "Public pilot intake has been deprecated. Use /pilot for open-source setup.",
+                        "next_steps": [
+                            "Open /pilot and follow the local bootstrap path",
+                            "Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
+                            "Use the monorepo: https://github.com/mapleleaflatte03/meridian",
+                        ],
+                    })
+                    return
+                if request_path == "/api/subscriptions/checkout-capture":
+                    self._send_json(410, {
+                        "status": "deprecated",
+                        "reason": "open_source_mode",
+                        "message": "This legacy payment-capture route has been deprecated. Meridian now runs in open-source setup mode.",
+                        "next_steps": [
+                            "Run local setup from /pilot",
+                            "Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
+                            "Use /api/workflows/showcase and /api/proofs to verify runtime behavior",
+                            "Contribute via https://github.com/mapleleaflatte03/meridian/issues",
                         ],
                     })
                     return

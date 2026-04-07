@@ -37,7 +37,7 @@
       <a href="/workflows">Workflows</a>
       <a href="/community">Community</a>
       <a href="/support">Support</a>
-      <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Docs</a>
+      <a href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">Docs</a>
       <a href="/loom#install" class="nav-cta">Get Started</a>
     </nav>
   </div>
@@ -126,9 +126,9 @@
   <h2 id="install" class="reveal">Install Loom now</h2>
   <p class="section-intro">This is the one command. Everything else on this page assumes you started here.</p>
   <div class="card small">
-    <p><strong>One-command install</strong></p>
-    <div class="sample-box"><code>curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash</code></div>
-    <p class="dim small mt-md">The installer prefers a matching GitHub release asset, provisions <code>$HOME/.local/share/meridian-loom</code>, and ends by telling you to run <code>loom new-agent</code>.</p>
+    <p><strong>One-command full-stack install</strong></p>
+    <div class="sample-box"><code>curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash</code></div>
+    <p class="dim small mt-md">This bootstraps Kernel + Intelligence and builds the Loom CLI at <code>$HOME/meridian/loom/target/release/loom</code>.</p>
   </div>
 
   <h2 class="reveal">Create your first governed personal agent</h2>
@@ -136,7 +136,7 @@
     <div class="process-step">
       <div class="process-number">01</div>
       <h3>Initialize Kernel</h3>
-      <p>Run <code>python3 quickstart.py --init-only</code> inside <code>/opt/meridian-kernel</code>.</p>
+      <p>Run <code>python3 quickstart.py --init-only</code> inside <code>$MERIDIAN_ROOT/kernel</code>.</p>
     </div>
     <div class="process-step">
       <div class="process-number">02</div>
@@ -156,20 +156,22 @@
   </div>
 
   <div class="card">
-    <pre class="sample-box"><code class="language-bash">export LOOM_ROOT="${HOME}/.local/share/meridian-loom/runtime/default"
-export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+    <pre class="sample-box"><code class="language-bash">export MERIDIAN_ROOT="${HOME}/meridian"
+export LOOM_BIN="${MERIDIAN_ROOT}/loom/target/release/loom"
+export LOOM_ROOT="${MERIDIAN_ROOT}/runtime/default"
+export MERIDIAN_KERNEL_PATH="${MERIDIAN_ROOT}/kernel"
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
 
-cd /opt/meridian-kernel
+cd "${MERIDIAN_KERNEL_PATH}"
 python3 quickstart.py --init-only
 
-loom new-agent \
+"${LOOM_BIN}" new-agent \
   --name "My Assistant" \
   --root "$LOOM_ROOT" \
   --kernel-path "$MERIDIAN_KERNEL_PATH" \
   --org-id "$MERIDIAN_ORG_ID"
 
-loom run-agent my-assistant</code></pre>
+"${LOOM_BIN}" run-agent my-assistant</code></pre>
   </div>
 
   <h2 class="reveal">What Loom ships right now</h2>
@@ -220,7 +222,7 @@ loom run-agent my-assistant</code></pre>
 
   <div class="card text-center mt-lg">
     <p><strong>Need the next step?</strong></p>
-    <a class="cta cta-primary" href="https://github.com/mapleleaflatte03/meridian-loom" target="_blank" rel="noopener">Open Loom on GitHub</a>
+    <a class="cta cta-primary" href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">Open Meridian Monorepo</a>
     <a class="cta cta-outline" href="/demo">See first-party apps on Loom</a>
     <a class="cta cta-outline" href="/boundary">Read the boundary note</a>
   </div>
@@ -235,7 +237,7 @@ loom run-agent my-assistant</code></pre>
         <div class="footer-nav-group">
           <h4>Product</h4>
           <a href="/loom">Loom Runtime</a>
-          <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Kernel</a>
+          <a href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">Monorepo</a>
           <a href="/demo">Live Demo</a>
           <a href="/compare">Compare</a>
         </div>
@@ -250,8 +252,8 @@ loom run-agent my-assistant</code></pre>
           <h4>Community</h4>
           <a href="/community">Community Hub</a>
           <a href="/support">Support</a>
-          <a href="https://github.com/mapleleaflatte03/meridian-loom/issues" target="_blank" rel="noopener">Contribute</a>
-          <a href="https://github.com/mapleleaflatte03/meridian-loom" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/mapleleaflatte03/meridian/issues" target="_blank" rel="noopener">Contribute</a>
+          <a href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
     </div>
