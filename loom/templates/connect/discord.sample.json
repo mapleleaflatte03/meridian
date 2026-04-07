@@ -1,0 +1,26 @@
+{
+  "schema_version": "meridian.connect.adapter.v1",
+  "adapter_id": "discord-ops-adapter",
+  "name": "discord_ops_adapter",
+  "transport": "discord",
+  "action_schema": "meridian.runtime.v1",
+  "runtime_contract": "connect_runtime_contract_v2",
+  "lifecycle": {
+    "enabled": false,
+    "state": "init",
+    "auth_state": "pending",
+    "reconnect_attempts": 0,
+    "reconnect_attempts_max": 3
+  },
+  "fallback": {
+    "mode": "local_queue_shadow",
+    "active": false
+  },
+  "transport_profile": {
+    "kind": "discord",
+    "commands_surface": "slash",
+    "voice_channel": true,
+    "health_endpoint": "/health"
+  }
+}
+

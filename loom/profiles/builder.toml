@@ -1,0 +1,30 @@
+[profile]
+name = "builder"
+description = "Active builder, more ceremony than solo, wasm isolation available"
+
+[scheduler]
+max_concurrent_jobs = 8
+lease_duration_secs = 600
+poll_interval_secs = 3
+queue_strategy = "fifo"
+max_retries = 2
+
+[governance]
+require_approval = false
+sanction_enforcement = "enforce"
+budget_gate = "enforce"
+audit_level = "signed_local"
+cost_alert_threshold_usd = 1.00
+
+[isolation]
+default_tier = "wasm"
+wasm_enabled = true
+microvm_enabled = false
+sandbox_network = false
+
+[audit]
+proof_level = "signed_local"
+parity_check = false
+runtime_audit_emission = true
+retention_days = 90
+sign_artifacts = true

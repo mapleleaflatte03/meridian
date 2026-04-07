@@ -1,0 +1,103 @@
+name: Loom Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run workspace tests
+        run: cargo test --workspace --locked
+
+  package:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            label: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            label: linux-aarch64
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            label: darwin-x86_64
+          - runner: macos-14
+            target: aarch64-apple-darwin
+            label: darwin-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Package release
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          artifact="$(./scripts/package_release.sh --version "${GITHUB_REF_NAME}" --output-dir dist --target "${{ matrix.target }}")"
+          echo "artifact=${artifact}" >> "${GITHUB_OUTPUT}"
+          if [[ -f "${artifact}.sha256" ]]; then
+            echo "checksum=${artifact}.sha256" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Upload packaged assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.label }}
+          path: |
+            ${{ steps.package.outputs.artifact }}
+            ${{ steps.package.outputs.checksum }}
+          if-no-files-found: error
+
+  publish:
+    needs: package
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download packaged assets
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find dist -maxdepth 1 -type f | sort)
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "no release assets downloaded" >&2
+            exit 1
+          fi
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GH_REPO}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" "${files[@]}" --repo "${GH_REPO}" --clobber
+          else
+            gh release create "${GITHUB_REF_NAME}" "${files[@]}" --repo "${GH_REPO}" --title "${GITHUB_REF_NAME}" --notes "Official Meridian Loom v0.1 local runtime release."
+          fi

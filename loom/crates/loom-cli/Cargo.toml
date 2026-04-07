@@ -1,0 +1,31 @@
+[package]
+name = "meridian-loom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Official Meridian Loom CLI for the governed local agent runtime"
+repository.workspace = true
+homepage.workspace = true
+readme = "../../README.md"
+keywords = ["meridian", "runtime", "governance", "cli", "loom"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+loom-core = { path = "../loom-core" }
+loom-poge = { path = "../loom-poge" }
+loom-shadow = { path = "../loom-shadow" }
+ed25519-dalek = "2"
+hex = "0.4"
+serde_json = "1"
+sha2 = "0.10"
+
+[dev-dependencies]
+ed25519-dalek = "2"
+hex = "0.4"
+serde_json = "1"
+
+[[bin]]
+name = "loom"
+path = "src/main.rs"

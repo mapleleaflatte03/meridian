@@ -1,0 +1,34 @@
+[profile]
+name = "team"
+description = "Multi-operator team, approval required, stronger sanctions and parity"
+
+[scheduler]
+max_concurrent_jobs = 16
+lease_duration_secs = 900
+poll_interval_secs = 2
+queue_strategy = "priority"
+max_retries = 3
+stale_job_timeout_secs = 1800
+
+[governance]
+require_approval = true
+approval_quorum = 1
+sanction_enforcement = "enforce"
+budget_gate = "enforce"
+audit_level = "signed_local"
+cost_alert_threshold_usd = 0.50
+authority_decay_enabled = true
+
+[isolation]
+default_tier = "wasm"
+wasm_enabled = true
+microvm_enabled = false
+sandbox_network = true
+
+[audit]
+proof_level = "signed_local"
+parity_check = true
+parity_schedule = "every_action"
+runtime_audit_emission = true
+retention_days = 180
+sign_artifacts = true

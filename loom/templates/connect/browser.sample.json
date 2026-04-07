@@ -1,0 +1,26 @@
+{
+  "schema_version": "meridian.connect.adapter.v1",
+  "adapter_id": "browser-ops-adapter",
+  "name": "browser_ops_adapter",
+  "transport": "browser",
+  "action_schema": "meridian.runtime.v1",
+  "runtime_contract": "connect_runtime_contract_v2",
+  "lifecycle": {
+    "enabled": false,
+    "state": "init",
+    "auth_state": "pending",
+    "reconnect_attempts": 0,
+    "reconnect_attempts_max": 3
+  },
+  "fallback": {
+    "mode": "local_queue_shadow",
+    "active": false
+  },
+  "transport_profile": {
+    "kind": "browser",
+    "engine": "playwright_wrapper",
+    "sandbox": "restricted",
+    "health_endpoint": "/health"
+  }
+}
+

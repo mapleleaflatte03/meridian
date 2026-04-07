@@ -1,0 +1,27 @@
+{
+  "schema_version": "meridian.connect.adapter.v1",
+  "adapter_id": "desktop-ops-adapter",
+  "name": "desktop_ops_adapter",
+  "transport": "desktop",
+  "action_schema": "meridian.runtime.v1",
+  "runtime_contract": "connect_runtime_contract_v2",
+  "lifecycle": {
+    "enabled": false,
+    "state": "init",
+    "auth_state": "pending",
+    "reconnect_attempts": 0,
+    "reconnect_attempts_max": 3
+  },
+  "fallback": {
+    "mode": "local_queue_shadow",
+    "active": false
+  },
+  "transport_profile": {
+    "kind": "desktop",
+    "control_mode": "governed_desktop_bridge",
+    "input_guard": "warrant_bound",
+    "capture_mode": "receipt_snapshots",
+    "rate_limit_per_minute": 45,
+    "health_endpoint": "/health"
+  }
+}

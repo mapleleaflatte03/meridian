@@ -1,0 +1,26 @@
+[package]
+name = "loom-shadow"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+description = "Shadow, decision, and parity rehearsal surfaces for Meridian Loom"
+repository.workspace = true
+homepage.workspace = true
+keywords = ["meridian", "shadow", "runtime", "governance"]
+categories = ["command-line-utilities", "development-tools"]
+
+[dependencies]
+loom-core = { path = "../loom-core" }
+loom-poge = { path = "../loom-poge" }
+serde_json = "1"
+sha2 = "0.10"
+hex = "0.4"
+ureq = "3.3.0"
+
+[dev-dependencies]
+ed25519-dalek = "2"
+
+[lib]
+path = "src/lib.rs"

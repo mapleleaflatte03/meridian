@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" role="img" aria-labelledby="title desc">
+  <title id="title">Meridian Loom runtime rehearsal panels</title>
+  <desc id="desc">Three dark panels showing fail-closed execute, runtime audit artifact, and parity stream surfaces.</desc>
+  <defs>
+    <style>
+      .bg { fill: #05070b; }
+      .panel { fill: #0c1117; stroke: #253240; stroke-width: 2; }
+      .soft { fill: #0f1720; }
+      .line { fill: #e6edf5; font: 600 20px/1 'JetBrains Mono', monospace; }
+      .body { fill: #8ca0b3; font: 500 18px/1.45 'JetBrains Mono', monospace; }
+      .title { fill: #f3f7fb; font: 700 26px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 1.2px; }
+      .tag { fill: #4fc3f7; font: 700 14px/1 'JetBrains Mono', monospace; letter-spacing: 2px; text-transform: uppercase; }
+      .ok { fill: #8ce99a; font: 700 18px/1 'JetBrains Mono', monospace; }
+      .warn { fill: #ffd166; font: 700 18px/1 'JetBrains Mono', monospace; }
+      .deny { fill: #ff7b72; font: 700 18px/1 'JetBrains Mono', monospace; }
+      .rail { fill: #4fc3f7; opacity: .9; }
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="720" rx="28"/>
+  <rect class="panel" x="32" y="32" width="1136" height="656" rx="24"/>
+  <rect class="soft" x="64" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="432" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="800" y="72" width="336" height="576" rx="20"/>
+  <rect class="rail" x="64" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="432" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="800" y="72" width="336" height="6" rx="3"/>
+
+  <text x="88" y="118" class="tag">Fail-Closed Execute</text>
+  <text x="88" y="160" class="title">loom action execute</text>
+  <text x="88" y="208" class="line">$ loom action execute \</text>
+  <text x="88" y="238" class="body">  --agent-id atlas --resource web_search</text>
+  <text x="88" y="282" class="body">effective_source      reference_gate</text>
+  <text x="88" y="314" class="body">effective_stage       budget_gate</text>
+  <text x="88" y="346" class="body">runtime_outcome       denied</text>
+  <text x="88" y="378" class="body">action_execute_exit   2</text>
+  <text x="88" y="430" class="deny">DENY</text>
+  <text x="88" y="462" class="body">Fail-closed runtime rehearsal.</text>
+  <text x="88" y="490" class="body">No governed worker supervisor yet.</text>
+
+  <text x="456" y="118" class="tag">Runtime Audit</text>
+  <text x="456" y="160" class="title">kernel/runtime_audit/loom_runtime_events.jsonl</text>
+  <text x="456" y="208" class="body">source                loom_runtime_execute</text>
+  <text x="456" y="240" class="body">policy_ref            experimental_runtime_rehearsal</text>
+  <text x="456" y="272" class="body">serializer            kernel when available</text>
+  <text x="456" y="304" class="body">fallback              local JSONL</text>
+  <text x="456" y="356" class="ok">RUNTIME EVENT WRITTEN</text>
+  <text x="456" y="388" class="body">Artifact is real.</text>
+  <text x="456" y="416" class="body">Kernel canonical audit still future-facing.</text>
+
+  <text x="824" y="118" class="tag">Parity Surface</text>
+  <text x="824" y="160" class="title">artifacts/parity/latest.json</text>
+  <text x="824" y="208" class="body">reference_gate        kernel adapter truth</text>
+  <text x="824" y="240" class="body">loom_runtime_stream   runtime rehearsal truth</text>
+  <text x="824" y="272" class="body">legacy_live_probe   founder-host snapshot</text>
+  <text x="824" y="320" class="warn">NOT PER-ACTION LIVE PARITY</text>
+  <text x="824" y="352" class="body">Stronger than file-only compare.</text>
+  <text x="824" y="380" class="body">Still not legacy-runtime replacement proof.</text>
+</svg>

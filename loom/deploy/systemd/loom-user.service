@@ -1,0 +1,18 @@
+[Unit]
+Description=Meridian Loom user runtime service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=LOOM_ROOT=%h/.local/share/meridian-loom/runtime/default
+Environment=MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+Environment=LOOM_SERVICE_TOKEN=loom-local-token
+ExecStart=/bin/sh -lc 'exec %h/.local/share/meridian-loom/current/bin/loom start --foreground --root "$LOOM_ROOT" --kernel-path "$MERIDIAN_KERNEL_PATH" --http-address 127.0.0.1:8080 --service-token "$LOOM_SERVICE_TOKEN" --max-jobs 1 --poll-seconds 1 --iterations 1000000 --format human'
+ExecStop=/bin/sh -lc 'exec %h/.local/share/meridian-loom/current/bin/loom stop --root "$LOOM_ROOT" --format human'
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target

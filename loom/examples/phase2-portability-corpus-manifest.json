@@ -1,0 +1,22 @@
+{
+  "corpus_name": "phase2_portability_corpus_v0",
+  "source_tree": "/home/ubuntu/meridian-migration/root-backup/stage/root/meridian-backup-safe/skills",
+  "supported_shape": "workspace_python_entrypoint",
+  "sources": [
+    {
+      "skill_name": "malware-triage",
+      "source_root": "/home/ubuntu/meridian-migration/root-backup/stage/root/meridian-backup-safe/skills/malware-triage",
+      "expected_capability_name": "clawskill.malware-triage.v0"
+    },
+    {
+      "skill_name": "download-quarantine",
+      "source_root": "/home/ubuntu/meridian-migration/root-backup/stage/root/meridian-backup-safe/skills/download-quarantine",
+      "expected_capability_name": "clawskill.download-quarantine.v0"
+    },
+    {
+      "skill_name": "safe-web-research",
+      "source_root": "/home/ubuntu/meridian-migration/root-backup/stage/root/meridian-backup-safe/skills/safe-web-research",
+      "expected_capability_name": "clawskill.safe-web-research.v0"
+    }
+  ]
+}

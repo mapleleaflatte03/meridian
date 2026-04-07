@@ -1,0 +1,26 @@
+[profile]
+name = "solo"
+description = "Single operator, local governance, minimal ceremony"
+
+[scheduler]
+max_concurrent_jobs = 4
+lease_duration_secs = 300
+poll_interval_secs = 5
+queue_strategy = "fifo"
+
+[governance]
+require_approval = false
+sanction_enforcement = "warn"
+budget_gate = "advisory"
+audit_level = "local"
+
+[isolation]
+default_tier = "in_process"
+wasm_enabled = false
+microvm_enabled = false
+
+[audit]
+proof_level = "local"
+parity_check = false
+runtime_audit_emission = true
+retention_days = 30

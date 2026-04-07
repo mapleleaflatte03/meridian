@@ -1,0 +1,16 @@
+[workspace]
+members = [
+  "crates/loom-cli",
+  "crates/loom-core", "crates/loom-poge",
+  "crates/loom-shadow",
+]
+resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+version = "0.1.16"
+authors = ["Meridian"]
+rust-version = "1.75"
+repository = "https://github.com/mapleleaflatte03/meridian-loom"
+homepage = "https://github.com/mapleleaflatte03/meridian-loom"

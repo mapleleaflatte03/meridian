@@ -1,0 +1,56 @@
+[runtime]
+mode = "embedded"
+kernel_path = "/opt/meridian-kernel"
+org_id = "local_foundry"
+state_dir = "state"
+run_dir = "run"
+log_dir = "logs"
+artifact_dir = "artifacts"
+
+[capabilities]
+capabilities_dir = "capabilities"
+
+[workers]
+python_path = "workers/python"
+typescript_path = "workers/typescript"
+wasm_dir = "workers/wasm"
+
+[service]
+service_http_address = "127.0.0.1:18910"
+service_token_env = "LOOM_SERVICE_TOKEN"
+service_max_jobs = 8
+service_poll_seconds = 1
+service_max_iterations = 0
+
+[logging]
+log_level = "info"
+log_format = "jsonl"
+log_max_bytes = 5242880
+log_max_files = 5
+
+[operator]
+# Use one of the checked-in operator profiles as a starting point:
+#   solo -> minimal ceremony
+#   builder -> stronger audit + wasm isolation
+#   team -> approvals + parity
+#   institution -> microvm + full proof chain
+profile = "solo"
+
+[wasm]
+# Built-in runtime profile presets are intentionally conservative.
+# Adjust these only if the execution surface truly needs them.
+profile = "standard"
+max_memory_bytes = 67108864
+max_table_elements = 10000
+max_instances = 10
+max_tables = 10
+max_memories = 10
+fuel_limit = 1000000
+
+[wasm.host]
+backend = "preview_only"
+component_model = true
+allocation = "pooling"
+isolation = "in_process"
+fuel_metering = true
+epoch_deadline_ms = 1000

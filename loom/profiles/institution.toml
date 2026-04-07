@@ -1,0 +1,40 @@
+[profile]
+name = "institution"
+description = "Full governance, wasm required, microvm for sensitive actions, full proof chain"
+
+[scheduler]
+max_concurrent_jobs = 32
+lease_duration_secs = 1200
+poll_interval_secs = 1
+queue_strategy = "priority"
+max_retries = 3
+stale_job_timeout_secs = 900
+preemption_enabled = true
+
+[governance]
+require_approval = true
+approval_quorum = 2
+sanction_enforcement = "enforce"
+budget_gate = "enforce"
+audit_level = "full"
+cost_alert_threshold_usd = 0.10
+authority_decay_enabled = true
+court_review_on_failure = true
+
+[isolation]
+default_tier = "wasm"
+wasm_enabled = true
+microvm_enabled = true
+sensitive_action_tier = "microvm"
+sandbox_network = true
+network_allowlist_only = true
+
+[audit]
+proof_level = "full"
+parity_check = true
+parity_schedule = "every_action"
+runtime_audit_emission = true
+retention_days = 365
+sign_artifacts = true
+tamper_detection = true
+external_audit_export = true

@@ -1,0 +1,29 @@
+services:
+  loom:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: meridian-loom:local
+    environment:
+      LOOM_ROOT: /var/lib/loom/runtime/default
+      LOOM_SERVICE_TOKEN: ${LOOM_SERVICE_TOKEN:-loom-local-token}
+      MERIDIAN_KERNEL_PATH: /kernel
+      MERIDIAN_RUNTIME_AUDIT_FILE: /var/lib/loom/runtime/default/artifacts/audit/loom_runtime_events.jsonl
+      LOOM_HTTP_PORT: ${LOOM_HTTP_PORT:-8080}
+      LOOM_ORG_ID: ${LOOM_ORG_ID:-local_foundry}
+    ports:
+      - "${LOOM_HTTP_PORT:-8080}:8080"
+    volumes:
+      - ${LOOM_RUNTIME_DIR:-./runtime}:/var/lib/loom
+      - ${MERIDIAN_KERNEL_PATH:-/opt/meridian-kernel}:/kernel:ro
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -lc
+      - >
+        loom init --mode embedded --root "$${LOOM_ROOT}" --kernel-path /kernel --org-id "$${LOOM_ORG_ID:-local_foundry}" &&
+        exec loom start --foreground --root "$${LOOM_ROOT}" --kernel-path /kernel
+        --http-address 0.0.0.0:$${LOOM_HTTP_PORT:-8080}
+        --service-token "$${LOOM_SERVICE_TOKEN:-loom-local-token}"
+        --max-jobs 1 --poll-seconds 1 --iterations $${LOOM_ITERATIONS:-1000000}
+        --format human

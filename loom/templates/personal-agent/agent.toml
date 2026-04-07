@@ -1,0 +1,34 @@
+[agent]
+name = "{{NAME}}"
+slug = "{{SLUG}}"
+agent_id = "{{AGENT_ID}}"
+display_name = "{{NAME}}"
+role = "{{ROLE}}"
+purpose = "{{PURPOSE}}"
+provider_profile = "{{PROVIDER_PROFILE}}"
+tool_scope = "{{TOOL_SCOPE}}"
+
+[runtime]
+org_id = "{{ORG_ID}}"
+loom_root = "{{LOOM_ROOT}}"
+kernel_path = "{{KERNEL_PATH}}"
+service_http_address = "{{SERVICE_HTTP_ADDRESS}}"
+service_token = "{{SERVICE_TOKEN}}"
+
+[heartbeat]
+heartbeat_capability = "{{HEARTBEAT_CAPABILITY}}"
+heartbeat_every_seconds = {{HEARTBEAT_EVERY_SECONDS}}
+
+[supervision]
+restart_policy = "manual"
+restart_backoff_seconds = 30
+
+[telegram]
+telegram_enabled = {{TELEGRAM_ENABLED}}
+telegram_chat_id = "{{TELEGRAM_CHAT_ID}}"
+telegram_token_env = "{{TELEGRAM_TOKEN_ENV}}"
+
+[webhook]
+webhook_enabled = {{WEBHOOK_ENABLED}}
+webhook_url = "{{WEBHOOK_URL}}"
+webhook_header = "{{WEBHOOK_HEADER}}"

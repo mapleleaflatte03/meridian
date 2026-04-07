@@ -1,0 +1,5 @@
+/target
+/.loom
+/tmp
+examples/*-output.txt
+examples/*.txt

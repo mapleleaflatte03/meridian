@@ -1,0 +1,43 @@
+{
+  "schema_version": "meridian.extension.contract.v1",
+  "extension_id": "observability-pack",
+  "name": "Observability Pack",
+  "version": "1.0.0",
+  "description": "Compact operator diagnostics and runtime proof helpers.",
+  "entrypoint": {
+    "kind": "skill_pack",
+    "path": "skills/observability_pack"
+  },
+  "capabilities": [
+    {
+      "id": "loom.observe.health.v1",
+      "kind": "operator_diagnostic",
+      "description": "Emit bounded health snapshots for operators."
+    }
+  ],
+  "permissions": {
+    "filesystem": [
+      "read:state/*",
+      "write:artifacts/extensions/*"
+    ],
+    "network": [
+      "egress:https://extensions.example"
+    ],
+    "governance": {
+      "requires_warrant": true,
+      "requires_authority_check": true,
+      "requires_court_check": true,
+      "requires_treasury_gate": true
+    }
+  },
+  "provider_config": {
+    "mode": "agnostic",
+    "profiles": [
+      {
+        "profile_id": "default-route",
+        "endpoint": "https://runtime.example/v1/chat/completions",
+        "auth_env": "MERIDIAN_EXTENSION_ROUTE_TOKEN"
+      }
+    ]
+  }
+}
