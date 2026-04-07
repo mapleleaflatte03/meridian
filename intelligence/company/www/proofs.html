@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridian Proofs — Receipts and ZK Boundary</title>
+<meta name="description" content="Public operator dashboard for Meridian receipts, runtime proof state, and live gateway events.">
+<link rel="icon" type="image/svg+xml" href="/assets/meridian_mark_flat.svg">
+<link rel="alternate icon" type="image/png" href="/assets/logo_favicon_64.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/assets/logo_avatar_192.png">
+<meta property="og:title" content="Meridian Proofs — Receipts and ZK Boundary">
+<meta property="og:description" content="Public operator dashboard for Meridian receipts, runtime proof state, and live gateway events.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://app.welliam.codes/proofs">
+<meta property="og:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Meridian Proofs — Receipts and ZK Boundary">
+<meta name="twitter:description" content="Public operator dashboard for Meridian receipts, runtime proof state, and live gateway events.">
+<meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260407-oss1">
+</head>
+<body class="page-proofs">
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/meridian_mark_flat.svg" alt="" class="brand-mark" aria-hidden="true">
+      <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="brand-wordmark">
+    </a>
+    <nav class="site-nav">
+      <a href="/loom">Product</a>
+      <a href="/why">Governance</a>
+      <a href="/proofs" class="current">Proofs</a>
+      <a href="/workflows">Workflows</a>
+      <a href="/community">Community</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Docs</a>
+      <a href="/loom#install" class="nav-cta">Get Started</a>
+    </nav>
+  </div>
+</header>
+
+<div class="page-intro">
+  <div class="page-intro-shell">
+    <div class="page-intro-main">
+      <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="page-wordmark">
+      <div class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        <span>Public proof dashboard · receipts + runtime boundary</span>
+      </div>
+      <h1>Receipts and runtime proof, in one operator surface.</h1>
+      <p class="subtitle">This page is the public read surface for runtime proof posture, settlement readiness, and live event flow. It reads directly from Meridian API routes without hiding drift, warnings, or queue pressure.</p>
+    </div>
+    <aside class="page-rail">
+      <div class="rail-kicker">Boundary</div>
+      <div class="rail-item">
+        <span>Data source</span>
+        <strong>Live host APIs.</strong>
+        <p>Status and proof values are fetched from <code>/api/status</code> and <code>/api/runtime-proof</code> on this host.</p>
+      </div>
+      <div class="rail-item">
+        <span>Event stream</span>
+        <strong>Realtime gateway feed.</strong>
+        <p>Operator alerts stream from <code>/api/events/stream</code> with fallback polling when streaming is unavailable.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="container">
+  <div class="live-chart-grid reveal" data-live-snapshot>
+    <div class="live-chart-card">
+      <span class="lane-kicker">Runtime</span>
+      <h3>Footprint now</h3>
+      <div class="live-chart-shell" data-live-chart="runtime"></div>
+      <p class="live-chart-caption" data-live-caption="runtime">Live runtime snapshot unavailable. Showing the latest verified boundary view until the next sync.</p>
+    </div>
+    <div class="live-chart-card">
+      <span class="lane-kicker">Queue</span>
+      <h3>Pressure now</h3>
+      <div class="live-chart-shell" data-live-chart="queue"></div>
+      <p class="live-chart-caption" data-live-caption="queue">Live queue snapshot unavailable. Retrying every 15 seconds and preserving the last good sample.</p>
+    </div>
+    <div class="live-chart-card">
+      <span class="lane-kicker">Proof</span>
+      <h3>Boundary now</h3>
+      <div class="live-chart-shell" data-live-chart="proof"></div>
+      <p class="live-chart-caption" data-live-caption="proof">Live proof snapshot unavailable. Boundary status will update automatically when upstream recovers.</p>
+    </div>
+  </div>
+
+  <h2 class="reveal">Receipt and settlement view</h2>
+  <p class="section-intro compact-copy">The table below stays compact: runtime ID, proof type, SLO status, and treasury floor pressure. This keeps operator decisions visible without opening multiple routes manually.</p>
+  <div class="card reveal proof-summary-shell" data-proof-summary-shell>
+    <div class="proof-summary-grid">
+      <div class="proof-summary-item"><span>runtime id</span><strong data-proof-runtime-id>loom_native</strong></div>
+      <div class="proof-summary-item"><span>proof type</span><strong data-proof-type>live_host_runtime_probe</strong></div>
+      <div class="proof-summary-item"><span>slo status</span><strong data-proof-slo>healthy</strong></div>
+      <div class="proof-summary-item"><span>alerts</span><strong data-proof-alerts>0</strong></div>
+      <div class="proof-summary-item"><span>treasury cash</span><strong data-proof-cash>--</strong></div>
+      <div class="proof-summary-item"><span>reserve floor</span><strong data-proof-floor>--</strong></div>
+    </div>
+    <p class="dim small mt-sm" data-proof-updated-at>Bootstrap baseline loaded. Live proof summary refreshes every 15 seconds.</p>
+  </div>
+
+  <h2 class="reveal">Realtime operator alerts</h2>
+  <p class="section-intro compact-copy">Live event feed from gateway notifications. Stream mode uses Server-Sent Events and automatically falls back to polling if needed.</p>
+  <div class="card reveal">
+    <div class="operator-stream-head">
+      <span class="status-good" data-stream-mode>connecting</span>
+      <span class="dim small" data-stream-note>Preparing realtime link…</span>
+    </div>
+    <div class="operator-stream-log" data-operator-stream-log>
+      <div class="operator-stream-empty">Operator stream is ready. New events and alerts appear here in realtime.</div>
+    </div>
+  </div>
+
+  <footer class="footer premium-footer">
+    <div class="footer-inner">
+      <div class="footer-brand-col">
+        <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
+        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+      </div>
+      <div class="footer-nav-col">
+        <div class="footer-nav-group">
+          <h4>Product</h4>
+          <a href="/loom">Loom Runtime</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Kernel</a>
+          <a href="/demo">Live Demo</a>
+          <a href="/compare">Compare</a>
+        </div>
+        <div class="footer-nav-group">
+          <h4>Governance</h4>
+          <a href="/why">Why Meridian</a>
+          <a href="/proofs">Proofs</a>
+          <a href="/workflows">Workflows</a>
+          <a href="/boundary">Boundary</a>
+        </div>
+        <div class="footer-nav-group">
+          <h4>Community</h4>
+          <a href="/community">Community Hub</a>
+          <a href="/support">Support</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-loom/issues" target="_blank" rel="noopener">Contribute</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-loom" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+    </div>
+  </footer>
+</div>
+
+<script src="/assets/meridian.js?v=20260407-oss1" defer></script>
+</body>
+</html>

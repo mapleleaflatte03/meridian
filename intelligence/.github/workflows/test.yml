@@ -1,0 +1,34 @@
+name: Intelligence Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  PYTHONPATH: .
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Syntax check gateway modules
+        run: |
+          python -m py_compile meridian_config.py meridian_gateway.py
+
+      - name: Run deterministic gateway unit tests
+        run: |
+          python -m unittest test_gateway_brain_router -v

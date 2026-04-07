@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://meridian.local/schemas/brain_router.schema.json",
+  "title": "Meridian Brain Router Config",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string"
+    },
+    "manager": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "profile_name": { "type": "string" },
+        "transport_kind": {
+          "type": "string",
+          "enum": ["cli_session", "http_json"]
+        },
+        "endpoint": { "type": "string" },
+        "model": { "type": "string" },
+        "key_pool": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "failover_status_codes": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 100, "maximum": 599 }
+        },
+        "max_tokens": { "type": "integer", "minimum": 1 },
+        "cli_bin": { "type": "string" },
+        "cli_home": { "type": "string" }
+      }
+    }
+  }
+}

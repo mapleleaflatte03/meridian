@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Meridian Trust Ops Queue</title>
+<meta name="description" content="Operator surface for Meridian Trust Ops: approval queue, questionnaire state, evidence-backed review decisions, and final-delivery gates.">
+<link rel="icon" type="image/svg+xml" href="/assets/meridian_mark_flat.svg">
+<link rel="alternate icon" type="image/png" href="/assets/logo_favicon_64.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/assets/logo_avatar_192.png">
+<meta property="og:title" content="Meridian Trust Ops Queue">
+<meta property="og:description" content="Operator surface for Meridian Trust Ops approval queue and questionnaire state.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://app.welliam.codes/trust-ops">
+<meta property="og:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Meridian Trust Ops Queue">
+<meta name="twitter:description" content="Operator surface for Meridian Trust Ops approval queue and questionnaire state.">
+<meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260407-oss1">
+</head>
+<body class="page-trust-ops">
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/meridian_mark_flat.svg" alt="" class="brand-mark" aria-hidden="true">
+      <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="brand-wordmark">
+    </a>
+    <nav class="site-nav">
+      <a href="/loom">Product</a>
+      <a href="/why">Governance</a>
+      <a href="/proofs">Proofs</a>
+      <a href="/workflows">Workflows</a>
+      <a href="/community">Community</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Docs</a>
+      <a href="/loom#install" class="nav-cta">Get Started</a>
+    </nav>
+  </div>
+</header>
+
+<div class="page-intro">
+  <div class="page-intro-shell">
+    <div class="page-intro-main">
+      <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="page-wordmark">
+      <div class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        <span>Operator surface &middot; governed review queue</span>
+      </div>
+      <h1>Trust Ops Queue</h1>
+      <p class="subtitle">This protected page is for questionnaire approvals, stale evidence, revoked claims, and final-delivery gates. It sits on the same host boundary as the Trust Ops routes, but it is for operators, not marketing.</p>
+    </div>
+    <aside class="page-rail">
+      <div class="rail-kicker">What this page shows</div>
+      <div class="rail-item">
+        <span>Actionable first</span>
+        <strong>Pending, stale, revoked, unresolved.</strong>
+        <p>The queue defaults to the items that still block or qualify final trust-pack delivery.</p>
+      </div>
+      <div class="rail-item">
+        <span>Governed review</span>
+        <strong>Review paths stay auditable.</strong>
+        <p>Queue and evidence review actions still flow through Meridian's audit, authority, and court-aware gateway logic.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="container" data-trust-ops-shell>
+  <div class="notice mb-xl">
+    <strong>Operator truth:</strong>
+    <span class="dim">This surface is meant to make Trust Ops state usable, not to widen the public claim. If a questionnaire remains unresolved, the page keeps that visible instead of faking a final answer pack.</span>
+  </div>
+
+  <div class="card operator-auth mb-lg">
+    <div>
+      <strong>Operator access</strong>
+      <p class="dim">Trust Ops data is now behind an operator token. The page shell can stay public; queue state, review actions, and final-delivery controls do not.</p>
+    </div>
+    <form class="operator-auth-form" data-trust-ops-auth-form>
+      <div class="operator-hidden-field" aria-hidden="true">
+        <label for="trust-ops-operator-username">Operator username</label>
+        <input id="trust-ops-operator-username" name="operator_username" type="text" autocomplete="username" tabindex="-1" value="meridian-operator">
+      </div>
+      <div class="field-group">
+        <label for="trust-ops-operator-token">Operator token</label>
+        <input id="trust-ops-operator-token" name="operator_token" type="password" autocomplete="current-password" placeholder="Paste Meridian operator token">
+      </div>
+      <label class="operator-checkbox">
+        <input type="checkbox" name="remember_token" value="true">
+        <span>Remember in this browser</span>
+      </label>
+      <button type="submit" class="cta">Unlock queue</button>
+      <button type="button" class="cta cta-outline" data-trust-ops-clear-token>Clear token</button>
+    </form>
+    <p class="operator-status" data-trust-ops-auth-status>Operator token required.</p>
+  </div>
+
+  <div class="operator-toolbar card mb-lg">
+    <form class="operator-filters" data-trust-ops-filter-form>
+      <div class="field-group">
+        <label for="trust-ops-status-filter">Queue filter</label>
+        <select id="trust-ops-status-filter" name="status">
+          <option value="actionable">Actionable only</option>
+          <option value="all">All visible items</option>
+          <option value="pending">Pending approval</option>
+          <option value="approved">Approved</option>
+          <option value="stale">Stale</option>
+          <option value="revoked">Revoked</option>
+          <option value="unresolved">Unresolved</option>
+          <option value="draft">Draft</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label for="trust-ops-questionnaire-filter">Questionnaire</label>
+        <select id="trust-ops-questionnaire-filter" name="questionnaire_id">
+          <option value="">All questionnaires</option>
+        </select>
+      </div>
+      <label class="operator-checkbox">
+        <input type="checkbox" name="include_cleared" value="true">
+        <span>Include cleared items</span>
+      </label>
+      <button type="submit" class="cta cta-outline">Refresh queue</button>
+    </form>
+    <p class="operator-status" data-trust-ops-status>Trust Ops sync started.</p>
+  </div>
+
+  <div class="card operator-bulk mb-lg" data-trust-ops-bulk-bar hidden>
+    <div class="operator-bulk-row">
+      <label class="operator-checkbox">
+        <input type="checkbox" data-trust-ops-select-all>
+        <span>Select visible items</span>
+      </label>
+      <strong class="operator-selected-count" data-trust-ops-selected-count>0 selected</strong>
+      <div class="operator-actions">
+        <button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>
+        <button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>
+        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>
+        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="operator-summary-grid reveal" data-trust-ops-summary>
+    <article class="feature-card">
+      <span class="operator-label">Actionable</span>
+      <strong data-summary-actionable>0</strong>
+      <p>Queue items still needing operator attention.</p>
+    </article>
+    <article class="feature-card">
+      <span class="operator-label">Pending approvals</span>
+      <strong data-summary-pending>0</strong>
+      <p>Items that still block delivery because approval is required.</p>
+    </article>
+    <article class="feature-card">
+      <span class="operator-label">Ready packs</span>
+      <strong data-summary-ready>0</strong>
+      <p>Questionnaires already clear for final trust-pack delivery.</p>
+    </article>
+    <article class="feature-card">
+      <span class="operator-label">Evidence mix</span>
+      <strong data-summary-evidence>0/0/0/0</strong>
+      <p>Approved / draft / stale / revoked evidence entries.</p>
+    </article>
+  </div>
+
+  <h2>Approval Queue</h2>
+  <p class="section-intro">The queue view merges questionnaire state, question state, evidence state, and the last review decision into one operator-friendly table.</p>
+  <div class="card">
+    <div class="data-table-wrap">
+      <table class="data-table operator-table">
+        <thead>
+          <tr>
+            <th>Select</th>
+            <th>Question</th>
+            <th>State</th>
+            <th>Evidence</th>
+            <th>Owner</th>
+            <th>Questionnaire</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody data-trust-ops-queue-body>
+          <tr><td colspan="7">Queue sync in progress.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <h2>Questionnaire Detail</h2>
+  <p class="section-intro">Selected questionnaire state is rendered below so an operator can see exactly which questions are approved, stale, revoked, or explicitly unresolved before touching final delivery.</p>
+  <div class="card" data-trust-ops-questionnaire-detail>
+    <p class="dim">No questionnaire selected yet.</p>
+  </div>
+
+    <footer class="footer premium-footer">
+    <div class="footer-inner">
+      <div class="footer-brand-col">
+        <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
+        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+      </div>
+      <div class="footer-nav-col">
+        <div class="footer-nav-group">
+          <h4>Product</h4>
+          <a href="/loom">Loom Runtime</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Kernel</a>
+          <a href="/demo">Live Demo</a>
+          <a href="/compare">Compare</a>
+        </div>
+        <div class="footer-nav-group">
+          <h4>Governance</h4>
+          <a href="/why">Why Meridian</a>
+          <a href="/proofs">Proofs</a>
+          <a href="/workflows">Workflows</a>
+          <a href="/boundary">Boundary</a>
+        </div>
+        <div class="footer-nav-group">
+          <h4>Community</h4>
+          <a href="/community">Community Hub</a>
+          <a href="/support">Support</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-loom/issues" target="_blank" rel="noopener">Contribute</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-loom" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+    </div>
+  </footer>
+</div>
+
+<script src="/assets/meridian.js?v=20260407-oss1" defer></script>
+</body>
+</html>

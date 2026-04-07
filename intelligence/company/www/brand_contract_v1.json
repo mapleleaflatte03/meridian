@@ -1,0 +1,37 @@
+{
+  "schema_version": "meridian.brand.contract.v1",
+  "canonical_assets": {
+    "mark": "assets/meridian_mark_flat.svg",
+    "wordmark": "assets/meridian_wordmark.svg",
+    "lockup": "assets/meridian_lockup.svg"
+  },
+  "public_pages": [
+    "index.html",
+    "demo.html",
+    "compare.html",
+    "proofs.html",
+    "workflows.html",
+    "community.html",
+    "loom.html",
+    "why.html",
+    "pilot.html",
+    "support.html",
+    "trust-ops.html",
+    "OPEN_SOURCE_BOUNDARY.html"
+  ],
+  "required_tokens": {
+    "header": [
+      "<header class=\"site-header\">",
+      "/assets/meridian_mark_flat.svg",
+      "/assets/meridian_wordmark.svg"
+    ],
+    "footer": [
+      "<div class=\"footer\">",
+      "/assets/meridian_lockup.svg"
+    ],
+    "intro": [
+      "Meridian",
+      "Governed Agent Runtime"
+    ]
+  }
+}

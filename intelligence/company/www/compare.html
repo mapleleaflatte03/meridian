@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why Loom instead of the strongest open agent stacks</title>
+<meta name="description" content="A bounded comparison of Loom against OpenClaw, OpenFang, IronClaw, TEMM1E, Goose, OpenHands, CrewAI, and LangGraph based on public repo/docs in April 2026.">
+<link rel="icon" type="image/svg+xml" href="/assets/meridian_mark_flat.svg">
+<link rel="alternate icon" type="image/png" href="/assets/logo_favicon_64.png">
+<link rel="apple-touch-icon" sizes="192x192" href="/assets/logo_avatar_192.png">
+<meta property="og:title" content="Why Loom instead of the strongest open agent stacks">
+<meta property="og:description" content="A bounded comparison of Loom against OpenClaw, OpenFang, IronClaw, TEMM1E, Goose, OpenHands, CrewAI, and LangGraph.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://app.welliam.codes/compare">
+<meta property="og:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:site_name" content="Meridian">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Why Loom instead of the strongest open agent stacks">
+<meta name="twitter:description" content="A bounded comparison of Loom against OpenClaw, OpenFang, IronClaw, TEMM1E, Goose, OpenHands, CrewAI, and LangGraph.">
+<meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260407-oss1">
+</head>
+<body class="page-compare">
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="brand" href="/">
+      <img src="/assets/meridian_mark_flat.svg" alt="" class="brand-mark" aria-hidden="true">
+      <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="brand-wordmark">
+    </a>
+    <nav class="site-nav">
+      <a href="/loom">Product</a>
+      <a href="/why">Governance</a>
+      <a href="/proofs">Proofs</a>
+      <a href="/workflows">Workflows</a>
+      <a href="/community">Community</a>
+      <a href="/support">Support</a>
+      <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Docs</a>
+      <a href="/loom#install" class="nav-cta">Get Started</a>
+    </nav>
+  </div>
+</header>
+
+<div class="page-intro">
+  <div class="page-intro-shell">
+    <div class="page-intro-main">
+      <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="page-wordmark">
+      <div class="eyebrow">
+        <span class="eyebrow-dot"></span>
+        <span>Loom battle page · public boundary-safe</span>
+      </div>
+      <h1>Why Loom instead of the strongest open agent stacks.</h1>
+      <p class="subtitle">This page is runtime-first. It compares Loom directly with the open systems serious builders actually mention: OpenClaw, OpenFang, IronClaw, TEMM1E, Goose, OpenHands, CrewAI, and LangGraph.</p>
+    </div>
+    <aside class="page-rail">
+      <div class="rail-kicker">Comparison boundary</div>
+      <div class="rail-item">
+        <span>Sources</span>
+        <strong>Public repo and docs only.</strong>
+        <p>Category judgments here are based on public runtime surfaces, not on private demos or invented claims.</p>
+      </div>
+      <div class="rail-item">
+        <span>Loom thesis</span>
+        <strong>Governance and proof as runtime choice.</strong>
+        <p>Loom is not trying to be the broadest agent shell. It is trying to be the runtime you choose when receipts, authority, budget, and sanctions matter enough to change the decision.</p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="container">
+
+  <div class="notice mb-xl">
+    <strong>Loom is trying to replace other runtimes, not decorate them.</strong>
+    <span class="dim">Kernel stays runtime-neutral, but Loom is the official first-party runtime that has to win on product feel, install speed, receipts, and governed execution.</span>
+  </div>
+
+  <h2>Reality split: breadth assistant vs governed runtime</h2>
+  <p class="section-intro compact-copy">Claw-family stacks currently win breadth, channels, and community gravity. Loom is intentionally optimized for governed execution where warrant, authority, treasury, and proof-chain are the selection criteria.</p>
+  <div class="scoreboard-grid">
+    <article class="score-card">
+      <span class="score-kicker">Claw-family default</span>
+      <h3>Personal autonomy and surface breadth</h3>
+      <p>Best fit when the requirement is broad channel coverage, companion UX, and fast feature spread across a large contributor base.</p>
+    </article>
+    <article class="score-card">
+      <span class="score-kicker">Loom default</span>
+      <h3>Governed runtime for organizations</h3>
+      <p>Best fit when execution must stay auditable and enforceable: receipts, sanctions, budget gates, and inspectable operator state.</p>
+    </article>
+  </div>
+
+  <h2>Runtime snapshot: resource and proof posture</h2>
+  <p class="section-intro compact-copy">This table is intentionally bounded. It combines local cold-start resource checks with runtime-governance posture from public stack surfaces.</p>
+  <div class="card">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Stack</th>
+          <th>Cold start band</th>
+          <th>Peak RSS band</th>
+          <th>Proof posture</th>
+          <th>Governance posture</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td data-label="Stack"><strong>Loom</strong></td>
+          <td data-label="Cold start band">~30ms (`loom status` reference)</td>
+          <td data-label="Peak RSS band">~4.8 MiB</td>
+          <td data-label="Proof posture">PoGE receipts + zk settlement-compatible path</td>
+          <td data-label="Governance posture">Kernel warrants, authority, treasury, court</td>
+        </tr>
+        <tr>
+          <td data-label="Stack"><strong>OpenFang</strong></td>
+          <td data-label="Cold start band">~28ms (`--help` reference)</td>
+          <td data-label="Peak RSS band">~2.8 MiB</td>
+          <td data-label="Proof posture">audit-oriented runtime traces</td>
+          <td data-label="Governance posture">runtime controls, no constitutional court/treasury model</td>
+        </tr>
+        <tr>
+          <td data-label="Stack"><strong>IronClaw</strong></td>
+          <td data-label="Cold start band">~33ms (`--help` reference)</td>
+          <td data-label="Peak RSS band">~5.1 MiB</td>
+          <td data-label="Proof posture">security-first local runtime controls</td>
+          <td data-label="Governance posture">strong sandbox posture, no kernel-style REP/AUTH/CASH economy</td>
+        </tr>
+        <tr>
+          <td data-label="Stack"><strong>ZeroClaw</strong></td>
+          <td data-label="Cold start band">benchmark slot included in Loom harness</td>
+          <td data-label="Peak RSS band">benchmark slot included in Loom harness</td>
+          <td data-label="Proof posture">runtime audit and performance emphasis</td>
+          <td data-label="Governance posture">breadth-first runtime surface, no Loom-style court/treasury layer</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Quadrant View</h2>
+  <p class="section-intro compact-copy">This is the least misleading single frame: upward means more governance pressure, rightward means more breadth, and the lower-right corner is where persistent local agency tends to live.</p>
+  <div class="quadrant-map">
+    <div class="quadrant-cell quadrant-cell-meridian">
+      <span class="quadrant-label">high governance / runtime pressure</span>
+      <h3>Loom</h3>
+      <p>Best when the runtime decision changes because receipts, sanctions, budget gates, and inspectable operator truth matter.</p>
+      <div class="quadrant-chips">
+        <span class="quadrant-chip">governance</span>
+        <span class="quadrant-chip">proof</span>
+        <span class="quadrant-chip">local runtime</span>
+      </div>
+    </div>
+    <div class="quadrant-cell">
+      <span class="quadrant-label">high breadth / product surface</span>
+      <h3>OpenClaw · OpenHands</h3>
+      <p>Best when the operator is really optimizing for breadth, companion feel, or coding-platform surface area.</p>
+      <div class="quadrant-chips">
+        <span class="quadrant-chip">channels</span>
+        <span class="quadrant-chip">GUI</span>
+        <span class="quadrant-chip">onboarding</span>
+      </div>
+    </div>
+    <div class="quadrant-cell">
+      <span class="quadrant-label">runtime density / framework gravity</span>
+      <h3>OpenFang · CrewAI · LangGraph</h3>
+      <p>Best when the buyer mostly wants orchestration primitives or dense runtime packaging.</p>
+      <div class="quadrant-chips">
+        <span class="quadrant-chip">runtime</span>
+        <span class="quadrant-chip">state</span>
+        <span class="quadrant-chip">orchestration</span>
+      </div>
+    </div>
+    <div class="quadrant-cell">
+      <span class="quadrant-label">persistent local agency</span>
+      <h3>IronClaw · TEMM1E · Goose</h3>
+      <p>Best when the operator wants memory-heavy local agency, engineering ergonomics, or secure local-assistant feel.</p>
+      <div class="quadrant-chips">
+        <span class="quadrant-chip">memory</span>
+        <span class="quadrant-chip">local</span>
+        <span class="quadrant-chip">assistant</span>
+      </div>
+    </div>
+    <div class="quadrant-axis quadrant-axis-x">more breadth</div>
+    <div class="quadrant-axis quadrant-axis-y">more governance</div>
+  </div>
+
+  <div class="scoreboard-grid">
+    <div class="score-card">
+      <span class="score-kicker">Loom profile</span>
+      <h3>Visual edge map</h3>
+      <div class="score-list">
+        <div class="score-row"><span class="score-label">governance</span><div class="score-track"><div class="score-fill" style="--score: 96%;"></div></div><span class="score-value">9.6</span></div>
+        <div class="score-row"><span class="score-label">proof</span><div class="score-track"><div class="score-fill" style="--score: 90%;"></div></div><span class="score-value">9.0</span></div>
+        <div class="score-row"><span class="score-label">packaging</span><div class="score-track"><div class="score-fill score-warn" style="--score: 58%;"></div></div><span class="score-value">5.8</span></div>
+        <div class="score-row"><span class="score-label">mindshare</span><div class="score-track"><div class="score-fill score-warn" style="--score: 34%;"></div></div><span class="score-value">3.4</span></div>
+      </div>
+    </div>
+    <div class="score-card">
+      <span class="score-kicker">Decision shortcut</span>
+      <h3>What to mention first</h3>
+      <div class="bullet-stack">
+        <div class="bullet-item"><span class="bullet-mark">01</span><span><strong>Need governed runtime execution?</strong> Loom.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">02</span><span><strong>Need broad assistant surface?</strong> OpenClaw or OpenHands.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">03</span><span><strong>Need dense runtime packaging?</strong> OpenFang.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">04</span><span><strong>Need local memory-heavy agency?</strong> IronClaw, TEMM1E, or Goose.</span></div>
+      </div>
+    </div>
+  </div>
+
+  <h2>Field Matrix</h2>
+  <p class="section-intro compact-copy">This is the fast read, not a benchmark lab. The point is to show where Loom still has to earn its place as a runtime choice.</p>
+  <div class="scoreboard-grid">
+    <article class="score-card">
+      <span class="score-kicker">Governed runtime</span>
+      <h3>Loom</h3>
+      <p>Built for local agent execution where approval, budget, memory receipts, channels, and proof routes stay inspectable.</p>
+      <div class="score-list">
+        <div class="score-row"><span class="score-label">governance</span><div class="score-track"><div class="score-fill" style="--score: 96%;"></div></div><span class="score-value">9.6</span></div>
+        <div class="score-row"><span class="score-label">proof</span><div class="score-track"><div class="score-fill" style="--score: 90%;"></div></div><span class="score-value">9.0</span></div>
+        <div class="score-row"><span class="score-label">memory</span><div class="score-track"><div class="score-fill score-warn" style="--score: 58%;"></div></div><span class="score-value">5.8</span></div>
+        <div class="score-row"><span class="score-label">packaging</span><div class="score-track"><div class="score-fill score-warn" style="--score: 58%;"></div></div><span class="score-value">5.8</span></div>
+      </div>
+    </article>
+    <article class="score-card">
+      <span class="score-kicker">Breadth bundle</span>
+      <h3>OpenClaw · OpenHands</h3>
+      <p>Win when breadth, coding presence, and big product surface matter more than governed runtime truth.</p>
+      <div class="score-list">
+        <div class="score-row"><span class="score-label">governance</span><div class="score-track"><div class="score-fill score-warn" style="--score: 24%;"></div></div><span class="score-value">2.4</span></div>
+        <div class="score-row"><span class="score-label">breadth</span><div class="score-track"><div class="score-fill" style="--score: 90%;"></div></div><span class="score-value">9.0</span></div>
+        <div class="score-row"><span class="score-label">memory</span><div class="score-track"><div class="score-fill" style="--score: 55%;"></div></div><span class="score-value">5.5</span></div>
+        <div class="score-row"><span class="score-label">packaging</span><div class="score-track"><div class="score-fill" style="--score: 89%;"></div></div><span class="score-value">8.9</span></div>
+      </div>
+    </article>
+    <article class="score-card">
+      <span class="score-kicker">Runtime density bundle</span>
+      <h3>OpenFang · CrewAI · LangGraph</h3>
+      <p>Win when the conversation is mostly about orchestration power, framework gravity, or one-box runtime density.</p>
+      <div class="score-list">
+        <div class="score-row"><span class="score-label">governance</span><div class="score-track"><div class="score-fill score-warn" style="--score: 23%;"></div></div><span class="score-value">2.3</span></div>
+        <div class="score-row"><span class="score-label">breadth</span><div class="score-track"><div class="score-fill" style="--score: 57%;"></div></div><span class="score-value">5.7</span></div>
+        <div class="score-row"><span class="score-label">memory</span><div class="score-track"><div class="score-fill" style="--score: 52%;"></div></div><span class="score-value">5.2</span></div>
+        <div class="score-row"><span class="score-label">packaging</span><div class="score-track"><div class="score-fill" style="--score: 87%;"></div></div><span class="score-value">8.7</span></div>
+      </div>
+    </article>
+    <article class="score-card">
+      <span class="score-kicker">Persistent local bundle</span>
+      <h3>IronClaw · TEMM1E · Goose</h3>
+      <p>Win when memory density, secure local assistant feel, or engineering-task ergonomics matter most.</p>
+      <div class="score-list">
+        <div class="score-row"><span class="score-label">governance</span><div class="score-track"><div class="score-fill score-warn" style="--score: 24%;"></div></div><span class="score-value">2.4</span></div>
+        <div class="score-row"><span class="score-label">breadth</span><div class="score-track"><div class="score-fill" style="--score: 56%;"></div></div><span class="score-value">5.6</span></div>
+        <div class="score-row"><span class="score-label">memory</span><div class="score-track"><div class="score-fill" style="--score: 84%;"></div></div><span class="score-value">8.4</span></div>
+        <div class="score-row"><span class="score-label">packaging</span><div class="score-track"><div class="score-fill" style="--score: 74%;"></div></div><span class="score-value">7.4</span></div>
+      </div>
+    </article>
+  </div>
+
+  <h2>Pick by operational requirement, not marketing breadth</h2>
+  <div class="split-grid">
+    <div class="split-card">
+      <h3>Need inspectable governed execution</h3>
+      <p>Pick Loom when the runtime decision changes because you need receipts, authority, budget gates, sanctions, and an honest local boundary.</p>
+    </div>
+    <div class="split-card">
+      <h3>Need broad assistant UX</h3>
+      <p>Pick OpenClaw or OpenHands when the real ask is feature breadth, coding environment presence, or companion surface.</p>
+    </div>
+    <div class="split-card">
+      <h3>Need dense orchestration packaging</h3>
+      <p>Pick OpenFang, CrewAI, or LangGraph when orchestration infrastructure is the center of gravity.</p>
+    </div>
+    <div class="split-card">
+      <h3>Need local memory-heavy agency</h3>
+      <p>Pick IronClaw, TEMM1E, or Goose when persistent local operator feel matters more than institutional governance.</p>
+    </div>
+  </div>
+
+  <h2>Loom still has to earn three things</h2>
+  <div class="card">
+    <div class="bullet-stack">
+      <div class="bullet-item"><span class="bullet-mark">01</span><span><strong>Packaging polish.</strong> Install is faster now, but the field still beats Loom on instant first-run polish.</span></div>
+      <div class="bullet-item"><span class="bullet-mark">02</span><span><strong>Memory feel.</strong> Loom now has governed memory receipts and personal-agent state, but it still trails the strongest local agency systems on density and ergonomics.</span></div>
+      <div class="bullet-item"><span class="bullet-mark">03</span><span><strong>Mindshare.</strong> The thesis is sharper than the current public attention, which means distribution is still behind the runtime work.</span></div>
+    </div>
+  </div>
+
+  <div class="notice">
+    <strong>What Loom should copy is execution quality, not category drift.</strong>
+    <span class="dim">It should copy better packaging, stronger memory ergonomics, and tighter personal-agent feel. It should not blur itself back into a generic SaaS layer or a governance addon for other runtimes.</span>
+  </div>
+
+  <div class="card text-center mt-lg">
+    <p><strong>Read the runtime, not the doctrine.</strong></p>
+    <a class="cta cta-primary" href="/loom#install">Install Loom</a>
+    <a class="cta cta-outline" href="/demo">See the live Loom-backed demo</a>
+    <a class="cta cta-outline" href="/boundary">Read the boundary note</a>
+  </div>
+
+    <footer class="footer premium-footer">
+    <div class="footer-inner">
+      <div class="footer-brand-col">
+        <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
+        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+      </div>
+      <div class="footer-nav-col">
+        <div class="footer-nav-group">
+          <h4>Product</h4>
+          <a href="/loom">Loom Runtime</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-kernel" target="_blank" rel="noopener">Kernel</a>
+          <a href="/demo">Live Demo</a>
+          <a href="/compare">Compare</a>
+        </div>
+        <div class="footer-nav-group">
+          <h4>Governance</h4>
+          <a href="/why">Why Meridian</a>
+          <a href="/proofs">Proofs</a>
+          <a href="/workflows">Workflows</a>
+          <a href="/boundary">Boundary</a>
+        </div>
+        <div class="footer-nav-group">
+          <h4>Community</h4>
+          <a href="/community">Community Hub</a>
+          <a href="/support">Support</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-loom/issues" target="_blank" rel="noopener">Contribute</a>
+          <a href="https://github.com/mapleleaflatte03/meridian-loom" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+    </div>
+  </footer>
+</div>
+
+<script src="/assets/meridian.js?v=20260407-oss1" defer></script>
+</body>
+</html>

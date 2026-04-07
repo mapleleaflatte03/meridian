@@ -1,0 +1,5 @@
+{
+  "name": "system_monitor",
+  "description": "Collect a bounded host system snapshot through the governed runtime.",
+  "capability": "loom.system.info.v1"
+}

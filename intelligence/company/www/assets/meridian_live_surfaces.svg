@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 720" width="1200" height="720" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
+  <title id="title">Meridian live surface panels</title>
+  <desc id="desc">Three dark panels showing the founding host, product surfaces, and honest delivery boundary.</desc>
+  <defs>
+    <style>
+      .bg { fill: #05070b; }
+      .panel { fill: #0c1117; stroke: #253240; stroke-width: 2; }
+      .soft { fill: #0f1720; }
+      .line { fill: #e6edf5; font: 600 20px/1 "JetBrains Mono", monospace; }
+      .body { fill: #8ca0b3; font: 500 18px/1.45 "JetBrains Mono", monospace; }
+      .title { fill: #f3f7fb; font: 700 26px/1 "Space Grotesk", Inter, sans-serif; letter-spacing: 1.2px; }
+      .tag { fill: #4fc3f7; font: 700 14px/1 "JetBrains Mono", monospace; letter-spacing: 2px; text-transform: uppercase; }
+      .ok { fill: #8ce99a; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .warn { fill: #ffd166; font: 700 18px/1 "JetBrains Mono", monospace; }
+      .rail { fill: #4fc3f7; opacity: .9; }
+    </style>
+  </defs>
+  <rect class="bg" width="1200" height="720" rx="28"/>
+  <rect class="panel" x="32" y="32" width="1136" height="656" rx="24"/>
+  <rect class="soft" x="64" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="432" y="72" width="336" height="576" rx="20"/>
+  <rect class="soft" x="800" y="72" width="336" height="576" rx="20"/>
+  <rect class="rail" x="64" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="432" y="72" width="336" height="6" rx="3"/>
+  <rect class="rail" x="800" y="72" width="336" height="6" rx="3"/>
+
+  <text x="88" y="118" class="tag">Founding Host</text>
+  <text x="88" y="160" class="title">app.welliam.codes</text>
+  <text x="88" y="208" class="body">runtime              Meridian Loom live host</text>
+  <text x="88" y="240" class="body">scope                founding institution only</text>
+  <text x="88" y="272" class="body">proof                public manifest and runtime receipt</text>
+  <text x="88" y="324" class="ok">LIVE, BUT NARROW</text>
+  <text x="88" y="356" class="body">No fake multi-host claims.</text>
+
+  <text x="456" y="118" class="tag">Product Surfaces</text>
+  <text x="456" y="160" class="title">Demo, Pilot, Support, MCP</text>
+  <text x="456" y="208" class="body">demo                 first managed vertical proof</text>
+  <text x="456" y="240" class="body">pilot                founder-led manual evaluation</text>
+  <text x="456" y="272" class="body">support              backing the kernel and founder</text>
+  <text x="456" y="304" class="body">mcp                  metered API surface</text>
+  <text x="456" y="356" class="ok">SURFACES ARE REAL</text>
+
+  <text x="824" y="118" class="tag">Truth Boundary</text>
+  <text x="824" y="160" class="title">Manual before scale</text>
+  <text x="824" y="208" class="body">delivery             founder-led while treasury-gated</text>
+  <text x="824" y="240" class="body">automation           held behind constitutional preflight</text>
+  <text x="824" y="272" class="body">payments             x402 live, checkout still narrow</text>
+  <text x="824" y="320" class="warn">NO PRODUCT FICTION</text>
+  <text x="824" y="352" class="body">The kernel is the durable layer.</text>
+</svg>

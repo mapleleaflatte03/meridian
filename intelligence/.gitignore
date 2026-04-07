@@ -1,0 +1,100 @@
+# ── Runtime and config (never push) ──
+.claude/
+.openclaw/
+__pycache__/
+*.pyc
+
+# ── Internal company docs (not for public repo) ──
+AGENTS.md
+HEARTBEAT.md
+IDENTITY.md
+MEMORY.md
+MIROFISH_LITE.md
+NIGHT_SHIFT.md
+ORG_CHART.md
+SECURITY_TOOL_INTEGRATION.md
+SOUL.md
+STAFF_PLAYBOOK.md
+TOOLS.md
+USER.md
+TELEGRAM_*.md
+tmp_*.md
+
+# ── Runtime state and logs (never push) ──
+company/subscriptions.json
+company/subscriptions.json.bak
+company/owner_ledger.json
+company/watchlists.json
+company/channel_deliver_state.json
+company/trial_reminder_state.json
+company/payment_monitor_state.json
+company/leads.json
+company/payment_events.log
+company/mcp_settlements.jsonl
+company/.mcp_settlement.lock
+company/.subscriptions.lock
+company/tests/
+company/battlecards/
+company/__pycache__/
+
+# ── Internal operational docs (not for public repo yet) ──
+company/SALES_KIT.md
+company/PILOT_RUNBOOK.md
+company/REVENUE_PLAN.md
+company/REVENUE_SPRINT_2026-03-15.md
+company/audits/
+company/marketing/
+company/browser/
+company/github-repo/
+
+# ── Platform state (never push — contains live org/agent data) ──
+company/meridian_platform/organizations.json
+company/meridian_platform/agent_registry.json
+company/meridian_platform/audit_log.jsonl
+company/meridian_platform/metering.jsonl
+company/meridian_platform/slo_alert_log.jsonl
+company/meridian_platform/pilot_intake.json
+company/meridian_platform/.pilot_intake.lock
+company/meridian_platform/authority_queue.json
+company/meridian_platform/court_records.json
+company/meridian_platform/*.db
+company/meridian_platform/*.db-shm
+company/meridian_platform/*.db-wal
+company/meridian_platform/__pycache__/
+
+# ── Economy and agent internals (never push) ──
+economy/
+memory/
+night-shift/
+simulations/
+skills/*
+!skills/ai-stack-watch/
+!skills/ai-stack-watch/SKILL.md
+!skills/security-questionnaire/
+!skills/security-questionnaire/SKILL.md
+security-vendor-manifest.json
+security/
+
+# ── Product code (push separately when ready to open-source) ──
+company/research_pipeline.py
+company/research_sources.json
+company/battlecard.py
+company/brief_quality.py
+company/watchlists.py
+company/subscriptions.py
+company/premium_deliver.py
+company/channel_deliver.py
+company/trial_reminder.py
+company/wallet.py
+company/payment_monitor.py
+company/gen_sample_brief.py
+company/send_email.py
+company/revenue_dashboard.py
+meridian_config.json
+
+# ── Launch runtime artifacts (generated locally) ──
+company/launch/artifacts/*.json
+!company/launch/artifacts/.gitkeep
+
+# ── Acceptance and test output (generated locally) ──
+output/

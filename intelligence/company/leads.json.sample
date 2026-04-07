@@ -1,0 +1,19 @@
+{
+  "_meta": {
+    "schema_version": 1,
+    "owner": "son",
+    "description": "Local lead tracker state for founder-led pilot outreach. Copy to leads.json for live use."
+  },
+  "stage_order": [
+    "new",
+    "contacted",
+    "replied",
+    "scoping",
+    "pilot_active",
+    "waiting_feedback",
+    "negotiating",
+    "won",
+    "lost"
+  ],
+  "leads": []
+}

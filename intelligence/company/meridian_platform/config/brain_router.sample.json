@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "manager": {
+    "profile_name": "manager_primary",
+    "transport_kind": "http_json",
+    "endpoint": "https://example.local/v1/chat/completions",
+    "model": "reasoner-small",
+    "key_pool": [
+      "${MERIDIAN_BRAIN_KEY_A}",
+      "${MERIDIAN_BRAIN_KEY_B}"
+    ],
+    "failover_status_codes": [401, 403, 408, 409, 429, 500, 502, 503, 504],
+    "max_tokens": 650
+  }
+}
