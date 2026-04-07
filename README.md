@@ -14,13 +14,19 @@ Meridian moved from a multi-repo layout to this monorepo to simplify onboarding 
 - one bootstrap entrypoint
 - clear module boundaries preserved under `loom/`, `kernel/`, `intelligence/`
 
-## One-Command Bootstrap
+## One-Command Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
+```
+
+This clones (or reuses) the monorepo, initializes kernel state, prepares shared environment variables, and builds the Loom CLI from source.
+
+If you already cloned the repo:
 
 ```bash
 ./scripts/bootstrap_full.sh
 ```
-
-This initializes kernel state, prepares shared environment variables, and builds the Loom CLI from source.
 
 ## Module Commands
 
