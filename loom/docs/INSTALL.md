@@ -107,10 +107,14 @@ Use the resulting binary:
 
 ```bash
 export LOOM_ROOT="$HOME/.local/share/meridian-loom/runtime/default"
-export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$HOME/meridian}"
+export MERIDIAN_KERNEL_PATH="${MERIDIAN_KERNEL_PATH:-$MERIDIAN_ROOT/kernel}"
+if [ ! -d "$MERIDIAN_KERNEL_PATH" ]; then
+  export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+fi
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
 
-cd /opt/meridian-kernel
+cd "$MERIDIAN_KERNEL_PATH"
 python3 quickstart.py --init-only
 
 loom new-agent \

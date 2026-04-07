@@ -20,7 +20,13 @@ curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main
 ## 2. Initialize Kernel
 
 ```bash
-cd /opt/meridian-kernel
+export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$HOME/meridian}"
+export MERIDIAN_KERNEL_PATH="${MERIDIAN_KERNEL_PATH:-$MERIDIAN_ROOT/kernel}"
+if [ ! -d "$MERIDIAN_KERNEL_PATH" ]; then
+  export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+fi
+
+cd "$MERIDIAN_KERNEL_PATH"
 python3 quickstart.py --init-only
 ```
 
@@ -30,7 +36,10 @@ This creates the local institution and treasury defaults Loom expects on a fresh
 
 ```bash
 export LOOM_ROOT="${HOME}/.local/share/meridian-loom/runtime/default"
-export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+export MERIDIAN_KERNEL_PATH="${MERIDIAN_KERNEL_PATH:-$HOME/meridian/kernel}"
+if [ ! -d "$MERIDIAN_KERNEL_PATH" ]; then
+  export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+fi
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
 
 loom new-agent \

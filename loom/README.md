@@ -53,6 +53,19 @@ curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main
 The installer prefers prebuilt GitHub release assets for the current host and
 falls back to a source build only when no matching asset is available.
 
+## Monorepo bootstrap (optional)
+
+If you are developing Meridian from the unified monorepo layout (`meridian/`),
+bootstrap the full stack in one command:
+
+```bash
+cd /path/to/meridian
+./scripts/bootstrap_full.sh
+```
+
+That initializes Kernel state and builds the Loom CLI in one pass while keeping
+module boundaries (`loom/`, `kernel/`, `intelligence/`) intact.
+
 ## One-command first proof
 
 ```bash

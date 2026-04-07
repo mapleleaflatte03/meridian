@@ -7,7 +7,10 @@ Linux host.
 
 ```bash
 export LOOM_ROOT="$HOME/.local/share/meridian-loom/runtime/default"
-export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+export MERIDIAN_KERNEL_PATH="${MERIDIAN_KERNEL_PATH:-$HOME/meridian/kernel}"
+if [ ! -d "$MERIDIAN_KERNEL_PATH" ]; then
+  export MERIDIAN_KERNEL_PATH=/opt/meridian-kernel
+fi
 export LOOM_SERVICE_TOKEN=loom-local-token
 mkdir -p "$LOOM_ROOT"
 ```
