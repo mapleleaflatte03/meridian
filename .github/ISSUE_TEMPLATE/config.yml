@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Meridian Discussions
+    url: https://github.com/mapleleaflatte03/meridian/discussions
+    about: Use discussions for architecture and research proposals.
+  - name: Security Policy
+    url: https://github.com/mapleleaflatte03/meridian/security/policy
+    about: Report vulnerabilities privately.

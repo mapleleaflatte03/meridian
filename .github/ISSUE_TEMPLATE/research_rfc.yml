@@ -1,0 +1,26 @@
+name: Research RFC
+description: Propose a governance/proof/runtime research direction with measurable evaluation.
+title: "[rfc] "
+labels: ["research", "rfc"]
+body:
+  - type: textarea
+    id: objective
+    attributes:
+      label: Objective
+      description: What hypothesis or capability is being tested?
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Technical Design
+      description: Include trust boundaries, protocol changes, and module impact.
+    validations:
+      required: true
+  - type: textarea
+    id: evaluation
+    attributes:
+      label: Evaluation Plan
+      description: Benchmarks, metrics, or proofs required to accept/reject the RFC.
+    validations:
+      required: true

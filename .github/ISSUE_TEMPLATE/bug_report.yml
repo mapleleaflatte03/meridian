@@ -1,0 +1,34 @@
+name: Bug Report
+description: Report a reproducible issue in runtime, governance, or workspace surfaces.
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What is broken?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction Steps
+      description: Include exact commands, routes, or inputs.
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Test output, logs, screenshots, or proof payload snippets.

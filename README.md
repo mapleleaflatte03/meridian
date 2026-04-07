@@ -82,6 +82,13 @@ python3 -m unittest -v test_subscription_service.py
 
 Meridian is open-source and contribution-first. Hosted services and external publishing credentials remain operational boundaries. See module docs for exact boundary definitions.
 
+## Community and Contribution
+
+- Contribution guide: `CONTRIBUTING.md`
+- Community map: `docs/COMMUNITY_MAP.md`
+- Public roadmap: `ROADMAP.md`
+- Research hub: `docs/RESEARCH_HUB.md`
+
 ## Support (Optional)
 
 - GitHub Sponsors: https://github.com/sponsors/mapleleaflatte03
