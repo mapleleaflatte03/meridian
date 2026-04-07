@@ -1,0 +1,67 @@
+name: Meridian Monorepo CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      loom: ${{ steps.filter.outputs.loom }}
+      kernel: ${{ steps.filter.outputs.kernel }}
+      intelligence: ${{ steps.filter.outputs.intelligence }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            loom:
+              - 'loom/**'
+            kernel:
+              - 'kernel/**'
+            intelligence:
+              - 'intelligence/**'
+
+  loom-rust:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.loom == 'true'
+    defaults:
+      run:
+        working-directory: loom
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: loom
+      - name: Test loom workspace
+        run: cargo test --workspace
+
+  python-kernel-intelligence:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true' || needs.changes.outputs.intelligence == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Kernel tests
+        if: needs.changes.outputs.kernel == 'true'
+        run: |
+          cd kernel
+          python3 -m unittest discover -s kernel/tests -p 'test_*.py'
+          python3 -m unittest discover -s economy/tests -p 'test_*.py'
+
+      - name: Intelligence tests
+        if: needs.changes.outputs.intelligence == 'true'
+        run: |
+          cd intelligence
+          python3 -m unittest -v test_gateway_brain_router.py
+          cd company/meridian_platform
+          python3 -m unittest -v test_subscription_service.py

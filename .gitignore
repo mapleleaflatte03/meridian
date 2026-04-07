@@ -1,0 +1,23 @@
+# Shared build and runtime artifacts
+.DS_Store
+*.log
+*.tmp
+*.swp
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.venv/
+**/venv/
+
+# Rust
+**/target/
+
+# Local runtime/state artifacts
+**/*.db
+**/*.db-wal
+**/*.db-shm
+**/*.lock
+**/output/
+**/runtime/
