@@ -3,7 +3,7 @@
   "latest_brief_date": null,
   "selection_mode": "representative_sample",
   "sample_basis_date": "2026-03-17",
-  "preview": "**Representative Competitor Intelligence Alert \u2014 qualified March 2026 sample**\n\n- **OpenAI Introduces Regional Surcharges for GPT-5.4**: OpenAI's pricing page shows a 10% regional processing surcharge on GPT-5.4 plus a 50% Batch API discount. This was the first geography-based API pricing move among major LLM providers, changing total-cost comparisons by region.\n\n- **Anthropic Holds Pricing While Expanding Context**: Claude Opus 4.6 and Sonnet 4.6 kept pricing flat while moving to a 1M-token context window in beta. The competitive story shifted from raw capability to context-per-dollar and integration stability.\n\n- **Google Hard-Deprecates Gemini 3 Pro Preview**: Google shut down a preview model after less than eight weeks and pushed users toward Gemini 3.1 Pro Preview, signaling a faster deprecation cadence than OpenAI or Anthropic.\n\n--- Representative preview ends here ---\nFull brief via MCP ($0.50 USDC). If you want the workflow evaluated now, request a founder-led manual pilot at /pilot.",
+  "preview": "**Representative Competitor Intelligence Alert \u2014 qualified March 2026 sample**\n\n- **OpenAI Introduces Regional Surcharges for GPT-5.4**: OpenAI's pricing page shows a 10% regional processing surcharge on GPT-5.4 plus a 50% Batch API discount. This was the first geography-based API pricing move among major LLM providers, changing total-cost comparisons by region.\n\n- **Anthropic Holds Pricing While Expanding Context**: Claude Opus 4.6 and Sonnet 4.6 kept pricing flat while moving to a 1M-token context window in beta. The competitive story shifted from raw capability to context-per-dollar and integration stability.\n\n- **Google Hard-Deprecates Gemini 3 Pro Preview**: Google shut down a preview model after less than eight weeks and pushed users toward Gemini 3.1 Pro Preview, signaling a faster deprecation cadence than OpenAI or Anthropic.\n\n--- Representative preview ends here ---\nRun the same workflow locally with open Meridian. Start from /pilot (Get Started) and inspect proof routes directly.",
   "word_count": 605,
   "distinct_sources": 5,
   "quality_pass": true,
@@ -16,6 +16,6 @@
   "latest_brief_quality_warnings": [],
   "source": "Meridian Night-Shift Pipeline (representative sample)",
   "full_price_usd": 0.5,
-  "manual_pilot_only": true,
+  "manual_pilot_only": false,
   "generated_at": "2026-03-23T22:45:04.045643Z"
 }

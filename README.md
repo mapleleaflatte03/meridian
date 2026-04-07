@@ -24,9 +24,10 @@
   <a href="https://app.welliam.codes/proofs">Proofs</a> ·
   <a href="https://app.welliam.codes/workflows">Workflows</a> ·
   <a href="https://app.welliam.codes/community">Community</a> ·
-  <a href="https://app.welliam.codes/pilot">Pilot</a> ·
   <a href="https://app.welliam.codes/support">Support</a> ·
-  <a href="https://app.welliam.codes/boundary">Boundary</a>
+  <a href="https://app.welliam.codes/boundary">Boundary</a> ·
+  <a href="https://github.com/mapleleaflatte03/meridian">Docs</a> ·
+  <a href="https://github.com/mapleleaflatte03/meridian/blob/main/CONTRIBUTING.md">Contribute</a>
 </p>
 
 # Meridian Intelligence
@@ -50,13 +51,13 @@ Operational positioning shorthand:
 
 ## 1-Command Install
 
-If the operator question is "what do I install?", the answer is Loom:
+If the operator question is "what do I install?", use the monorepo one-command setup:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-The installer story belongs to Meridian Loom. This repo links to that runtime surface while keeping the live portal and host boundary honest.
+This keeps onboarding in one place while preserving clear module boundaries.
 
 ## Product Hierarchy
 
@@ -111,11 +112,11 @@ Rollback plan (safe + quick):
 3. Restart `meridian-gateway.service`.
 4. Verify via `GET /api/status` and a short manager route request.
 
-## Three-Part Architecture
+## Monorepo Architecture
 
-- [meridian-loom](https://github.com/mapleleaflatte03/meridian-loom): official first-party local runtime, install path, CLI, personal agents, channels, memory, and proof receipts.
-- [meridian-kernel](https://github.com/mapleleaflatte03/meridian-kernel): governance truth, institution, authority, treasury, court, and the runtime contract Loom consumes.
-- [meridian-intelligence](https://github.com/mapleleaflatte03/meridian-intelligence): portal, live host surface, first-party workflows, subscriptions, and bounded customer-facing routes.
+- [meridian/loom](https://github.com/mapleleaflatte03/meridian/tree/main/loom): first-party local runtime, CLI, personal agents, channels, memory, and proof receipts.
+- [meridian/kernel](https://github.com/mapleleaflatte03/meridian/tree/main/kernel): governance truth, institution, authority, treasury, court, and the runtime contract Loom consumes.
+- [meridian/intelligence](https://github.com/mapleleaflatte03/meridian/tree/main/intelligence): portal, live host surface, first-party workflows, and contribution-first research routes.
 
 ## What Is Live Today
 
@@ -145,29 +146,30 @@ Competitive intelligence is the first managed first-party workflow vertical. Wha
 - **Battlecards on demand** — structured competitor snapshots for sales enablement
 - **Competitor watchlists** — track specific companies through the governed workflow
 
-### Current Entry Path
+### Current Entry Path (Open Source)
 
-Start with the demo and pilot surfaces:
+Start with these public surfaces:
 - Loom: https://app.welliam.codes/loom
 - Demo: https://app.welliam.codes/demo
-- Pilot: https://app.welliam.codes/pilot
-- Support the work: https://app.welliam.codes/support
+- Proofs: https://app.welliam.codes/proofs
+- Workflows: https://app.welliam.codes/workflows
+- Community: https://app.welliam.codes/community
+- Support: https://app.welliam.codes/support
 - Contact: Telegram [@Enhanhsj](https://t.me/Enhanhsj) or email `nguyensimon186@gmail.com`
 
-The honest current offer is a founder-led paid pilot plus an evidence-backed checkout capture rail. More cash in treasury only clears the reserve gate; broader automated delivery still waits for customer-backed phase progression, runtime preflight, and constitutional approval where required.
-If you want to back Meridian without pretending that support equals customer delivery, use the dedicated support path instead of the pilot flow.
+Meridian is now positioned as an open research and contribution stack. Public surfaces are for proof visibility, reproducible workflows, and governance experimentation. They are not a hard-paywalled sales funnel.
 
-### 5-Step Cash Path (Current Live Boundary)
+### 5-Step Open Contribution Path (Current Live Boundary)
 
-If your goal is "agent work -> paid output -> treasury visibility", use this exact sequence:
+If your goal is "agent work -> verifiable governance -> community contribution", use this sequence:
 
-1. Install Loom and run one-command first proof (`loom quickstart`) on your own host.
-2. Open `/pilot`, complete checkout capture, and activate the bounded 7-day founder path.
-3. Confirm delivery events in `/proofs` (`/api/events/stream`) and workflow state in `/workflows` (`/api/workflows/showcase`).
-4. Verify treasury and payout state from the public surfaces (`/api/workflows/showcase`, `/api/treasury`, `/api/payouts`).
-5. Keep all claims bounded to what receipts and treasury state can currently prove on-host.
+1. Install Loom and run first proof (`loom quickstart`) on your own host.
+2. Verify runtime and governance receipts in `/proofs` (`/api/events/stream`).
+3. Inspect live workflow state in `/workflows` (`/api/workflows/showcase`).
+4. Validate treasury and payout policy state from `/api/treasury` and `/api/payouts`.
+5. Contribute patches/tests/docs with claims bounded to what receipts and treasury state can currently prove on-host.
 
-If you are confused about support vs pilot vs customer revenue vs future contributor payouts, read:
+If you are unsure about operational boundaries, read:
 - [Meridian Doctrine](company/MERIDIAN_DOCTRINE.md)
 
 ---
@@ -186,19 +188,19 @@ Connect via SSE: `https://app.welliam.codes/sse`
 }
 ```
 
-| Tool | Price | Description |
-|------|-------|-------------|
-| `intelligence_latest_brief` | **$0.50 USDC** | Metered brief tool for the founding Meridian institution; external-customer settlement proof is still pending |
-| `intelligence_on_demand_research` | **$2.00 USDC** | Metered research tool with sourced findings on the current public MCP surface |
-| `intelligence_competitor_snapshot` | **$3.00 USDC** | Metered competitor snapshot tool; public battlecard layouts remain reference examples |
-| `intelligence_qa_verify` | **$1.00 USDC** | Metered QA verification of claims or text |
-| `intelligence_weekly_digest` | **$1.50 USDC** | Metered digest tool; public weekly brief layouts remain reference examples |
-| `company_info` | **FREE** | Meridian capabilities and pricing |
+| Tool | Access | Description |
+|------|--------|-------------|
+| `intelligence_latest_brief` | Public research surface | Brief output for the host-bound Meridian institution in current OSS boundary |
+| `intelligence_on_demand_research` | Public research surface | Sourced research findings on the current public MCP surface |
+| `intelligence_competitor_snapshot` | Public research surface | Competitor snapshot surface; public battlecard layouts remain reference examples |
+| `intelligence_qa_verify` | Public research surface | QA verification of claims or text |
+| `intelligence_weekly_digest` | Public research surface | Weekly digest surface; public layout remains a reference example |
+| `company_info` | Public | Meridian capabilities and runtime boundary |
 
 On the live host today, every MCP tool call is audited and metered for the
-founding Meridian institution only. The shared runtime-core taxonomy classifies
+host-bound Meridian institution path. The shared runtime-core taxonomy classifies
 that path as `mcp_service` with identity model `x402_payment` and scope
-`founding_service_only`. Multi-institution MCP routing is not live.
+`host_bound_service_only`. Multi-institution MCP routing is not live.
 The live agent registry also surfaces `runtime_binding` on each governed agent
 record, and that same field is visible through `GET /api/agents` and the
 `agents` array plus the top-level `agent_runtime_bindings` summary block inside
@@ -207,11 +209,11 @@ implicit.
 
 ---
 
-## Payment
+## Support and Sustainability
 
-- **MCP tool calls:** [x402](https://x402.org) over USDC on Base L2
-- **Pilot engagements:** the live public buy path is exact-amount USDC on Base with validated checkout capture; bank transfer, Wise, and manual exceptions remain secondary rails, and card checkout is not live
-- **Support / sponsorship:** use the support page for non-customer backing of the build, infra, and open kernel
+- **MCP tool transport:** [x402](https://x402.org) over USDC on Base L2 (when enabled by host policy)
+- **Support / sponsorship:** use the support page for voluntary backing of build, infra, and open kernel work
+- **Research grants / consulting:** optional sustainability channels; not required for core OSS usage
 - **Chain:** Base L2 (Chain ID 8453)
 - **Token:** USDC (`0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`)
 - **Wallet:** `0x82009D0fa435d490A12e0cBfBE47bf3358e47761`
@@ -238,13 +240,13 @@ Agents earn REP (reputation) and AUTH (authority) from accepted output. Sanction
 
 ## Reference CI Pipeline
 
-The CI workflow is structured as a nightly sequence. The logic is real, but public customer delivery is not being marketed as always-on hosted automation while treasury policy remains blocked.
+The CI workflow is structured as a nightly sequence. The logic is real and contribution-facing; claims remain bounded to what the current public host can verify.
 
 1. **Research** — Fetch tracked sources. Watchlist competitors get priority.
 2. **Extract** — Sourced findings with relevance scoring and deduplication
 3. **Write** — Cited intelligence alert in structured format
 4. **QA** — Multi-agent verification: source freshness, citation accuracy, quality bar
-5. **Deliver** — Approved alert through the current honest path: founder-led pilot now, automated subscriber delivery when treasury policy clears
+5. **Deliver** — Approved alert through the current bounded runtime path on the public host
 6. **Score** — Economy auto-scores agents (REP/AUTH deltas). Registry syncs.
 7. **Audit** — Every step logged. Usage metered.
 
@@ -256,13 +258,13 @@ Constitutional 3-ledger internal economy:
 
 - **REP (Reputation)** — earned from accepted output, non-transferable
 - **AUTH (Authority)** — temporary right to lead work, decays without output
-- **CASH (Treasury)** — real money only (owner capital, support, customer revenue)
+- **CASH (Treasury)** — real money only (owner capital, sponsorship, grants, and approved program revenue)
 
 ---
 
 ## Tech Stack
 
-- **Runtime:** [Meridian Loom](https://github.com/mapleleaflatte03/meridian-loom) — primary execution surface for agent execution, capability dispatch, sessions
+- **Runtime:** [Meridian Loom](https://github.com/mapleleaflatte03/meridian/tree/main/loom) — primary execution surface for agent execution, capability dispatch, sessions
 - **Platform:** Python 3.10, JSON state files, JSONL audit/metering logs
 - **Proxy:** Caddy (auto-TLS)
 - **Payments:** [x402](https://x402.org) + USDC on Base L2

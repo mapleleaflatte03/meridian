@@ -631,6 +631,27 @@ def _public_org_record(org):
     return record
 
 
+_PUBLIC_PAYLOAD_WORDING_REPLACEMENTS = (
+    ('founding_service_only', 'host_bound_service_only'),
+    ('founding_workspace_local', 'host_bound_workspace_local'),
+    ('founding_locked', 'host_bound_locked'),
+    ('Founder-Backed Build', 'Maintainer-Backed Build'),
+)
+
+
+def _normalize_public_payload_wording(value):
+    if isinstance(value, dict):
+        return {k: _normalize_public_payload_wording(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_normalize_public_payload_wording(item) for item in value]
+    if isinstance(value, str):
+        normalized = value
+        for source, target in _PUBLIC_PAYLOAD_WORDING_REPLACEMENTS:
+            normalized = normalized.replace(source, target)
+        return normalized
+    return value
+
+
 def _institution_template_snapshot(org_id, org=None):
     org_record = _public_org_record(org or load_orgs().get('organizations', {}).get(org_id) or {})
     policy_defaults = dict(DEFAULT_POLICY_DEFAULTS)
@@ -674,8 +695,8 @@ def _institution_template_snapshot(org_id, org=None):
             ],
         },
         'boundary': {
-            'service_scope': 'founding_service_only',
-            'note': 'Template is production-ready for the founding host path; multi-institution self-serve remains intentionally bounded.',
+            'service_scope': 'host_bound_service_only',
+            'note': 'Template is production-ready for host-bound open-source deployments; multi-institution self-serve remains intentionally bounded.',
         },
     }
 
@@ -5043,10 +5064,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             return self._json({
                 'status': 'deprecated',
                 'reason': 'open_source_mode',
-                'message': 'The institution license catalog has been deprecated. Meridian is now fully open source.',
+                'message': 'This legacy monetization route has been deprecated. Meridian now runs in open-source setup mode.',
                 'next_steps': [
-                    'Install Loom: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash',
-                    'Visit https://github.com/mapleleaflatte03/meridian-loom for source and documentation',
+                    'Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash',
+                    'Visit https://github.com/mapleleaflatte03/meridian for source and documentation',
                     'The institution template remains available at /api/institution/template',
                 ],
             }, 410)
@@ -5137,7 +5158,17 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         elif path == '/api/accounting':
             return self._json(service_state.accounting_snapshot(org_id))
         elif path == '/api/pilot/intake':
-            return self._json(pilot_intake.queue_snapshot(org_id))
+            return self._json({
+                'status': 'deprecated',
+                'reason': 'open_source_mode',
+                'message': 'Public pilot intake has been deprecated. Use /pilot for open-source setup.',
+                'next_steps': [
+                    'Open /pilot and follow the local bootstrap path',
+                    'Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash',
+                    'Use the monorepo: https://github.com/mapleleaflatte03/meridian',
+                    'Use /api/workflows/showcase and /api/proofs for runtime verification',
+                ],
+            }, 410)
         elif path == '/api/pilot/intake/operator':
             return self._json(pilot_intake.operator_review_snapshot(org_id))
         elif path == '/api/payouts':
@@ -5200,11 +5231,11 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 )
             )
         elif path == '/api/kernel-proof-bundle':
-            return self._json(
+            return self._json(_normalize_public_payload_wording(
                 _kernel_public_proof_bundle(
                     base_url=_request_public_base_url(self),
                 )
-            )
+            ))
         elif path == '/api/admission':
             host_identity, admission_registry = _runtime_host_state(org_id)
             return self._json(_admission_snapshot(
@@ -5395,6 +5426,17 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 return self._json({'error': str(e)}, 400)
 
         if path == '/api/pilot/intake':
+            return self._json({
+                'status': 'deprecated',
+                'reason': 'open_source_mode',
+                'message': 'Public pilot intake has been deprecated. Use /pilot for open-source setup.',
+                'next_steps': [
+                    'Open /pilot and follow the local bootstrap path',
+                    'Use the monorepo: https://github.com/mapleleaflatte03/meridian',
+                    'Use /api/workflows/showcase and /api/proofs for runtime verification',
+                ],
+            }, 410)
+        if False:  # Preserved for ledger continuity reference
             try:
                 inst_ctx = _resolve_workspace_context()
                 body = self._read_body()
@@ -5458,6 +5500,18 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 return self._json({'error': str(e)}, 400)
 
         if path == '/api/subscriptions/checkout-capture':
+            return self._json({
+                'status': 'deprecated',
+                'reason': 'open_source_mode',
+                'message': 'This legacy payment-capture route has been deprecated. Meridian now runs in open-source setup mode.',
+                'next_steps': [
+                    'Open /pilot and follow the local bootstrap path',
+                    'Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash',
+                    'Use /api/workflows/showcase and /api/proofs for runtime verification',
+                    'Contribute via https://github.com/mapleleaflatte03/meridian/issues',
+                ],
+            }, 410)
+        if False:  # Preserved for ledger continuity reference
             try:
                 inst_ctx = _resolve_workspace_context()
                 body = self._read_body()
@@ -5571,10 +5625,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             return self._json({
                 'status': 'deprecated',
                 'reason': 'open_source_mode',
-                'message': 'Institution license checkout has been deprecated. Meridian is now fully open source.',
+                'message': 'This legacy payment-capture route has been deprecated. Meridian now runs in open-source setup mode.',
                 'next_steps': [
-                    'Install Loom: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash',
-                    'Visit https://github.com/mapleleaflatte03/meridian-loom for source and documentation',
+                    'Run one-command setup: curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash',
+                    'Visit https://github.com/mapleleaflatte03/meridian for source and documentation',
                     'The institution template remains available at /api/institution/template',
                 ],
             }, 410)

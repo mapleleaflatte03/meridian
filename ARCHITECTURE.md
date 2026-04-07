@@ -380,7 +380,7 @@ institution, not the live source of truth.
 - Cited intelligence workflow for AI/product teams
 - Watchlist-driven research, writing, QA, and scoring
 - Battlecard-style snapshots and research-on-demand outputs
-- Delivery promise currently narrowed to founder-led manual pilot
+- Delivery promise currently narrowed to bounded open-source host surfaces
 - Workflow shape: research -> extract -> write -> QA -> deliver -> score -> court-review
 
 ### Research-on-Demand (live, via MCP)

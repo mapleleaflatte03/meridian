@@ -129,10 +129,16 @@ BASE = "https://app.welliam.codes"
 checks = [
     ("/api/institution/template", "json_template"),
     ("/api/institution/license/catalog", "json_deprecated_410"),
+    ("/api/pilot/intake", "json_deprecated_410"),
+    ("/api/subscriptions/checkout-capture", "json_deprecated_410_post"),
     ("/api/kernel-proof-bundle", "json_kernel_bundle"),
     ("/", "html"),
     ("/proofs", "html_secondary"),
     ("/workflows", "html_secondary"),
+    ("/support", "html_open_source"),
+    ("/demo", "html_open_source"),
+    ("/boundary", "html_open_source"),
+    ("/pilot", "html_open_source"),
 ]
 
 def fetch(path: str, allow_error: bool = False):
@@ -145,11 +151,34 @@ def fetch(path: str, allow_error: bool = False):
             return e.code, e.read().decode("utf-8", "ignore")
         raise
 
+def fetch_post(path: str, payload: dict, allow_error: bool = False):
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        BASE + path,
+        data=body,
+        headers={"Content-Type": "application/json", "Origin": BASE},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as response:
+            return response.status, response.read().decode("utf-8", "ignore")
+    except urllib.error.HTTPError as e:
+        if allow_error:
+            return e.code, e.read().decode("utf-8", "ignore")
+        raise
+
 for path, mode in checks:
     if mode == "json_deprecated_410":
         status, body = fetch(path, allow_error=True)
         payload = json.loads(body)
         assert status == 410, f"Expected HTTP 410 for {path}, got {status}"
+        assert payload.get("status") == "deprecated", payload
+        assert payload.get("reason") == "open_source_mode", payload
+        assert isinstance(payload.get("next_steps"), list), payload
+    elif mode == "json_deprecated_410_post":
+        status, body = fetch_post(path, {"probe": "acceptance"}, allow_error=True)
+        payload = json.loads(body)
+        assert status == 410, f"Expected HTTP 410 for POST {path}, got {status}"
         assert payload.get("status") == "deprecated", payload
         assert payload.get("reason") == "open_source_mode", payload
         assert isinstance(payload.get("next_steps"), list), payload
@@ -193,6 +222,19 @@ for path, mode in checks:
         assert "premium-footer" in body or "footer-nav-group" in body, f"Missing premium footer on {path}"
         assert "Get License" not in body, f"Legacy 'Get License' found on {path}"
         for nav_label in ("Product", "Governance", "Community", "Support"):
+            assert nav_label in body, f"Missing nav label '{nav_label}' on {path}"
+    elif mode == "html_open_source":
+        _, body = fetch(path)
+        assert "site-nav" in body, f"Missing site nav on {path}"
+        assert "premium-footer" in body or "footer-nav-group" in body, f"Missing premium footer on {path}"
+        assert "Get Started" in body, f"Missing 'Get Started' CTA on {path}"
+        assert "Constitutional Institution License" not in body, f"Legacy license copy found on {path}"
+        assert "Get License" not in body, f"Legacy 'Get License' found on {path}"
+        assert "$299" not in body, f"Legacy '$299' pricing found on {path}"
+        assert "$79" not in body, f"Legacy '$79' pricing found on {path}"
+        assert "checkout-capture" not in body, f"Legacy checkout capture text found on {path}"
+        assert "manual pilot" not in body.lower(), f"Legacy manual pilot copy found on {path}"
+        for nav_label in ("Product", "Governance", "Community", "Support", "Docs"):
             assert nav_label in body, f"Missing nav label '{nav_label}' on {path}"
 PY
 

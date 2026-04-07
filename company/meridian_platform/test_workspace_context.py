@@ -723,9 +723,9 @@ class LiveWorkspaceContextTests(unittest.TestCase):
             result = self.workspace.WorkspaceHandler.do_POST(handler)
 
         self.assertEqual(calls, [])
-        self.assertEqual(handler.response['status'], 201)
-        self.assertEqual(handler.response['data']['request']['request_id'], 'pir_demo')
-        self.assertEqual(handler.response['data']['summary']['total_requests'], 1)
+        self.assertEqual(handler.response['status'], 410)
+        self.assertEqual(handler.response['data']['reason'], 'open_source_mode')
+        self.assertIn('/pilot', handler.response['data']['message'])
         self.assertEqual(result, handler.response)
 
     def test_subscription_draft_from_preview_route_creates_status_surface(self):
@@ -1072,10 +1072,9 @@ class LiveWorkspaceContextTests(unittest.TestCase):
             handler = PostHandler()
             result = self.workspace.WorkspaceHandler.do_POST(handler)
         self.assertEqual(calls, [])
-        self.assertEqual(handler.response['status'], 201)
-        self.assertEqual(handler.response['data']['result']['subscription']['status'], 'active')
-        self.assertEqual(handler.response['data']['preview']['delivery_ref'], 'loom-job-checkout')
-        self.assertEqual(handler.response['data']['subscription_preview_summary']['delivered_count'], 1)
+        self.assertEqual(handler.response['status'], 410)
+        self.assertEqual(handler.response['data']['reason'], 'open_source_mode')
+        self.assertIn('deprecated', handler.response['data']['status'])
         self.assertEqual(result, handler.response)
 
     def test_public_subscription_checkout_capture_route_only_marks_preview_delivered_after_dispatch(self):
@@ -1197,11 +1196,10 @@ class LiveWorkspaceContextTests(unittest.TestCase):
             handler = PostHandler()
             result = self.workspace.WorkspaceHandler.do_POST(handler)
         self.assertEqual(calls, [])
-        self.assertEqual(handler.response['status'], 201)
+        self.assertEqual(handler.response['status'], 410)
+        self.assertEqual(handler.response['data']['reason'], 'open_source_mode')
         self.assertFalse(mark_preview_delivered.called)
-        mark_preview_activated.assert_called_once()
-        self.assertEqual(handler.response['data']['preview']['delivery_state'], 'captured')
-        self.assertEqual(handler.response['data']['subscription_preview_summary']['delivered_count'], 0)
+        self.assertFalse(mark_preview_activated.called)
         self.assertEqual(result, handler.response)
 
     def test_operator_pilot_intake_routes_expose_review_only_flow(self):
