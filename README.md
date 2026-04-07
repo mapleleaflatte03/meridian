@@ -48,6 +48,11 @@ curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scri
 ```
 
 This clones (or reuses) the monorepo, initializes kernel state, prepares shared environment variables, and builds the Loom CLI from source.
+It also bootstraps workspace institution state and runs a smoke check for:
+
+- institution template availability
+- treasury snapshot keys
+- baseline court rule set
 
 If you already cloned the repo:
 
