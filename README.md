@@ -54,7 +54,7 @@ Meridian is intentionally split into three layers so each part can evolve withou
 | **Intelligence** | [`meridian-intelligence`](https://github.com/mapleleaflatte03/meridian-intelligence) | Governed work, planning, analysis, and operational intelligence on top of the kernel |
 | **Loom** | [`meridian-loom`](https://github.com/mapleleaflatte03/meridian-loom) | Meridian's official first-party runtime: a governed local agent runtime that consumes the kernel contract |
 
-The kernel and intelligence layers can be exercised entirely locally. Loom remains a separate runtime surface so the governance contract stays independent of any one runner, even while Loom serves as Meridian's flagship runtime product. Commitment lives at the Meridian platform layer above this repo; it is not a sixth kernel primitive.
+The kernel and intelligence layers can be exercised entirely locally. Meridian now uses a unified OSS workspace (`meridian/loom`, `meridian/kernel`, `meridian/intelligence`) for contributor onboarding, while preserving strict module boundaries. Loom remains a runtime surface that consumes this governance contract; Commitment lives at the Meridian platform layer above this repo and is not a sixth kernel primitive.
 
 ---
 
