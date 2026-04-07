@@ -127,14 +127,15 @@ import urllib.request
 
 BASE = "https://app.welliam.codes"
 checks = [
+    ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
     ("/api/institution/license/catalog", "json_deprecated_410"),
     ("/api/pilot/intake", "json_deprecated_410"),
     ("/api/subscriptions/checkout-capture", "json_deprecated_410_post"),
     ("/api/kernel-proof-bundle", "json_kernel_bundle"),
-    ("/", "html"),
-    ("/proofs", "html_secondary"),
-    ("/workflows", "html_secondary"),
+    ("/", "html_home_anatomy"),
+    ("/proofs", "html_proofs_anatomy"),
+    ("/workflows", "html_workflows_anatomy"),
     ("/support", "html_open_source"),
     ("/demo", "html_open_source"),
     ("/boundary", "html_open_source"),
@@ -193,15 +194,58 @@ for path, mode in checks:
         assert isinstance(payload, dict), payload
         assert payload.get("proof_bundle_version"), payload
         assert payload.get("public_routes", {}).get("kernel_proof_bundle") == "/api/kernel-proof-bundle", payload
+        live_host = payload.get("live_host_receipt") or {}
+        live_runtime = payload.get("live_runtime_receipt") or {}
+        assert live_host.get("included") is True, payload
+        assert live_runtime.get("included") is True, payload
+        runtime_receipt = (live_runtime.get("receipt") or {}).get("health") or {}
+        assert runtime_receipt.get("status") in {"healthy", "degraded"}, payload
         cache = payload.get("cache") or {}
         assert cache.get("state") in {"fresh", "stale_fallback", "building", "error_fallback", "bootstrap"}, payload
-    elif mode == "html":
+    elif mode == "json_status_clean":
         _, body = fetch(path)
+        payload = json.loads(body)
+        assert isinstance(payload, dict), payload
+        body_lc = body.lower()
+        for banned in ("founder", "founding", "commercial", "checkout", "pilot"):
+            assert banned not in body_lc, f"Legacy wording '{banned}' found in /api/status"
+        runtime_id = payload.get("runtime_id")
+        assert runtime_id, payload
+        slo = payload.get("slo") or {}
+        assert slo.get("status") in {"healthy", "warning", "breach"}, payload
+    elif mode == "html_home_anatomy":
+        _, body = fetch(path)
+        # Home anatomy (section-level)
+        for token in (
+            "site-header",
+            "site-nav",
+            "hero",
+            "trust-bar",
+            "why-meridian",
+            "governance-model",
+            "research-hub",
+            "how-to-contribute",
+            "live-snapshot-section",
+            "premium-footer",
+        ):
+            assert token in body, f"Missing homepage anatomy token '{token}'"
+        # Home anatomy (component-level)
+        for token in (
+            "brand-mark",
+            "brand-wordmark",
+            "nav-cta",
+            "cta-group",
+            "feature-card",
+            "metric-card",
+            "live-chart-card",
+            "lane-card",
+            "step-card",
+        ):
+            assert token in body, f"Missing homepage component token '{token}'"
         # Open-source positioning present
         assert "open-source" in body.lower() or "open source" in body.lower(), "Missing open-source positioning on homepage"
         assert "Get Started" in body, "Missing 'Get Started' CTA on homepage"
-        assert "trust-bar" in body or "Local-first" in body, "Missing trust bar section"
-        assert "premium-footer" in body or "footer-nav-group" in body, "Missing premium footer"
+        assert "Local-first" in body, "Missing trust bar copy on homepage"
         assert "Contribute" in body, "Missing contribution link on homepage"
         assert "/support" in body, "Missing support link on homepage"
         # Legacy commercial strings must be absent
@@ -213,16 +257,42 @@ for path, mode in checks:
         # Consistent nav
         for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
             assert nav_label in body, f"Missing nav label '{nav_label}' on homepage"
-    elif mode == "html_secondary":
+    elif mode == "html_proofs_anatomy":
         _, body = fetch(path)
-        assert "site-nav" in body, f"Missing site nav on {path}"
-        assert "Docs" in body, f"Missing Docs nav item on {path}"
-        assert "nav-cta" in body, f"Missing nav CTA on {path}"
-        assert "Get Started" in body, f"Missing 'Get Started' CTA on {path}"
-        assert "premium-footer" in body or "footer-nav-group" in body, f"Missing premium footer on {path}"
-        assert "Get License" not in body, f"Legacy 'Get License' found on {path}"
-        for nav_label in ("Product", "Governance", "Community", "Support"):
-            assert nav_label in body, f"Missing nav label '{nav_label}' on {path}"
+        for token in (
+            "site-header",
+            "site-nav",
+            "page-intro",
+            "live-chart-grid",
+            "proof-summary-shell",
+            "operator-stream-log",
+            "premium-footer",
+            "brand-mark",
+            "brand-wordmark",
+            "nav-cta",
+        ):
+            assert token in body, f"Missing proofs anatomy token '{token}'"
+        assert "Get License" not in body, "Legacy 'Get License' found on /proofs"
+        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
+            assert nav_label in body, f"Missing nav label '{nav_label}' on /proofs"
+    elif mode == "html_workflows_anatomy":
+        _, body = fetch(path)
+        for token in (
+            "site-header",
+            "site-nav",
+            "page-intro",
+            "feature-grid",
+            "data-workflow-showcase-grid",
+            "data-usdc-surface",
+            "premium-footer",
+            "brand-mark",
+            "brand-wordmark",
+            "nav-cta",
+        ):
+            assert token in body, f"Missing workflows anatomy token '{token}'"
+        assert "Get License" not in body, "Legacy 'Get License' found on /workflows"
+        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
+            assert nav_label in body, f"Missing nav label '{nav_label}' on /workflows"
     elif mode == "html_open_source":
         _, body = fetch(path)
         assert "site-nav" in body, f"Missing site nav on {path}"
