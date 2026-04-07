@@ -7,7 +7,7 @@ export MERIDIAN_LOOM_ROOT="${MERIDIAN_LOOM_ROOT:-$MERIDIAN_ROOT/loom}"
 export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
-export LOOM_RUNTIME_ROOT="${LOOM_RUNTIME_ROOT:-$HOME/.local/share/meridian-loom/runtime/default}"
+export LOOM_RUNTIME_ROOT="${LOOM_RUNTIME_ROOT:-$MERIDIAN_ROOT/runtime/default}"
 
 require_cmd() {
   local cmd="$1"

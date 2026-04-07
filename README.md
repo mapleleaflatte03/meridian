@@ -6,6 +6,15 @@ Meridian is an open-source, governance-first stack for local AI labor:
 - `kernel/` — constitutional governance core (Institution, Agent, Authority, Treasury, Court + 3-ledger economy)
 - `intelligence/` — operator workspace, workflows, public surfaces, and gateway
 
+## Canonical Source
+
+This monorepo is the canonical Meridian source of truth.
+
+Legacy repositories are now mirrors for backward compatibility:
+- `meridian-loom` -> `meridian/loom`
+- `meridian-kernel` -> `meridian/kernel`
+- `meridian-intelligence` -> `meridian/intelligence`
+
 ## Why Monorepo
 
 Meridian moved from a multi-repo layout to this monorepo to simplify onboarding and OSS contribution:
@@ -49,3 +58,9 @@ python3 -m unittest -v test_subscription_service.py
 ## Open Source Boundary
 
 Meridian is open-source and contribution-first. Hosted services and external publishing credentials remain operational boundaries. See module docs for exact boundary definitions.
+
+## Support (Optional)
+
+- GitHub Sponsors: https://github.com/sponsors/mapleleaflatte03
+- Patreon: https://www.patreon.com/ (optional community funding path)
+- Consulting / research collaboration: see `intelligence/company/www/support.html`
