@@ -266,68 +266,50 @@ def _summarize_legacy_reference_proof(proof):
 
 
 def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
-    try:
-        three_host = {
-            'passed': True,
-            'skipped': False,
-            'summary': _run_three_host_federation_proof(),
-        }
-    except unittest.SkipTest as exc:
-        three_host = {
-            'passed': False,
-            'skipped': True,
-            'reason': str(exc),
-        }
-    try:
-        handoff_dispatch = {
-            'passed': True,
-            'skipped': False,
-            'summary': _run_handoff_dispatch_proof(),
-        }
-    except unittest.SkipTest as exc:
-        handoff_dispatch = {
-            'passed': False,
-            'skipped': True,
-            'reason': str(exc),
-        }
-    try:
-        execution_loop = {
-            'passed': True,
-            'skipped': False,
-            'summary': _run_execution_settlement_loop_proof(),
-        }
-    except unittest.SkipTest as exc:
-        execution_loop = {
-            'passed': False,
-            'skipped': True,
-            'reason': str(exc),
-        }
-    try:
-        external_settlement = {
-            'passed': True,
-            'skipped': False,
-            'summary': _run_base_usdc_x402_settlement_proof(),
-        }
-    except unittest.SkipTest as exc:
-        external_settlement = {
-            'passed': False,
-            'skipped': True,
-            'reason': str(exc),
-        }
-    try:
-        legacy_proof = {
-            'passed': True,
-            'skipped': False,
-            'summary': _summarize_legacy_reference_proof(
-                _run_legacy_reference_adapter_federation_proof()
-            ),
-        }
-    except unittest.SkipTest as exc:
-        legacy_proof = {
-            'passed': False,
-            'skipped': True,
-            'reason': str(exc),
-        }
+    def _run_reference_proof(fn, label, summarize=None):
+        try:
+            summary = fn()
+            if summarize is not None:
+                summary = summarize(summary)
+            return {
+                'passed': True,
+                'skipped': False,
+                'summary': summary,
+            }
+        except unittest.SkipTest as exc:
+            return {
+                'passed': False,
+                'skipped': True,
+                'reason': str(exc),
+            }
+        except Exception as exc:  # noqa: BLE001
+            return {
+                'passed': False,
+                'skipped': False,
+                'reason': f'{label}_failed: {type(exc).__name__}: {exc}',
+            }
+
+    three_host = _run_reference_proof(
+        _run_three_host_federation_proof,
+        'three_host_federation',
+    )
+    handoff_dispatch = _run_reference_proof(
+        _run_handoff_dispatch_proof,
+        'handoff_dispatch',
+    )
+    execution_loop = _run_reference_proof(
+        _run_execution_settlement_loop_proof,
+        'execution_settlement_loop',
+    )
+    external_settlement = _run_reference_proof(
+        _run_base_usdc_x402_settlement_proof,
+        'external_settlement_adapter',
+    )
+    legacy_proof = _run_reference_proof(
+        _run_legacy_reference_adapter_federation_proof,
+        'legacy_reference_adapter',
+        summarize=_summarize_legacy_reference_proof,
+    )
     return {
         'proof_bundle_version': 4,
         'generated_at': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),

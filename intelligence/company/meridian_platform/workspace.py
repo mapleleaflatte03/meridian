@@ -356,12 +356,143 @@ from marketplace import (
 )
 from memory_graph import (append_node as memory_append_node,
                           verify_chain as memory_verify_chain,
-                          verify_temporal_proof as memory_verify_temporal_proof,
                           query_nodes as memory_query_nodes,
                           temporal_query_with_proof as memory_temporal_query_with_proof,
                           chain_head as memory_chain_head,
                           integrity_hash as memory_integrity_hash,
                           temporal_integrity_status)
+try:
+    from memory_graph import verify_temporal_proof as memory_verify_temporal_proof
+except ImportError:
+    def memory_verify_temporal_proof(proof, org_id=None):
+        valid, error_detail = memory_verify_chain(org_id=org_id)
+        if not valid:
+            return False, {
+                'reason': 'chain_invalid',
+                'detail': error_detail,
+            }
+        if not isinstance(proof, dict):
+            return False, {
+                'reason': 'proof_missing',
+            }
+        try:
+            expected = memory_temporal_query_with_proof(org_id=org_id)
+            expected_proof = dict(expected.get('proof') or {})
+        except Exception as exc:  # noqa: BLE001
+            return False, {
+                'reason': 'proof_query_failed',
+                'detail': f'{exc.__class__.__name__}: {exc}',
+            }
+
+        expected_head = str(expected_proof.get('head_hash') or '').strip()
+        expected_index_version = int(expected_proof.get('index_version') or 0)
+        provided_head = str(proof.get('head_hash') or '').strip()
+        if provided_head and provided_head != expected_head:
+            return False, {
+                'reason': 'head_hash_mismatch',
+                'expected': expected_head,
+                'actual': provided_head,
+            }
+        provided_event_hash = str(proof.get('event_hash') or '').strip()
+        if provided_event_hash and provided_event_hash != expected_head:
+            return False, {
+                'reason': 'event_hash_mismatch',
+                'expected': expected_head,
+                'actual': provided_event_hash,
+            }
+        try:
+            provided_index = int(proof.get('index_version'))
+        except (TypeError, ValueError):
+            provided_index = None
+        if provided_index is not None and provided_index != expected_index_version:
+            return False, {
+                'reason': 'index_version_mismatch',
+                'expected': expected_index_version,
+                'actual': provided_index,
+            }
+
+        expected_nodes = expected_proof.get('proof_nodes') or []
+        if not isinstance(expected_nodes, list):
+            expected_nodes = []
+        expected_nodes_by_hash = {}
+        for index, node in enumerate(expected_nodes):
+            if not isinstance(node, dict):
+                continue
+            node_hash = str(node.get('hash') or node.get('event_hash') or '').strip()
+            if node_hash:
+                expected_nodes_by_hash[node_hash] = (index, node)
+
+        proof_nodes = proof.get('proof_nodes')
+        if proof_nodes is None:
+            proof_nodes = []
+        if not isinstance(proof_nodes, list):
+            return False, {
+                'reason': 'proof_nodes_invalid',
+            }
+        try:
+            provided_selected_count = int(proof.get('selected_count'))
+        except (TypeError, ValueError):
+            provided_selected_count = None
+        if provided_selected_count is not None and provided_selected_count != len(proof_nodes):
+            return False, {
+                'reason': 'selected_count_mismatch',
+                'expected': len(proof_nodes),
+                'actual': provided_selected_count,
+            }
+        for index, node in enumerate(proof_nodes):
+            if not isinstance(node, dict):
+                return False, {
+                    'reason': 'proof_node_invalid',
+                    'index': index,
+                }
+            node_hash = str(node.get('hash') or node.get('event_hash') or '').strip()
+            if not node_hash:
+                return False, {
+                    'reason': 'proof_node_missing_hash',
+                    'index': index,
+                }
+            expected_pair = expected_nodes_by_hash.get(node_hash)
+            if expected_pair is None:
+                return False, {
+                    'reason': 'proof_node_not_found',
+                    'index': index,
+                    'hash': node_hash,
+                }
+            _expected_index, expected_node = expected_pair
+            expected_prev = str(expected_node.get('prev_hash') or '').strip()
+            provided_prev = str(node.get('prev_hash') or '').strip()
+            if provided_prev and provided_prev != expected_prev:
+                return False, {
+                    'reason': 'proof_node_prev_hash_mismatch',
+                    'index': index,
+                    'expected': expected_prev,
+                    'actual': provided_prev,
+                }
+            try:
+                expected_depth = int(expected_node.get('depth') or 0)
+            except (TypeError, ValueError):
+                expected_depth = 0
+            try:
+                provided_depth = int(node.get('depth'))
+            except (TypeError, ValueError):
+                provided_depth = None
+            if provided_depth is not None and provided_depth != expected_depth:
+                return False, {
+                    'reason': 'proof_node_depth_mismatch',
+                    'index': index,
+                    'expected': expected_depth,
+                    'actual': provided_depth,
+                }
+            expected_timestamp = str(expected_node.get('timestamp') or '').strip()
+            provided_timestamp = str(node.get('timestamp') or '').strip()
+            if provided_timestamp and provided_timestamp != expected_timestamp:
+                return False, {
+                    'reason': 'proof_node_timestamp_mismatch',
+                    'index': index,
+                    'expected': expected_timestamp,
+                    'actual': provided_timestamp,
+                }
+        return True, None
 from session import SessionAuthority
 from app import (
     PUBLIC_UNAUTHENTICATED_PATHS,
