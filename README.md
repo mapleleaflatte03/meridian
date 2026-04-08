@@ -1,86 +1,90 @@
-# Meridian (Monorepo)
+# Meridian
 
-Meridian is an open research platform for governed local AI agents:
+<p align="center">
+  <img src="intelligence/company/www/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" width="720">
+</p>
 
-- `loom/` — sovereign local runtime and PoGE execution layer (Rust)
+<p align="center">
+  <strong>Open research platform for governed local AI agents.</strong><br>
+  Loom runs the local runtime. Kernel enforces governance. Intelligence exposes public proof/workflow surfaces.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/ci.yml?branch=main&style=flat-square" alt="CI status">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-475569?style=flat-square" alt="Apache-2.0">
+  <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="GitHub stars">
+  <img src="https://img.shields.io/badge/focus-open%20research-0f766e?style=flat-square" alt="Open research">
+  <img src="https://img.shields.io/badge/runtime-local%20first-1f6feb?style=flat-square" alt="Local-first runtime">
+</p>
+
+<p align="center">
+  <a href="https://app.welliam.codes">Website</a> ·
+  <a href="https://app.welliam.codes/proofs">Proofs</a> ·
+  <a href="https://app.welliam.codes/workflows">Workflows</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="ROADMAP.md">Roadmap</a> ·
+  <a href="docs/RESEARCH_HUB.md">Research Hub</a>
+</p>
+
+## What Meridian Is
+
+Meridian is a governance-first stack for local AI agent systems:
+
+- `loom/` — sovereign local runtime + PoGE execution layer (Rust)
 - `kernel/` — constitutional governance core (Institution, Agent, Authority, Treasury, Court + 3-ledger economy)
-- `intelligence/` — operator workspace, workflows, public surfaces, and gateway
+- `intelligence/` — workflows, public surfaces, gateway, and operator tooling
 
-## Canonical Source
+Canonical source is this monorepo.
 
-This monorepo is the canonical Meridian source of truth.
+Legacy repositories are archived mirrors:
 
-Legacy repositories are now mirrors for backward compatibility:
 - `meridian-loom` -> `meridian/loom`
 - `meridian-kernel` -> `meridian/kernel`
 - `meridian-intelligence` -> `meridian/intelligence`
 
-Archived mirror and redirect details:
-- `docs/REPO_MIGRATION_MAP.md`
+Migration details: [`docs/REPO_MIGRATION_MAP.md`](docs/REPO_MIGRATION_MAP.md)
 
-## Vision Lock
-
-Meridian exists to advance open research and public infrastructure for governed digital labor:
-
-- local-first runtime execution
-- constitutional governance primitives
-- verifiable proof and auditability
-- contribution-first open-source collaboration
-
-## Non-Goals
-
-- no commercial lock-in path in public onboarding
-- no mandatory paid checkout flow
-- no closed governance modules hidden from community review
-
-## Why Monorepo
-
-Meridian moved from a multi-repo layout to this monorepo to simplify onboarding and OSS contribution:
-
-- one clone for the full stack
-- one bootstrap entrypoint
-- clear module boundaries preserved under `loom/`, `kernel/`, `intelligence/`
-
-## One-Command Install
+## Install Full Stack (One Command)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-This clones (or reuses) the monorepo, initializes kernel state, prepares shared environment variables, and builds the Loom CLI from source.
-It also bootstraps workspace institution state and runs a smoke check for:
-
-- institution template availability
-- treasury snapshot keys
-- baseline court rule set
-- gateway status + runtime proof + treasury route readiness
-
-By default, bootstrap also brings up local workspace + gateway (`scripts/dev-up.sh`) and writes:
-
-- `runtime/bootstrap_gateway_smoke.json`
-
-If you already cloned the repo:
+After install:
 
 ```bash
-./scripts/bootstrap_full.sh
+cd ~/meridian
+./scripts/dev-up.sh
 ```
 
-To skip auto-start and run checks only:
+By default bootstrap initializes institution state, treasury baseline, and court rule set, then runs local smoke checks for:
+
+- `/api/institution/template`
+- `/api/treasury`
+- `/api/status` + runtime proof readiness
+
+## Quick Visuals
+
+Install flow:
+
+![Install in 60 seconds](docs/assets/install_in_60_seconds.gif)
+
+Live surfaces:
+
+![Homepage](docs/assets/home-desktop.png)
+![Proofs](docs/assets/proofs-desktop.png)
+![Workflows](docs/assets/workflows-desktop.png)
+
+## Local Dev Commands
 
 ```bash
-MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
-```
-
-To manage local processes directly:
-
-```bash
+# Start/stop local workspace + gateway
 ./scripts/dev-up.sh
 ./scripts/dev-down.sh
-```
 
-## Module Commands
+# Bootstrap only (without auto-start)
+MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
 
-```bash
 # Loom tests
 cargo test --manifest-path loom/Cargo.toml --workspace
 
@@ -89,27 +93,28 @@ cd kernel
 python3 -m unittest discover -s kernel/tests -p 'test_*.py'
 python3 -m unittest discover -s economy/tests -p 'test_*.py'
 
-# Intelligence gateway tests
+# Intelligence tests
 cd ../intelligence
 python3 -m unittest -v test_gateway_brain_router.py
-cd company/meridian_platform
-python3 -m unittest -v test_subscription_service.py
 ```
 
-## Open Source Boundary
+## Open-Source Boundary
 
-Meridian is open-source and contribution-first. Hosted services and external publishing credentials remain operational boundaries. See module docs for exact boundary definitions.
+Meridian is open-source and contribution-first. Hosted credentials, external publishing identities, and managed operations remain explicit operational boundaries.
 
-## Community and Contribution
+See:
 
-- Contribution guide: `CONTRIBUTING.md`
-- Community map: `docs/COMMUNITY_MAP.md`
-- Public roadmap: `ROADMAP.md`
-- Research hub: `docs/RESEARCH_HUB.md`
-- RFC issues: `/.github/ISSUE_TEMPLATE/research_rfc.yml`
+- [`intelligence/company/www/OPEN_SOURCE_BOUNDARY.html`](intelligence/company/www/OPEN_SOURCE_BOUNDARY.html)
+- [`docs/RESEARCH_HUB.md`](docs/RESEARCH_HUB.md)
 
-## Support (Optional)
+## Contribute
+
+- Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
+- Community map: [`docs/COMMUNITY_MAP.md`](docs/COMMUNITY_MAP.md)
+- Roadmap: [`ROADMAP.md`](ROADMAP.md)
+
+Optional support:
 
 - GitHub Sponsors: https://github.com/sponsors/mapleleaflatte03
-- Patreon: https://www.patreon.com/ (optional community funding path)
-- Consulting / research collaboration: see `intelligence/company/www/support.html`
+- Patreon: https://www.patreon.com/

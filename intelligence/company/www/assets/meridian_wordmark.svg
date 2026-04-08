@@ -3,8 +3,8 @@
   <desc id="desc">The Meridian wordmark in Space Grotesk with governed agent runtime subtitle.</desc>
   <defs>
     <style>
-      .word { fill: #e6edf5; font: 700 72px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 5.8px; }
-      .accent { fill: #7d8a99; font: 500 18px/1 'JetBrains Mono', monospace; letter-spacing: 4px; text-transform: uppercase; }
+      .word { fill: #d6e0ea; font: 700 72px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 5.8px; }
+      .accent { fill: #8f9daf; font: 500 18px/1 'JetBrains Mono', monospace; letter-spacing: 4px; text-transform: uppercase; }
     </style>
   </defs>
   <text x="0" y="78" class="word">Meridian</text>

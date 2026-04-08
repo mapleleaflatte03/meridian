@@ -5,7 +5,7 @@
     <style>
       .mk { fill: #0a0a0f; }
       @media (prefers-color-scheme: dark) {
-        .mk { fill: #e0e0e0; }
+        .mk { fill: #c7d3df; }
       }
     </style>
   </defs>
