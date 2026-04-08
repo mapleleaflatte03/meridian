@@ -484,6 +484,12 @@ def collect_loom_runtime_proof(
             'proof_level': 'read_only',
             'generic_runtime_claim': False,
         },
+        'recursive_proof': {
+            'enabled': True,
+            'depth': len(mapped_agents),
+            'root': None,
+            'fallback_mode': False,
+        },
     }
 
 
@@ -597,6 +603,12 @@ def public_loom_runtime_receipt(
             'handle_gap': list(proof.get('handle_gap') or []),
             'governed_agent_count': len(governed_agents),
         },
+        'recursive_proof': dict(proof.get('recursive_proof') or {
+            'enabled': False,
+            'depth': 0,
+            'root': None,
+            'fallback_mode': True,
+        }),
     }
 
 

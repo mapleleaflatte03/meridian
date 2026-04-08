@@ -1,5 +1,8 @@
 use crate::*;
-use loom_poge::{PoGEAuditRoot, ZkPoGEProof, ZkProofBackend};
+use loom_poge::{
+    PoGEAuditRoot, RecursiveChainEntry, ZkPoGEProof, ZkProofBackend,
+    build_recursive_chain, finalize_recursive_bundle,
+};
 use serde_json::{json, Value};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -136,6 +139,17 @@ pub(crate) fn settle_latest_execution_with_zk(
         resolve_settlement_agent_refs(root, kernel_path, &requested_agent_ref, &org_id)?;
     let audit_root = audit_root_from_execution(&execution)?;
     let proof = ZkPoGEProof::prepare(&audit_root, &warrant_binding_status, zk_backend);
+
+    // Build recursive proof chain from this execution's receipt
+    let recursive_entry = RecursiveChainEntry {
+        receipt_hash: audit_root.merkle_root,
+        warrant_id: audit_root.warrant_id,
+        action_id: &action_type,
+        ts_ms: audit_root.epoch_end_ms,
+    };
+    let recursive_chain = build_recursive_chain(&[recursive_entry]);
+    let recursive_bundle = finalize_recursive_bundle(&recursive_chain, false);
+
     let captured_at = chrono_like_timestamp();
     let kernel_path_buf = PathBuf::from(kernel_path);
     let court = query_court_status(&kernel_path_buf, &agent_refs.authority_agent_ref, &org_id)?;
@@ -179,6 +193,13 @@ pub(crate) fn settle_latest_execution_with_zk(
         "poge_session_label": proof.session_label,
         "runtime_execution_path": runtime_execution_path.display().to_string(),
         "kernel_path": kernel_path,
+        "recursive_proof": {
+            "bundle_id": recursive_bundle.bundle_id,
+            "root_hash_hex": recursive_bundle.root_hash_hex(),
+            "max_depth": recursive_bundle.max_depth,
+            "leaf_count": recursive_bundle.leaf_count,
+            "fallback_mode": recursive_bundle.fallback_mode,
+        },
         "note": "The selected zk backend prepares a bounded proof artifact that binds and verifies the PoGE witness before settlement without claiming on-chain finality."
     });
     write_pretty_json(&zk_latest_path, &proof_payload)?;

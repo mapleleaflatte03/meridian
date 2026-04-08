@@ -4100,6 +4100,20 @@ def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expi
     }
 
 
+def _recursive_proof_status():
+    """Collect recursive proof chain status from the Loom runtime."""
+    try:
+        proof = loom_runtime_proof.collect_loom_runtime_proof(include_service_probe=True)
+        rp = proof.get('recursive_proof') or {}
+        return {
+            'enabled': bool(rp.get('enabled', False)),
+            'depth': int(rp.get('depth', 0)),
+            'root': rp.get('root'),
+        }
+    except Exception:
+        return {'enabled': False, 'depth': 0, 'root': None}
+
+
 # ── API data builders ────────────────────────────────────────────────────────
 
 def api_status(context_source='configured_default', institution_context=None):
@@ -4267,11 +4281,7 @@ def api_status(context_source='configured_default', institution_context=None):
         'remediations': remediations,
         'timestamp': _now(),
         'proof': {
-            'recursive': {
-                'enabled': False,
-                'depth': 0,
-                'root': None,
-            },
+            'recursive': _recursive_proof_status(),
             'aggregate': {
                 'topology': 'none',
                 'bundle_id': None,

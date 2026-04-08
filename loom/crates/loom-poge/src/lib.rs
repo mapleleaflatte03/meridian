@@ -5,6 +5,7 @@
 //! EVM-compatible on-chain settlement.
 
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 pub mod sp1;
@@ -663,6 +664,133 @@ pub fn aggregate_proofs(leaves: &[ProofLeaf]) -> Result<AggregateProof, PoGEErro
         total_trace_len,
         leaf_hashes,
     })
+}
+
+// ---------------------------------------------------------------------------
+// Recursive Proof Chain (P2)
+// ---------------------------------------------------------------------------
+
+/// Domain tag for recursive proof chain hashing.
+pub const RECURSIVE_CHAIN_TAG: &[u8] = b"POGE_RECURSIVE_v1\x00";
+
+/// Domain tag for recursive proof bundle ID generation.
+pub const RECURSIVE_BUNDLE_TAG: &[u8] = b"POGE_RECURSIVE_BUNDLE_v1\x00";
+
+/// A single node in a recursive proof chain.
+///
+/// Each node chains its hash to the previous node, forming a deterministic
+/// sequential proof of execution order.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecursiveProofNode {
+    pub node_id: String,
+    pub depth: u32,
+    pub parent_id: Option<String>,
+    pub receipt_hash: [u8; 32],
+    pub chain_hash: [u8; 32],
+    pub warrant_id: [u8; 32],
+    pub action_id: String,
+    pub ts_ms: u64,
+}
+
+/// A finalized recursive proof bundle containing the chain root.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct RecursiveProofBundle {
+    pub bundle_id: String,
+    pub root_hash: [u8; 32],
+    pub max_depth: u32,
+    pub leaf_count: usize,
+    pub fallback_mode: bool,
+}
+
+impl RecursiveProofBundle {
+    pub fn root_hash_hex(&self) -> String {
+        format!("0x{}", hex::encode(self.root_hash))
+    }
+}
+
+/// An entry for building a recursive proof chain.
+pub struct RecursiveChainEntry<'a> {
+    pub receipt_hash: [u8; 32],
+    pub warrant_id: [u8; 32],
+    pub action_id: &'a str,
+    pub ts_ms: u64,
+}
+
+/// Build a recursive proof chain from a sequence of entries.
+///
+/// ## Chain Algorithm
+/// ```text
+/// h0 = H(tag || receipt0 || warrant0 || action0 || depth_0_be)
+/// hi = H(tag || h(i-1) || receipt_i || warrant_i || action_i || depth_i_be)
+/// root = h_n (last chain hash)
+/// ```
+///
+/// The chain is fully deterministic: identical inputs always produce the
+/// same sequence of hashes and the same root.
+pub fn build_recursive_chain(entries: &[RecursiveChainEntry<'_>]) -> Vec<RecursiveProofNode> {
+    let mut nodes: Vec<RecursiveProofNode> = Vec::with_capacity(entries.len());
+    let mut prev_hash = [0u8; 32];
+
+    for (i, entry) in entries.iter().enumerate() {
+        let mut hasher = Sha256::new();
+        hasher.update(RECURSIVE_CHAIN_TAG);
+        if i > 0 {
+            hasher.update(prev_hash);
+        }
+        hasher.update(entry.receipt_hash);
+        hasher.update(entry.warrant_id);
+        hasher.update(entry.action_id.as_bytes());
+        hasher.update((i as u32).to_be_bytes());
+        let chain_hash: [u8; 32] = hasher.finalize().into();
+
+        let node_id = format!("rpn_{}", hex::encode(&chain_hash[..8]));
+        let parent_id = if i > 0 {
+            Some(nodes[i - 1].node_id.clone())
+        } else {
+            None
+        };
+
+        nodes.push(RecursiveProofNode {
+            node_id,
+            depth: i as u32,
+            parent_id,
+            receipt_hash: entry.receipt_hash,
+            chain_hash,
+            warrant_id: entry.warrant_id,
+            action_id: entry.action_id.to_string(),
+            ts_ms: entry.ts_ms,
+        });
+        prev_hash = chain_hash;
+    }
+
+    nodes
+}
+
+/// Finalize a recursive chain into a bundle with a root hash.
+///
+/// If `fallback_mode` is true, the bundle is marked as a legacy single-proof
+/// fallback (the chain still exists but consumers may treat it as non-recursive).
+pub fn finalize_recursive_bundle(
+    nodes: &[RecursiveProofNode],
+    fallback_mode: bool,
+) -> RecursiveProofBundle {
+    let root_hash = nodes.last().map(|n| n.chain_hash).unwrap_or([0u8; 32]);
+    let max_depth = nodes.last().map(|n| n.depth).unwrap_or(0);
+    let bundle_id_hash = {
+        let mut h = Sha256::new();
+        h.update(RECURSIVE_BUNDLE_TAG);
+        h.update(root_hash);
+        h.update(max_depth.to_be_bytes());
+        h.update((nodes.len() as u32).to_be_bytes());
+        h.finalize()
+    };
+    RecursiveProofBundle {
+        bundle_id: format!("rpb_{}", hex::encode(&bundle_id_hash[..8])),
+        root_hash,
+        max_depth,
+        leaf_count: nodes.len(),
+        fallback_mode,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1403,5 +1531,166 @@ mod tests {
             session_label: "z".to_string(),
         };
         assert!(!agg.contains_leaf(&other));
+    }
+
+    // -----------------------------------------------------------------------
+    // Recursive Proof Chain (P2)
+    // -----------------------------------------------------------------------
+
+    fn sample_chain_entries() -> Vec<RecursiveChainEntry<'static>> {
+        vec![
+            RecursiveChainEntry {
+                receipt_hash: [0x11; 32],
+                warrant_id: [0x22; 32],
+                action_id: "llm_inference",
+                ts_ms: 1_700_000_000_100,
+            },
+            RecursiveChainEntry {
+                receipt_hash: [0x33; 32],
+                warrant_id: [0x22; 32],
+                action_id: "fs_write",
+                ts_ms: 1_700_000_000_200,
+            },
+            RecursiveChainEntry {
+                receipt_hash: [0x44; 32],
+                warrant_id: [0x22; 32],
+                action_id: "web_fetch",
+                ts_ms: 1_700_000_000_300,
+            },
+        ]
+    }
+
+    #[test]
+    fn recursive_chain_deterministic_root() {
+        let entries = sample_chain_entries();
+        let chain_a = build_recursive_chain(&entries);
+        let chain_b = build_recursive_chain(&entries);
+        assert_eq!(
+            chain_a.last().unwrap().chain_hash,
+            chain_b.last().unwrap().chain_hash,
+            "same input must produce same root hash"
+        );
+        for (a, b) in chain_a.iter().zip(chain_b.iter()) {
+            assert_eq!(a.chain_hash, b.chain_hash);
+            assert_eq!(a.node_id, b.node_id);
+        }
+    }
+
+    #[test]
+    fn recursive_chain_depth_at_least_two() {
+        let entries = sample_chain_entries();
+        let chain = build_recursive_chain(&entries);
+        assert!(chain.len() >= 3, "sample has 3 entries");
+        let max_depth = chain.last().unwrap().depth;
+        assert!(max_depth >= 2, "max depth should be >= 2, got {}", max_depth);
+    }
+
+    #[test]
+    fn recursive_chain_parent_linking() {
+        let entries = sample_chain_entries();
+        let chain = build_recursive_chain(&entries);
+        assert!(chain[0].parent_id.is_none(), "first node has no parent");
+        assert_eq!(chain[1].parent_id.as_deref(), Some(chain[0].node_id.as_str()));
+        assert_eq!(chain[2].parent_id.as_deref(), Some(chain[1].node_id.as_str()));
+    }
+
+    #[test]
+    fn recursive_chain_changes_with_different_input() {
+        let entries_a = sample_chain_entries();
+        let mut entries_b = sample_chain_entries();
+        entries_b[1].receipt_hash = [0xFF; 32];
+        let chain_a = build_recursive_chain(&entries_a);
+        let chain_b = build_recursive_chain(&entries_b);
+        // First node same (same input), second and third differ
+        assert_eq!(chain_a[0].chain_hash, chain_b[0].chain_hash);
+        assert_ne!(chain_a[1].chain_hash, chain_b[1].chain_hash);
+        assert_ne!(chain_a[2].chain_hash, chain_b[2].chain_hash);
+    }
+
+    #[test]
+    fn recursive_bundle_captures_root() {
+        let entries = sample_chain_entries();
+        let chain = build_recursive_chain(&entries);
+        let bundle = finalize_recursive_bundle(&chain, false);
+        assert_eq!(bundle.root_hash, chain.last().unwrap().chain_hash);
+        assert_eq!(bundle.max_depth, 2);
+        assert_eq!(bundle.leaf_count, 3);
+        assert!(!bundle.fallback_mode);
+        assert!(bundle.bundle_id.starts_with("rpb_"));
+    }
+
+    #[test]
+    fn recursive_bundle_fallback_mode() {
+        let entries = &[RecursiveChainEntry {
+            receipt_hash: [0x11; 32],
+            warrant_id: [0x22; 32],
+            action_id: "single_action",
+            ts_ms: 1_700_000_000_100,
+        }];
+        let chain = build_recursive_chain(entries);
+        let bundle = finalize_recursive_bundle(&chain, true);
+        assert!(bundle.fallback_mode);
+        assert_eq!(bundle.max_depth, 0, "single entry has depth 0");
+        assert_eq!(bundle.leaf_count, 1);
+        // Root hash equals the single node's chain hash
+        assert_eq!(bundle.root_hash, chain[0].chain_hash);
+    }
+
+    #[test]
+    fn recursive_bundle_deterministic_id() {
+        let entries = sample_chain_entries();
+        let chain = build_recursive_chain(&entries);
+        let b1 = finalize_recursive_bundle(&chain, false);
+        let b2 = finalize_recursive_bundle(&chain, false);
+        assert_eq!(b1.bundle_id, b2.bundle_id);
+        assert_eq!(b1.root_hash, b2.root_hash);
+    }
+
+    #[test]
+    fn recursive_bundle_hex_format() {
+        let entries = sample_chain_entries();
+        let chain = build_recursive_chain(&entries);
+        let bundle = finalize_recursive_bundle(&chain, false);
+        let hex = bundle.root_hash_hex();
+        assert_eq!(hex.len(), 66);
+        assert!(hex.starts_with("0x"));
+    }
+
+    #[test]
+    fn recursive_empty_chain_produces_zero_bundle() {
+        let chain = build_recursive_chain(&[]);
+        let bundle = finalize_recursive_bundle(&chain, true);
+        assert_eq!(bundle.root_hash, [0u8; 32]);
+        assert_eq!(bundle.max_depth, 0);
+        assert_eq!(bundle.leaf_count, 0);
+    }
+
+    #[test]
+    fn fallback_single_proof_preserved() {
+        // Verify that single-proof (non-recursive) path still works independently
+        let root = PoGEAuditRoot {
+            merkle_root: [0x11; 32],
+            warrant_id: [0x22; 32],
+            trace_len: 3,
+            epoch_start_ms: 1_700_000_000_100,
+            epoch_end_ms: 1_700_000_000_900,
+            module_digest: [0x33; 32],
+            session_label: "shadow:org_demo:agent_atlas:research".to_string(),
+        };
+        let proof = ZkPoGEProof::prepare(&root, "verified", ZkProofBackend::Sp1);
+        assert_eq!(proof.proof_backend, ZkProofBackend::Sp1);
+        // Now also build a fallback recursive bundle from the same receipt
+        let entry = RecursiveChainEntry {
+            receipt_hash: root.merkle_root,
+            warrant_id: root.warrant_id,
+            action_id: "legacy_single",
+            ts_ms: root.epoch_start_ms,
+        };
+        let chain = build_recursive_chain(&[entry]);
+        let bundle = finalize_recursive_bundle(&chain, true);
+        assert!(bundle.fallback_mode);
+        assert_eq!(bundle.leaf_count, 1);
+        // Both paths coexist without interference
+        assert_ne!(proof.proof_id, bundle.bundle_id);
     }
 }
