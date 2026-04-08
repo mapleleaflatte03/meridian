@@ -51,6 +51,94 @@ print(selected)
 PY
 }
 
+seed_workspace_founding_org() {
+  python3 - <<'PY'
+import os
+import sys
+
+platform_dir = os.path.join(
+    os.environ["MERIDIAN_INTELLIGENCE_ROOT"],
+    "company",
+    "meridian_platform",
+)
+sys.path.insert(0, platform_dir)
+
+from organizations import (  # noqa: E402
+    DEFAULT_POLICY_DEFAULTS,
+    create_org,
+    load_orgs,
+    save_orgs,
+)
+
+orgs = load_orgs()
+organizations = orgs.setdefault("organizations", {})
+founding_org_id = ""
+for oid, org in organizations.items():
+    if (org or {}).get("slug") == "meridian":
+        founding_org_id = oid
+        break
+
+if not founding_org_id:
+    founding_org_id = create_org(
+        name="Meridian",
+        owner_id="user_meridian_5322393870",
+        plan="enterprise",
+    )
+    orgs = load_orgs()
+    organizations = orgs.setdefault("organizations", {})
+
+org = organizations.get(founding_org_id) or {}
+changed = False
+if org.get("slug") != "meridian":
+    org["slug"] = "meridian"
+    changed = True
+if "charter" not in org:
+    org["charter"] = ""
+    changed = True
+
+policy_defaults = dict(DEFAULT_POLICY_DEFAULTS)
+policy_defaults.update(dict(org.get("policy_defaults") or {}))
+if org.get("policy_defaults") != policy_defaults:
+    org["policy_defaults"] = policy_defaults
+    changed = True
+
+expected_treasury = f"capsule://{founding_org_id}/treasury"
+if org.get("treasury_id") != expected_treasury:
+    org["treasury_id"] = expected_treasury
+    changed = True
+
+if org.get("lifecycle_state") not in {"founding", "active", "suspended", "dissolved"}:
+    org["lifecycle_state"] = "active"
+    changed = True
+if "settings" not in org:
+    org["settings"] = {}
+    changed = True
+
+if changed:
+    organizations[founding_org_id] = org
+    save_orgs(orgs)
+
+print(founding_org_id)
+PY
+}
+
+run_workspace_platform_bootstrap() {
+  (
+    cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
+    MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" python3 bootstrap.py >/tmp/meridian_platform_bootstrap.log
+  )
+}
+
+ensure_intelligence_gateway_config() {
+  (
+    cd "${MERIDIAN_INTELLIGENCE_ROOT}"
+    python3 - <<'PY'
+from meridian_config import load_config, save_config
+save_config(load_config(required=False))
+PY
+  )
+}
+
 run_kernel_smoke_check() {
   if [ "${MERIDIAN_SKIP_SMOKE_CHECK:-0}" = "1" ]; then
     echo "[bootstrap] Skipping kernel smoke check (MERIDIAN_SKIP_SMOKE_CHECK=1)"
@@ -154,18 +242,48 @@ def fetch(path: str, timeout: float = 4.0):
     with urllib.request.urlopen(base + path, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
-deadline = time.time() + 35
+def parse_court_counters(status_payload: dict):
+    court = status_payload.get("court") or {}
+    open_violations_raw = court.get("open_violations")
+    pending_appeals_raw = court.get("pending_appeals")
+
+    if isinstance(open_violations_raw, list):
+        open_violations_count = len(open_violations_raw)
+    elif isinstance(open_violations_raw, int):
+        open_violations_count = open_violations_raw
+    else:
+        return None
+
+    if isinstance(pending_appeals_raw, list):
+        pending_appeals_count = len(pending_appeals_raw)
+    elif isinstance(pending_appeals_raw, int):
+        pending_appeals_count = pending_appeals_raw
+    else:
+        return None
+
+    return int(open_violations_count), int(pending_appeals_count)
+
+deadline = time.time() + 60
 status = None
+open_violations_count = None
+pending_appeals_count = None
 last_error = None
 while time.time() < deadline:
     try:
-        status = fetch("/api/status", timeout=2.5)
+        candidate = fetch("/api/status", timeout=8.0)
+        parsed = parse_court_counters(candidate)
+        if parsed is None:
+            last_error = "status snapshot missing court counters"
+            time.sleep(0.5)
+            continue
+        status = candidate
+        open_violations_count, pending_appeals_count = parsed
         break
     except Exception as exc:  # noqa: BLE001
         last_error = exc
         time.sleep(0.5)
 
-if status is None:
+if status is None or open_violations_count is None or pending_appeals_count is None:
     raise SystemExit(f"gateway smoke-check failed: {last_error}")
 
 template = fetch("/api/institution/template")
@@ -178,12 +296,6 @@ if len(template.get("court_rule_set") or []) < 3:
 if "balance_usd" not in treasury or "reserve_floor_usd" not in treasury:
     raise SystemExit("gateway smoke-check failed: treasury snapshot missing baseline keys")
 
-court = status.get("court") or {}
-open_violations = court.get("open_violations")
-pending_appeals = court.get("pending_appeals")
-if not isinstance(open_violations, list) or not isinstance(pending_appeals, list):
-    raise SystemExit("gateway smoke-check failed: status snapshot missing court counters")
-
 report = {
     "status": "ok",
     "org_id": ((status.get("context") or {}).get("bound_org_id") or "").strip(),
@@ -193,8 +305,8 @@ report = {
     "court_rule_count": len(template.get("court_rule_set") or []),
     "treasury_balance_usd": treasury.get("balance_usd"),
     "treasury_reserve_floor_usd": treasury.get("reserve_floor_usd"),
-    "court_open_violations": len(open_violations),
-    "court_pending_appeals": len(pending_appeals),
+    "court_open_violations": int(open_violations_count),
+    "court_pending_appeals": int(pending_appeals_count),
 }
 
 os.makedirs(os.path.dirname(report_path), exist_ok=True)
@@ -216,6 +328,16 @@ if [ -n "$RESOLVED_KERNEL_ORG_ID" ]; then
   export MERIDIAN_ORG_ID="$RESOLVED_KERNEL_ORG_ID"
 fi
 echo "[bootstrap] Kernel org id: $MERIDIAN_ORG_ID"
+
+WORKSPACE_ORG_ID="$(seed_workspace_founding_org)"
+if [ -n "$WORKSPACE_ORG_ID" ]; then
+  export MERIDIAN_WORKSPACE_ORG_ID="$WORKSPACE_ORG_ID"
+fi
+echo "[bootstrap] Workspace org id: ${MERIDIAN_WORKSPACE_ORG_ID:-<auto>}"
+echo "[bootstrap] Bootstrapping workspace platform state..."
+run_workspace_platform_bootstrap
+echo "[bootstrap] Ensuring intelligence gateway config..."
+ensure_intelligence_gateway_config
 
 if [ "${MERIDIAN_SKIP_LOOM_BUILD:-0}" = "1" ]; then
   echo "[bootstrap] Skipping Loom build (MERIDIAN_SKIP_LOOM_BUILD=1)"

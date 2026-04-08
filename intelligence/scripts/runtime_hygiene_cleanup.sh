@@ -23,7 +23,7 @@ count_tmp_dirs() {
 
 count_ps_pattern() {
   local pattern="$1"
-  ps -eo cmd | rg -i "$pattern" | wc -l || true
+  ps -eo cmd | awk -v IGNORECASE=1 -v pat="$pattern" 'match($0, pat) { c += 1 } END { print c + 0 }' || true
 }
 
 kill_pattern() {

@@ -7,6 +7,8 @@ export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
 export MERIDIAN_WORKSPACE_PORT="${MERIDIAN_WORKSPACE_PORT:-18901}"
 export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
+export MERIDIAN_WORKSPACE_READY_TIMEOUT="${MERIDIAN_WORKSPACE_READY_TIMEOUT:-45}"
+export MERIDIAN_GATEWAY_READY_TIMEOUT="${MERIDIAN_GATEWAY_READY_TIMEOUT:-90}"
 
 QUIET=0
 if [[ "${1:-}" == "--no-summary" ]]; then
@@ -40,12 +42,65 @@ print(next(iter(orgs.keys()), "local_foundry"))
 PY
 }
 
+resolve_workspace_org_id() {
+  python3 - <<'PY'
+import json
+import os
+
+workspace_root = os.environ["MERIDIAN_INTELLIGENCE_ROOT"]
+path = os.path.join(workspace_root, "company", "meridian_platform", "organizations.json")
+if not os.path.exists(path):
+    print("")
+    raise SystemExit(0)
+
+with open(path, "r", encoding="utf-8") as f:
+    payload = json.load(f)
+orgs = payload.get("organizations") or {}
+for oid, org in orgs.items():
+    if (org or {}).get("slug") == "meridian":
+        print(oid)
+        raise SystemExit(0)
+print(next(iter(orgs.keys()), ""))
+PY
+}
+
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-$(resolve_org_id)}"
-export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$MERIDIAN_ORG_ID}"
+export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$(resolve_workspace_org_id)}"
 
 port_listening() {
   local port="$1"
-  ss -lnt "( sport = :${port} )" 2>/dev/null | rg -q ":${port}\\b"
+  if command -v rg >/dev/null 2>&1; then
+    ss -lnt "( sport = :${port} )" 2>/dev/null | rg -q ":${port}\\b"
+  else
+    ss -lnt "( sport = :${port} )" 2>/dev/null | grep -Eq ":${port}([^0-9]|$)"
+  fi
+}
+
+kill_pid_file_process() {
+  local name="$1"
+  local pid_file="${PID_DIR}/${name}.pid"
+  if [[ ! -f "${pid_file}" ]]; then
+    return
+  fi
+  local pid
+  pid="$(cat "${pid_file}" 2>/dev/null || true)"
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
+    kill "${pid}" >/dev/null 2>&1 || true
+    sleep 0.3
+    kill -9 "${pid}" >/dev/null 2>&1 || true
+  fi
+  rm -f "${pid_file}"
+}
+
+print_startup_failure() {
+  local name="$1"
+  local log_file="$2"
+  echo "[dev-up] ${name} failed to start after retries"
+  if [[ -f "${log_file}" ]]; then
+    echo "[dev-up] --- tail ${log_file} ---"
+    tail -n 120 "${log_file}" || true
+    echo "[dev-up] --- end tail ---"
+  fi
 }
 
 wait_for_json() {
@@ -63,7 +118,7 @@ deadline = time.time() + timeout_s
 last = None
 while time.time() < deadline:
     try:
-        with urllib.request.urlopen(url, timeout=2.5) as r:
+        with urllib.request.urlopen(url, timeout=min(timeout_s, 8.0)) as r:
             payload = json.loads(r.read().decode("utf-8"))
         print(json.dumps(payload))
         raise SystemExit(0)
@@ -80,15 +135,32 @@ start_workspace_if_needed() {
     return
   fi
 
-  echo "[dev-up] starting workspace on :${MERIDIAN_WORKSPACE_PORT}"
-  (
-    cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
-    MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
-    MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
-    nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" --org-id "${MERIDIAN_WORKSPACE_ORG_ID}" \
-      >"${LOG_DIR}/workspace.log" 2>&1 &
-    echo $! > "${PID_DIR}/workspace.pid"
-  )
+  local attempts=3
+  local attempt=1
+  while [[ "${attempt}" -le "${attempts}" ]]; do
+    echo "[dev-up] starting workspace on :${MERIDIAN_WORKSPACE_PORT} (attempt ${attempt}/${attempts})"
+    kill_pid_file_process "workspace"
+    (
+      cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
+      local org_args=()
+      if [[ -n "${MERIDIAN_WORKSPACE_ORG_ID}" ]]; then
+        org_args=(--org-id "${MERIDIAN_WORKSPACE_ORG_ID}")
+      fi
+      MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
+      MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" "${org_args[@]}" \
+        >"${LOG_DIR}/workspace.log" 2>&1 &
+      echo $! > "${PID_DIR}/workspace.pid"
+    )
+    sleep 1
+    if port_listening "${MERIDIAN_WORKSPACE_PORT}"; then
+      return
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  print_startup_failure "workspace" "${LOG_DIR}/workspace.log"
+  return 1
 }
 
 start_gateway_if_needed() {
@@ -97,24 +169,38 @@ start_gateway_if_needed() {
     return
   fi
 
-  echo "[dev-up] starting gateway on :${MERIDIAN_GATEWAY_PORT}"
-  (
-    cd "${MERIDIAN_INTELLIGENCE_ROOT}"
-    MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
-    MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
-    MERIDIAN_WORKSPACE_API_BASE="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" \
-    nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
-    echo $! > "${PID_DIR}/gateway.pid"
-  )
+  local attempts=3
+  local attempt=1
+  while [[ "${attempt}" -le "${attempts}" ]]; do
+    echo "[dev-up] starting gateway on :${MERIDIAN_GATEWAY_PORT} (attempt ${attempt}/${attempts})"
+    kill_pid_file_process "gateway"
+    (
+      cd "${MERIDIAN_INTELLIGENCE_ROOT}"
+      MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
+      MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      MERIDIAN_WORKSPACE_API_BASE="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" \
+      MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT}" \
+      nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
+      echo $! > "${PID_DIR}/gateway.pid"
+    )
+    sleep 1
+    if port_listening "${MERIDIAN_GATEWAY_PORT}"; then
+      return
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  print_startup_failure "gateway" "${LOG_DIR}/gateway.log"
+  return 1
 }
 
 start_workspace_if_needed
-wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/status" 35 >/dev/null
+wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/status" "${MERIDIAN_WORKSPACE_READY_TIMEOUT}" >/dev/null
 
 start_gateway_if_needed
-STATUS_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" 35)"
-TEMPLATE_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/institution/template" 35)"
-TREASURY_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/treasury" 35)"
+STATUS_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
+TEMPLATE_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/institution/template" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
+TREASURY_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/treasury" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
 export STATUS_JSON TEMPLATE_JSON TREASURY_JSON
 
 if [[ "$QUIET" -eq 0 ]]; then

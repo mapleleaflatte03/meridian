@@ -4,15 +4,39 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+find_free_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+ONBOARDING_WORKSPACE_PORT="${MERIDIAN_TEST_WORKSPACE_PORT:-$(find_free_port)}"
+ONBOARDING_GATEWAY_PORT="${MERIDIAN_TEST_GATEWAY_PORT:-$(find_free_port)}"
+if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_GATEWAY_PORT}" ]]; then
+  ONBOARDING_GATEWAY_PORT="$(find_free_port)"
+fi
+export ONBOARDING_GATEWAY_PORT
+
 if [ ! -x "./scripts/new-first-agent.sh" ]; then
   echo "[onboarding-lane] missing executable helper: ./scripts/new-first-agent.sh" >&2
   exit 1
 fi
 
 echo "[onboarding-lane] bootstrap full stack (skip loom build for fast/portable gate)"
-MERIDIAN_SKIP_LOOM_BUILD=1 \
-MERIDIAN_AUTO_START_STACK=1 \
-./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log
+echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
+if ! MERIDIAN_SKIP_LOOM_BUILD=1 \
+  MERIDIAN_AUTO_START_STACK=1 \
+  MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
+  MERIDIAN_GATEWAY_PORT="${ONBOARDING_GATEWAY_PORT}" \
+  ./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log 2>&1; then
+  echo "[onboarding-lane] bootstrap failed; dumping /tmp/meridian_onboarding_bootstrap.log" >&2
+  cat /tmp/meridian_onboarding_bootstrap.log >&2 || true
+  exit 1
+fi
 
 echo "[onboarding-lane] validate bootstrap smoke report"
 python3 - <<'PY'
@@ -34,10 +58,11 @@ PY
 echo "[onboarding-lane] verify local API readiness contract"
 python3 - <<'PY'
 import json
+import os
 from pathlib import Path
 import urllib.request
 
-BASE = "http://127.0.0.1:8266"
+BASE = f"http://127.0.0.1:{os.environ['ONBOARDING_GATEWAY_PORT']}"
 
 def get_json(path: str):
     with urllib.request.urlopen(BASE + path, timeout=20) as response:

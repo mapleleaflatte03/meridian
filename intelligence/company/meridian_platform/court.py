@@ -30,7 +30,18 @@ import uuid
 
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE = os.path.dirname(os.path.dirname(PLATFORM_DIR))
-ECONOMY_DIR = os.path.join(WORKSPACE, 'economy')
+MONOREPO_ROOT = os.path.dirname(WORKSPACE)
+CANONICAL_KERNEL_ROOT = (
+    (os.environ.get('MERIDIAN_KERNEL_ROOT') or '').strip()
+    or os.path.join(MONOREPO_ROOT, 'kernel')
+    or '/opt/meridian-kernel'
+)
+LOCAL_ECONOMY_DIR = os.path.join(WORKSPACE, 'economy')
+ECONOMY_DIR = (
+    os.path.join(CANONICAL_KERNEL_ROOT, 'economy')
+    if os.path.isdir(os.path.join(CANONICAL_KERNEL_ROOT, 'economy'))
+    else LOCAL_ECONOMY_DIR
+)
 RECORDS_FILE = os.path.join(PLATFORM_DIR, 'court_records.json')
 
 if PLATFORM_DIR not in sys.path:
