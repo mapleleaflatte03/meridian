@@ -59,6 +59,30 @@ curl -fsS http://127.0.0.1:8266/api/status
 ./scripts/research_capture_case_study.sh sanction_remediation_loop
 ```
 
+## V4 Implementation Summary
+
+All five contract blocks are live and verified:
+
+| Block | Gate | Status | Commit |
+|-------|------|--------|--------|
+| `proof.recursive` | P2 | Recursive chain with deterministic root | `6f3d485` |
+| `proof.aggregate` | P3 | Hypercube topology + Merkle inclusion proofs | `9396429` |
+| `court.dynamic` | P4 | Proposal/vote/tally/activate lifecycle | `6492523` |
+| `marketplace` | P5 | Bid/assign/settle with receipt chain | `f1ed98b` |
+| `memory.temporal_integrity` | Track M | Hash-chained memory graph | `aa1c44e` |
+
+### API Endpoints Added
+
+**Court (P4):** `/api/court/propose`, `/api/court/vote`, `/api/court/tally`, `/api/court/activate`, `/api/court/proposals`, `/api/court/rules`
+
+**Marketplace (P5):** `/api/marketplace/bid`, `/api/marketplace/assign`, `/api/marketplace/settle`, `/api/marketplace/cancel`, `/api/marketplace/bids`, `/api/marketplace/settlements`
+
+**Memory (Track M):** `/api/memory/append`, `/api/memory/verify`, `/api/memory/query`, `/api/memory/head`
+
+### Rust Crate: loom-poge
+
+58 tests total — 40 original + 9 recursive chain + 9 hypercube aggregation.
+
 ## Killer Example (Governed Runtime Loop)
 
 Minimal example to show why Meridian is different from generic local-agent runtimes:
