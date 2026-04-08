@@ -69,6 +69,12 @@ Endpoints:
   POST /api/court/appeal          → File an appeal
   POST /api/court/decide-appeal   → Decide an appeal
   POST /api/court/remediate       → Lift lingering sanctions after review
+  POST /api/court/propose         → Submit a constitutional rule proposal
+  POST /api/court/vote            → Cast a vote on a proposal
+  POST /api/court/tally           → Tally votes and determine outcome
+  POST /api/court/activate        → Activate an approved rule
+  POST /api/court/proposals       → List proposals (optional status filter)
+  POST /api/court/rules           → List active dynamic rules
   POST /api/warrants/issue        → Issue a warrant record
   POST /api/warrants/approve      → Approve a warrant for execution
   POST /api/warrants/stay         → Stay a warrant before execution
@@ -304,7 +310,10 @@ from treasury import (treasury_snapshot, get_balance,
                       load_payout_proposals)
 from court import (file_violation, resolve_violation,
                    file_appeal, decide_appeal, auto_review,
-                   get_restrictions, remediate, _load_records)
+                   get_restrictions, remediate, _load_records,
+                   propose_rule, vote_on_proposal, tally_proposal,
+                   activate_rule, get_proposals, get_dynamic_rules,
+                   dynamic_court_status)
 from session import SessionAuthority
 from app import (
     PUBLIC_UNAUTHENTICATED_PATHS,
@@ -4100,6 +4109,14 @@ def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expi
     }
 
 
+def _dynamic_court_status(org_id: str | None = None) -> dict:
+    """Collect dynamic court status for the /api/status block."""
+    try:
+        return dynamic_court_status(org_id)
+    except Exception:
+        return {'ruleset_version': 0, 'proposal_count': 0, 'active_rules': 0, 'pending_proposals': 0}
+
+
 def _aggregate_proof_status():
     """Collect aggregate proof status from the kernel proof bundle."""
     try:
@@ -4263,11 +4280,7 @@ def api_status(context_source='configured_default', institution_context=None):
             'pending_appeals': pending_appeals,
             'total_violations': len(records['violations']),
             'total_appeals': len(records['appeals']),
-            'dynamic': {
-                'ruleset_version': 0,
-                'proposal_count': 0,
-                'active_rules': 0,
-            },
+            'dynamic': _dynamic_court_status(org_id),
         },
         'warrants': _warrant_summary(org_id, include_archived=False),
         'commitments': _commitment_snapshot(org_id),
@@ -5972,6 +5985,69 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                           session_id=_sid)
                 return self._json({'message': f'Remediation complete: lifted {lifted}',
                                    'lifted': lifted})
+
+            elif path == '/api/court/propose':
+                proposal_id = propose_rule(
+                    title=body['title'],
+                    description=body.get('description', ''),
+                    rule_text=body['rule_text'],
+                    proposed_by=by,
+                    org_id=org_id,
+                    action_ids=body.get('action_ids'),
+                )
+                log_event(org_id, by, 'court_rule_proposed', resource=proposal_id,
+                          outcome='success', details={'title': body['title']},
+                          session_id=_sid)
+                return self._json({'message': f'Proposal submitted: {proposal_id}',
+                                   'proposal_id': proposal_id})
+
+            elif path == '/api/court/vote':
+                vote_result = vote_on_proposal(
+                    proposal_id=body['proposal_id'],
+                    voter_id=by,
+                    vote=body['vote'],
+                    justification=body.get('justification', ''),
+                    org_id=org_id,
+                )
+                log_event(org_id, by, 'court_rule_vote', resource=body['proposal_id'],
+                          outcome='success', details={'vote': body['vote']},
+                          session_id=_sid)
+                return self._json({'message': f'Vote cast on {body["proposal_id"]}',
+                                   'vote': vote_result})
+
+            elif path == '/api/court/tally':
+                tally_result = tally_proposal(
+                    proposal_id=body['proposal_id'],
+                    org_id=org_id,
+                    quorum=int(body.get('quorum', 1)),
+                )
+                log_event(org_id, by, 'court_rule_tallied', resource=body['proposal_id'],
+                          outcome='success', details=tally_result,
+                          session_id=_sid)
+                return self._json({'message': f'Tally complete for {body["proposal_id"]}',
+                                   'tally': tally_result})
+
+            elif path == '/api/court/activate':
+                rule_id = activate_rule(
+                    proposal_id=body['proposal_id'],
+                    org_id=org_id,
+                )
+                log_event(org_id, by, 'court_rule_activated', resource=rule_id,
+                          outcome='success', details={'proposal_id': body['proposal_id']},
+                          session_id=_sid)
+                return self._json({'message': f'Rule activated: {rule_id}',
+                                   'rule_id': rule_id})
+
+            elif path == '/api/court/proposals':
+                proposals = get_proposals(
+                    status=body.get('status'),
+                    org_id=org_id,
+                )
+                return self._json({'proposals': proposals, 'count': len(proposals)})
+
+            elif path == '/api/court/rules':
+                rules = get_dynamic_rules(org_id=org_id)
+                return self._json({'rules': rules, 'count': len(rules)})
 
             elif path == '/api/treasury/contribute':
                 result = contribute_owner_capital(body['amount'], body.get('note', ''),

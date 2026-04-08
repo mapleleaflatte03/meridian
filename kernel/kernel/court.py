@@ -77,7 +77,11 @@ def _now():
 
 
 def _empty_records():
-    return {'violations': {}, 'appeals': {}, 'updatedAt': _now()}
+    data = {'violations': {}, 'appeals': {}, 'updatedAt': _now()}
+    data['dynamic_rules'] = {}
+    data['proposals'] = {}
+    data['ruleset_version'] = 0
+    return data
 
 
 def _missing_org_error(org_id):
@@ -538,6 +542,176 @@ def main():
                 print(f"  {a['id']}  violation={a['violation_id']}  agent={a['agent_id']}")
     else:
         p.print_help()
+
+
+# ── Dynamic Constitutional Court ─────────────────────────────────────────────
+
+PROPOSAL_STATUSES = ('proposed', 'voting', 'approved', 'rejected', 'activated')
+VOTE_OPTIONS = ('for', 'against', 'abstain')
+
+
+def _ensure_dynamic_fields(records):
+    """Ensure dynamic court fields exist in records."""
+    records.setdefault('dynamic_rules', {})
+    records.setdefault('proposals', {})
+    records.setdefault('ruleset_version', 0)
+    return records
+
+
+def propose_rule(title, description, rule_text, proposed_by, org_id=None, action_ids=None):
+    """Submit a new constitutional rule proposal."""
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+
+    proposal_id = f'prop_{uuid.uuid4().hex[:8]}'
+    records['proposals'][proposal_id] = {
+        'id': proposal_id,
+        'org_id': org_id,
+        'title': title,
+        'description': description,
+        'rule_text': rule_text,
+        'proposed_by': proposed_by,
+        'status': 'proposed',
+        'votes': {},
+        'action_ids': action_ids or [],
+        'created_at': _now(),
+        'tallied_at': None,
+        'activated_at': None,
+        'tally_result': None,
+    }
+    _save_records(records, org_id)
+    return proposal_id
+
+
+def vote_on_proposal(proposal_id, voter_id, vote, justification='', org_id=None):
+    """Cast a vote on a proposal. Each voter may vote once."""
+    if vote not in VOTE_OPTIONS:
+        raise ValueError(f'Invalid vote: {vote}. Must be one of {VOTE_OPTIONS}')
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+
+    proposal = records['proposals'].get(proposal_id)
+    if not proposal:
+        raise ValueError(f'Proposal not found: {proposal_id}')
+    if proposal['status'] not in ('proposed', 'voting'):
+        raise ValueError(f'Proposal {proposal_id} is not open for voting (status={proposal["status"]})')
+
+    if proposal['status'] == 'proposed':
+        proposal['status'] = 'voting'
+
+    proposal['votes'][voter_id] = {
+        'voter_id': voter_id,
+        'vote': vote,
+        'justification': justification,
+        'cast_at': _now(),
+    }
+    _save_records(records, org_id)
+    return proposal['votes'][voter_id]
+
+
+def tally_proposal(proposal_id, org_id=None, quorum=1):
+    """Tally votes on a proposal. Requires quorum votes and majority 'for' to approve."""
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+
+    proposal = records['proposals'].get(proposal_id)
+    if not proposal:
+        raise ValueError(f'Proposal not found: {proposal_id}')
+    if proposal['status'] not in ('proposed', 'voting'):
+        raise ValueError(f'Proposal {proposal_id} cannot be tallied (status={proposal["status"]})')
+
+    votes = proposal.get('votes', {})
+    count_for = sum(1 for v in votes.values() if v['vote'] == 'for')
+    count_against = sum(1 for v in votes.values() if v['vote'] == 'against')
+    count_abstain = sum(1 for v in votes.values() if v['vote'] == 'abstain')
+    total = len(votes)
+
+    has_quorum = total >= quorum
+    approved = has_quorum and count_for > count_against
+
+    tally_result = {
+        'total_votes': total,
+        'for': count_for,
+        'against': count_against,
+        'abstain': count_abstain,
+        'quorum_required': quorum,
+        'quorum_met': has_quorum,
+        'approved': approved,
+    }
+
+    proposal['status'] = 'approved' if approved else 'rejected'
+    proposal['tallied_at'] = _now()
+    proposal['tally_result'] = tally_result
+    _save_records(records, org_id)
+    return tally_result
+
+
+def activate_rule(proposal_id, org_id=None):
+    """Activate an approved proposal as a live constitutional rule."""
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+
+    proposal = records['proposals'].get(proposal_id)
+    if not proposal:
+        raise ValueError(f'Proposal not found: {proposal_id}')
+    if proposal['status'] != 'approved':
+        raise ValueError(
+            f'Only approved proposals can be activated (status={proposal["status"]})'
+        )
+
+    rule_id = f'rule_{uuid.uuid4().hex[:8]}'
+    records['dynamic_rules'][rule_id] = {
+        'id': rule_id,
+        'org_id': org_id,
+        'proposal_id': proposal_id,
+        'title': proposal['title'],
+        'rule_text': proposal['rule_text'],
+        'activated_at': _now(),
+        'activated_by': proposal['proposed_by'],
+        'action_ids': proposal.get('action_ids', []),
+        'status': 'active',
+    }
+    proposal['status'] = 'activated'
+    proposal['activated_at'] = _now()
+    records['ruleset_version'] = records.get('ruleset_version', 0) + 1
+    _save_records(records, org_id)
+    return rule_id
+
+
+def get_proposals(status=None, org_id=None):
+    """List proposals, optionally filtered by status."""
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+
+    proposals = list(records['proposals'].values())
+    if status:
+        proposals = [p for p in proposals if p['status'] == status]
+    return proposals
+
+
+def get_dynamic_rules(org_id=None):
+    """List all active dynamic rules."""
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+    return [r for r in records['dynamic_rules'].values() if r['status'] == 'active']
+
+
+def dynamic_court_status(org_id=None):
+    """Return dynamic court status for the /api/status block."""
+    records = _load_records(org_id)
+    _ensure_dynamic_fields(records)
+
+    active_rules = [r for r in records['dynamic_rules'].values() if r['status'] == 'active']
+    pending_proposals = [
+        p for p in records['proposals'].values()
+        if p['status'] in ('proposed', 'voting')
+    ]
+    return {
+        'ruleset_version': records.get('ruleset_version', 0),
+        'proposal_count': len(records['proposals']),
+        'active_rules': len(active_rules),
+        'pending_proposals': len(pending_proposals),
+    }
 
 
 if __name__ == '__main__':
