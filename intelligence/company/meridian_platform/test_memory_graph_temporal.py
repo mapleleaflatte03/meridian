@@ -65,6 +65,41 @@ class MemoryGraphTemporalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'memory_integrity_mismatch:'):
             memory_graph.temporal_query_with_proof(org_id='org_test')
 
+    def test_verify_temporal_proof_accepts_valid_payload(self):
+        memory_graph.append_node(
+            key='fact',
+            value={'value': 'A', 'agent_id': 'agent_atlas'},
+            org_id='org_test',
+            agent_id='agent_atlas',
+            timestamp='2026-04-08T10:00:00Z',
+        )
+        memory_graph.append_node(
+            key='fact',
+            value={'value': 'B', 'agent_id': 'agent_atlas'},
+            org_id='org_test',
+            agent_id='agent_atlas',
+            timestamp='2026-04-08T10:05:00Z',
+        )
+        payload = memory_graph.temporal_query_with_proof(org_id='org_test', agent_id='agent_atlas')
+        valid, error_detail = memory_graph.verify_temporal_proof(payload['proof'], org_id='org_test')
+        self.assertTrue(valid)
+        self.assertIsNone(error_detail)
+
+    def test_verify_temporal_proof_rejects_mismatch(self):
+        memory_graph.append_node(
+            key='fact',
+            value={'value': 'A', 'agent_id': 'agent_atlas'},
+            org_id='org_test',
+            agent_id='agent_atlas',
+            timestamp='2026-04-08T10:00:00Z',
+        )
+        payload = memory_graph.temporal_query_with_proof(org_id='org_test', agent_id='agent_atlas')
+        proof = dict(payload['proof'])
+        proof['head_hash'] = '0' * 64
+        valid, error_detail = memory_graph.verify_temporal_proof(proof, org_id='org_test')
+        self.assertFalse(valid)
+        self.assertEqual(error_detail.get('reason'), 'head_hash_mismatch')
+
 
 if __name__ == '__main__':
     unittest.main()

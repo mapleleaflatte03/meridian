@@ -356,6 +356,7 @@ from marketplace import (
 )
 from memory_graph import (append_node as memory_append_node,
                           verify_chain as memory_verify_chain,
+                          verify_temporal_proof as memory_verify_temporal_proof,
                           query_nodes as memory_query_nodes,
                           temporal_query_with_proof as memory_temporal_query_with_proof,
                           chain_head as memory_chain_head,
@@ -6376,7 +6377,14 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                                    'node_hash': node_hash, 'depth': depth})
 
             elif path == '/api/memory/verify':
-                valid, error_detail = memory_verify_chain(org_id=org_id)
+                proof_payload = body.get('proof')
+                if proof_payload is None:
+                    valid, error_detail = memory_verify_chain(org_id=org_id)
+                else:
+                    valid, error_detail = memory_verify_temporal_proof(
+                        proof_payload,
+                        org_id=org_id,
+                    )
                 return self._json({
                     'valid': valid,
                     'error': error_detail,

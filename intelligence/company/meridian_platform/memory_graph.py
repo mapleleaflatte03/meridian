@@ -226,6 +226,128 @@ def temporal_query_with_proof(org_id=None, *, agent_id=None, start_ts=None, end_
     }
 
 
+def verify_temporal_proof(proof, org_id=None):
+    """Verify a temporal proof payload against the current memory graph."""
+    valid, error_detail = verify_chain(org_id)
+    if not valid:
+        return False, {
+            'reason': 'chain_invalid',
+            'detail': error_detail,
+        }
+
+    if not isinstance(proof, dict):
+        return False, {
+            'reason': 'proof_missing',
+        }
+
+    graph = _load_graph(org_id)
+    expected_head = str(graph.get('head_hash') or '')
+    expected_index_version = int(graph.get('index_version') or 0)
+
+    def _coerce_int(value):
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    provided_head = str(proof.get('head_hash') or '').strip()
+    if provided_head and provided_head != expected_head:
+        return False, {
+            'reason': 'head_hash_mismatch',
+            'expected': expected_head,
+            'actual': provided_head,
+        }
+
+    provided_event_hash = str(proof.get('event_hash') or '').strip()
+    if provided_event_hash and provided_event_hash != expected_head:
+        return False, {
+            'reason': 'event_hash_mismatch',
+            'expected': expected_head,
+            'actual': provided_event_hash,
+        }
+
+    provided_index = _coerce_int(proof.get('index_version'))
+    if provided_index is not None and provided_index != expected_index_version:
+        return False, {
+            'reason': 'index_version_mismatch',
+            'expected': expected_index_version,
+            'actual': provided_index,
+        }
+
+    proof_nodes = proof.get('proof_nodes')
+    if proof_nodes is None:
+        proof_nodes = []
+    if not isinstance(proof_nodes, list):
+        return False, {
+            'reason': 'proof_nodes_invalid',
+        }
+
+    selected_count = _coerce_int(proof.get('selected_count'))
+    if selected_count is not None and selected_count != len(proof_nodes):
+        return False, {
+            'reason': 'selected_count_mismatch',
+            'expected': len(proof_nodes),
+            'actual': selected_count,
+        }
+
+    nodes_by_hash = {str(node.get('hash') or ''): node for node in graph.get('nodes', [])}
+    for index, proof_node in enumerate(proof_nodes):
+        if not isinstance(proof_node, dict):
+            return False, {
+                'reason': 'proof_node_invalid',
+                'index': index,
+            }
+
+        candidate_hash = str(proof_node.get('hash') or proof_node.get('event_hash') or '').strip()
+        if not candidate_hash:
+            return False, {
+                'reason': 'proof_node_missing_hash',
+                'index': index,
+            }
+
+        node = nodes_by_hash.get(candidate_hash)
+        if not node:
+            return False, {
+                'reason': 'proof_node_not_found',
+                'index': index,
+                'hash': candidate_hash,
+            }
+
+        expected_prev = str(node.get('prev_hash') or '')
+        provided_prev = str(proof_node.get('prev_hash') or '').strip()
+        if provided_prev and provided_prev != expected_prev:
+            return False, {
+                'reason': 'proof_node_prev_hash_mismatch',
+                'index': index,
+                'expected': expected_prev,
+                'actual': provided_prev,
+            }
+
+        expected_depth = int(node.get('depth') or 0)
+        provided_depth = _coerce_int(proof_node.get('depth'))
+        if provided_depth is not None and provided_depth != expected_depth:
+            return False, {
+                'reason': 'proof_node_depth_mismatch',
+                'index': index,
+                'expected': expected_depth,
+                'actual': provided_depth,
+            }
+
+        expected_timestamp = str(node.get('timestamp') or '')
+        provided_timestamp = str(proof_node.get('timestamp') or '').strip()
+        if provided_timestamp and provided_timestamp != expected_timestamp:
+            return False, {
+                'reason': 'proof_node_timestamp_mismatch',
+                'index': index,
+                'expected': expected_timestamp,
+                'actual': provided_timestamp,
+            }
+
+    return True, None
+
+
 def chain_head(org_id=None):
     """Get the current chain head hash and depth."""
     graph = _load_graph(org_id)
