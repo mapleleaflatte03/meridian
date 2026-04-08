@@ -30,6 +30,14 @@ Every RFC must include:
 2. measurable acceptance criteria,
 3. rollback strategy.
 
+## V4 Contract Blocks
+
+The `/api/status` endpoint includes five contract blocks that track the state of
+recursive proofs, aggregate bundles, dynamic court, agent marketplace, and
+temporal memory integrity. These blocks are captured by the baseline script
+under the `contract_blocks` key. See `docs/research/README.md` for the full
+field reference.
+
 ## Baseline Reproduction Commands
 
 ```bash

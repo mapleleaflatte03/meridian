@@ -4234,6 +4234,11 @@ def api_status(context_source='configured_default', institution_context=None):
             'pending_appeals': pending_appeals,
             'total_violations': len(records['violations']),
             'total_appeals': len(records['appeals']),
+            'dynamic': {
+                'ruleset_version': 0,
+                'proposal_count': 0,
+                'active_rules': 0,
+            },
         },
         'warrants': _warrant_summary(org_id, include_archived=False),
         'commitments': _commitment_snapshot(org_id),
@@ -4261,6 +4266,31 @@ def api_status(context_source='configured_default', institution_context=None):
         'ci_vertical': _ci_vertical_status(reg, lead_id, org_id),
         'remediations': remediations,
         'timestamp': _now(),
+        'proof': {
+            'recursive': {
+                'enabled': False,
+                'depth': 0,
+                'root': None,
+            },
+            'aggregate': {
+                'topology': 'none',
+                'bundle_id': None,
+                'member_count': 0,
+                'integrity_hash': None,
+            },
+        },
+        'marketplace': {
+            'mode': 'disabled',
+            'open_bids': 0,
+            'active_assignments': 0,
+            'settled_count': 0,
+        },
+        'memory': {
+            'temporal_integrity': {
+                'enabled': False,
+                'index_version': 0,
+            },
+        },
     }
     result['runtime_core']['federation'] = _federation_snapshot(
         org_id,

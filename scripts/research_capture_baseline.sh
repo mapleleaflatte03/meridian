@@ -38,6 +38,13 @@ payload = {
         "delivered_count": status.get("delivered_count"),
         "proof_mode": status.get("proof_mode"),
     },
+    "contract_blocks": {
+        "proof_recursive": (status.get("proof") or {}).get("recursive"),
+        "proof_aggregate": (status.get("proof") or {}).get("aggregate"),
+        "court_dynamic": (status.get("court") or {}).get("dynamic"),
+        "marketplace": status.get("marketplace"),
+        "memory_temporal_integrity": (status.get("memory") or {}).get("temporal_integrity"),
+    },
     "runtime_proof": {
         "runtime_id": runtime_proof.get("runtime_id"),
         "proof_mode": runtime_proof.get("proof_mode"),
