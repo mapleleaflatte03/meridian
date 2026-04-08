@@ -62,6 +62,10 @@ from team_topology import SPECIALIST_KEYS, load_team_topology, sync_loom_team_pr
 from telegram_history import imported_history_context
 import brain_router
 
+
+class MeridianThreadingHTTPServer(ThreadingHTTPServer):
+    allow_reuse_address = True
+
 def _resolve_kernel_dir() -> Path:
     explicit_root = str(os.environ.get("MERIDIAN_KERNEL_ROOT") or "").strip()
     if explicit_root:
@@ -11986,7 +11990,7 @@ class WebAPIAdapter(ChannelAdapter):
             _log("web adapter disabled: allowed_origin missing", color=ANSI_YELLOW)
             return
         handler = self._make_handler()
-        self.server = ThreadingHTTPServer((HOST, PORT), handler)
+        self.server = MeridianThreadingHTTPServer((HOST, PORT), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, name="web-api-adapter", daemon=True)
         self.thread.start()
         self._active = True

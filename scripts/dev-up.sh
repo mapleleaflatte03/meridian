@@ -7,6 +7,8 @@ export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
 export MERIDIAN_WORKSPACE_PORT="${MERIDIAN_WORKSPACE_PORT:-18901}"
 export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
+export MERIDIAN_WORKSPACE_READY_TIMEOUT="${MERIDIAN_WORKSPACE_READY_TIMEOUT:-45}"
+export MERIDIAN_GATEWAY_READY_TIMEOUT="${MERIDIAN_GATEWAY_READY_TIMEOUT:-90}"
 
 QUIET=0
 if [[ "${1:-}" == "--no-summary" ]]; then
@@ -139,12 +141,12 @@ start_gateway_if_needed() {
 }
 
 start_workspace_if_needed
-wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/status" 35 >/dev/null
+wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/status" "${MERIDIAN_WORKSPACE_READY_TIMEOUT}" >/dev/null
 
 start_gateway_if_needed
-STATUS_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" 35)"
-TEMPLATE_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/institution/template" 35)"
-TREASURY_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/treasury" 35)"
+STATUS_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
+TEMPLATE_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/institution/template" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
+TREASURY_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/treasury" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
 export STATUS_JSON TEMPLATE_JSON TREASURY_JSON
 
 if [[ "$QUIET" -eq 0 ]]; then

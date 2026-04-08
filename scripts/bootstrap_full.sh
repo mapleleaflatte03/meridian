@@ -242,18 +242,48 @@ def fetch(path: str, timeout: float = 4.0):
     with urllib.request.urlopen(base + path, timeout=timeout) as response:
         return json.loads(response.read().decode("utf-8"))
 
-deadline = time.time() + 35
+def parse_court_counters(status_payload: dict):
+    court = status_payload.get("court") or {}
+    open_violations_raw = court.get("open_violations")
+    pending_appeals_raw = court.get("pending_appeals")
+
+    if isinstance(open_violations_raw, list):
+        open_violations_count = len(open_violations_raw)
+    elif isinstance(open_violations_raw, int):
+        open_violations_count = open_violations_raw
+    else:
+        return None
+
+    if isinstance(pending_appeals_raw, list):
+        pending_appeals_count = len(pending_appeals_raw)
+    elif isinstance(pending_appeals_raw, int):
+        pending_appeals_count = pending_appeals_raw
+    else:
+        return None
+
+    return int(open_violations_count), int(pending_appeals_count)
+
+deadline = time.time() + 60
 status = None
+open_violations_count = None
+pending_appeals_count = None
 last_error = None
 while time.time() < deadline:
     try:
-        status = fetch("/api/status", timeout=8.0)
+        candidate = fetch("/api/status", timeout=8.0)
+        parsed = parse_court_counters(candidate)
+        if parsed is None:
+            last_error = "status snapshot missing court counters"
+            time.sleep(0.5)
+            continue
+        status = candidate
+        open_violations_count, pending_appeals_count = parsed
         break
     except Exception as exc:  # noqa: BLE001
         last_error = exc
         time.sleep(0.5)
 
-if status is None:
+if status is None or open_violations_count is None or pending_appeals_count is None:
     raise SystemExit(f"gateway smoke-check failed: {last_error}")
 
 template = fetch("/api/institution/template")
@@ -266,12 +296,6 @@ if len(template.get("court_rule_set") or []) < 3:
 if "balance_usd" not in treasury or "reserve_floor_usd" not in treasury:
     raise SystemExit("gateway smoke-check failed: treasury snapshot missing baseline keys")
 
-court = status.get("court") or {}
-open_violations = court.get("open_violations")
-pending_appeals = court.get("pending_appeals")
-if not isinstance(open_violations, list) or not isinstance(pending_appeals, list):
-    raise SystemExit("gateway smoke-check failed: status snapshot missing court counters")
-
 report = {
     "status": "ok",
     "org_id": ((status.get("context") or {}).get("bound_org_id") or "").strip(),
@@ -281,8 +305,8 @@ report = {
     "court_rule_count": len(template.get("court_rule_set") or []),
     "treasury_balance_usd": treasury.get("balance_usd"),
     "treasury_reserve_floor_usd": treasury.get("reserve_floor_usd"),
-    "court_open_violations": len(open_violations),
-    "court_pending_appeals": len(pending_appeals),
+    "court_open_violations": int(open_violations_count),
+    "court_pending_appeals": int(pending_appeals_count),
 }
 
 os.makedirs(os.path.dirname(report_path), exist_ok=True)

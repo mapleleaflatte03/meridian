@@ -4,8 +4,21 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
-ONBOARDING_WORKSPACE_PORT="${MERIDIAN_TEST_WORKSPACE_PORT:-28901}"
-ONBOARDING_GATEWAY_PORT="${MERIDIAN_TEST_GATEWAY_PORT:-28266}"
+find_free_port() {
+  python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+}
+
+ONBOARDING_WORKSPACE_PORT="${MERIDIAN_TEST_WORKSPACE_PORT:-$(find_free_port)}"
+ONBOARDING_GATEWAY_PORT="${MERIDIAN_TEST_GATEWAY_PORT:-$(find_free_port)}"
+if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_GATEWAY_PORT}" ]]; then
+  ONBOARDING_GATEWAY_PORT="$(find_free_port)"
+fi
 export ONBOARDING_GATEWAY_PORT
 
 if [ ! -x "./scripts/new-first-agent.sh" ]; then
