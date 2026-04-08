@@ -27,6 +27,9 @@ PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE = os.path.dirname(PLATFORM_DIR)
 ECONOMY_DIR = os.path.join(WORKSPACE, 'economy')
 LEGACY_RECORDS_FILE = os.path.join(PLATFORM_DIR, 'court_records.json')
+DYNAMIC_RULES_FILE = 'court_rules.json'
+DYNAMIC_PROPOSALS_FILE = 'court_rule_proposals.json'
+DYNAMIC_VOTES_FILE = 'court_votes.json'
 
 if PLATFORM_DIR not in sys.path:
     sys.path.insert(0, PLATFORM_DIR)
@@ -94,6 +97,14 @@ def _records_path(org_id=None):
     return capsule_path(org_id, 'court_records.json')
 
 
+def _dynamic_projection_paths(org_id=None):
+    return {
+        'rules': capsule_path(org_id, DYNAMIC_RULES_FILE),
+        'proposals': capsule_path(org_id, DYNAMIC_PROPOSALS_FILE),
+        'votes': capsule_path(org_id, DYNAMIC_VOTES_FILE),
+    }
+
+
 def _is_economy_capsule(path):
     try:
         return os.path.commonpath([os.path.abspath(path), os.path.abspath(ECONOMY_DIR)]) == os.path.abspath(ECONOMY_DIR)
@@ -130,6 +141,53 @@ def _save_records(data, org_id=None):
     if org_id and not os.path.isdir(os.path.dirname(path)):
         _missing_org_error(org_id)
     atomic_write_json(path, data)
+    _sync_dynamic_projection_files(data, org_id=org_id)
+
+
+def _sync_dynamic_projection_files(records, org_id=None):
+    _ensure_dynamic_fields(records)
+    paths = _dynamic_projection_paths(org_id)
+    for projection_path in paths.values():
+        if org_id and not os.path.isdir(os.path.dirname(projection_path)):
+            _missing_org_error(org_id)
+
+    updated_at = records.get('updatedAt') or _now()
+    rules = list(records.get('dynamic_rules', {}).values())
+    proposals = list(records.get('proposals', {}).values())
+    votes = []
+    for proposal in proposals:
+        proposal_id = proposal.get('id')
+        for voter_id, vote in (proposal.get('votes') or {}).items():
+            row = dict(vote)
+            row.setdefault('voter_id', voter_id)
+            row['proposal_id'] = proposal_id
+            votes.append(row)
+
+    atomic_write_json(
+        paths['rules'],
+        {
+            'ruleset_version': records.get('ruleset_version', 0),
+            'rules': rules,
+            'count': len(rules),
+            'updatedAt': updated_at,
+        },
+    )
+    atomic_write_json(
+        paths['proposals'],
+        {
+            'proposals': proposals,
+            'count': len(proposals),
+            'updatedAt': updated_at,
+        },
+    )
+    atomic_write_json(
+        paths['votes'],
+        {
+            'votes': votes,
+            'count': len(votes),
+            'updatedAt': updated_at,
+        },
+    )
 
 
 # -- Core functions -----------------------------------------------------------
@@ -578,6 +636,9 @@ def propose_rule(title, description, rule_text, proposed_by, org_id=None, action
         'tallied_at': None,
         'activated_at': None,
         'tally_result': None,
+        'rule_id': None,
+        'rule_version': None,
+        'proof_ref': None,
     }
     _save_records(records, org_id)
     return proposal_id
@@ -637,6 +698,7 @@ def tally_proposal(proposal_id, org_id=None, quorum=1):
         'quorum_required': quorum,
         'quorum_met': has_quorum,
         'approved': approved,
+        'proof_ref': f'court_tally:{proposal_id}:{_now()}',
     }
 
     proposal['status'] = 'approved' if approved else 'rejected'
@@ -659,21 +721,29 @@ def activate_rule(proposal_id, org_id=None):
             f'Only approved proposals can be activated (status={proposal["status"]})'
         )
 
+    next_rule_version = records.get('ruleset_version', 0) + 1
+    activated_at = _now()
     rule_id = f'rule_{uuid.uuid4().hex[:8]}'
+    proof_ref = f'court_rule_activation:{proposal_id}:v{next_rule_version}'
     records['dynamic_rules'][rule_id] = {
         'id': rule_id,
         'org_id': org_id,
         'proposal_id': proposal_id,
         'title': proposal['title'],
         'rule_text': proposal['rule_text'],
-        'activated_at': _now(),
+        'activated_at': activated_at,
         'activated_by': proposal['proposed_by'],
         'action_ids': proposal.get('action_ids', []),
+        'rule_version': next_rule_version,
+        'proof_ref': proof_ref,
         'status': 'active',
     }
     proposal['status'] = 'activated'
-    proposal['activated_at'] = _now()
-    records['ruleset_version'] = records.get('ruleset_version', 0) + 1
+    proposal['activated_at'] = activated_at
+    proposal['rule_id'] = rule_id
+    proposal['rule_version'] = next_rule_version
+    proposal['proof_ref'] = proof_ref
+    records['ruleset_version'] = next_rule_version
     _save_records(records, org_id)
     return rule_id
 

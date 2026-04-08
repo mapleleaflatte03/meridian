@@ -167,6 +167,92 @@ class CourtCapsuleTests(unittest.TestCase):
             self.assertTrue(migrated_path.exists())
             self.assertEqual(records['violations']['vio_seed']['status'], 'open')
 
+    def test_dynamic_court_projection_files_and_activation_metadata(self):
+        proposal_id = court.propose_rule(
+            title='Determinism Guard',
+            description='Require deterministic runtime chain',
+            rule_text='proof.chain.deterministic=true',
+            proposed_by='user_owner',
+            org_id=self.org_id,
+            action_ids=['act_001'],
+        )
+        vote = court.vote_on_proposal(
+            proposal_id=proposal_id,
+            voter_id='user_owner',
+            vote='for',
+            justification='gate check',
+            org_id=self.org_id,
+        )
+        tally = court.tally_proposal(
+            proposal_id=proposal_id,
+            org_id=self.org_id,
+            quorum=1,
+        )
+        rule_id = court.activate_rule(
+            proposal_id=proposal_id,
+            org_id=self.org_id,
+        )
+
+        self.assertEqual(vote['vote'], 'for')
+        self.assertTrue(tally['approved'])
+        self.assertIn('proof_ref', tally)
+        self.assertEqual(tally['quorum_required'], 1)
+
+        rules_path = pathlib.Path(capsule.capsule_path(self.org_id, 'court_rules.json'))
+        proposals_path = pathlib.Path(capsule.capsule_path(self.org_id, 'court_rule_proposals.json'))
+        votes_path = pathlib.Path(capsule.capsule_path(self.org_id, 'court_votes.json'))
+        self.assertTrue(rules_path.exists())
+        self.assertTrue(proposals_path.exists())
+        self.assertTrue(votes_path.exists())
+
+        rules_payload = json.loads(rules_path.read_text())
+        proposals_payload = json.loads(proposals_path.read_text())
+        votes_payload = json.loads(votes_path.read_text())
+
+        self.assertGreaterEqual(rules_payload.get('ruleset_version', 0), 1)
+        rule = next((row for row in rules_payload.get('rules', []) if row.get('id') == rule_id), None)
+        self.assertIsNotNone(rule)
+        self.assertGreaterEqual(rule.get('rule_version', 0), 1)
+        self.assertTrue(str(rule.get('proof_ref') or '').startswith('court_rule_activation:'))
+
+        proposal = next((row for row in proposals_payload.get('proposals', []) if row.get('id') == proposal_id), None)
+        self.assertIsNotNone(proposal)
+        self.assertEqual(proposal.get('rule_id'), rule_id)
+        self.assertEqual(proposal.get('rule_version'), rule.get('rule_version'))
+        self.assertEqual(proposal.get('proof_ref'), rule.get('proof_ref'))
+
+        vote_row = next((row for row in votes_payload.get('votes', []) if row.get('proposal_id') == proposal_id), None)
+        self.assertIsNotNone(vote_row)
+        self.assertEqual(vote_row.get('voter_id'), 'user_owner')
+
+    def test_dynamic_vote_is_idempotent_per_voter(self):
+        proposal_id = court.propose_rule(
+            title='Budget Limit Rule',
+            description='Vote idempotency check',
+            rule_text='treasury.max_spend=100',
+            proposed_by='user_owner',
+            org_id=self.org_id,
+        )
+        court.vote_on_proposal(
+            proposal_id=proposal_id,
+            voter_id='user_owner',
+            vote='for',
+            org_id=self.org_id,
+        )
+        court.vote_on_proposal(
+            proposal_id=proposal_id,
+            voter_id='user_owner',
+            vote='against',
+            org_id=self.org_id,
+        )
+        proposal = next(
+            row for row in court.get_proposals(org_id=self.org_id)
+            if row.get('id') == proposal_id
+        )
+        votes = proposal.get('votes') or {}
+        self.assertEqual(len(votes), 1)
+        self.assertEqual(votes['user_owner']['vote'], 'against')
+
 
 if __name__ == '__main__':
     unittest.main()
