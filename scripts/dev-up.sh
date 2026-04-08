@@ -76,6 +76,33 @@ port_listening() {
   fi
 }
 
+kill_pid_file_process() {
+  local name="$1"
+  local pid_file="${PID_DIR}/${name}.pid"
+  if [[ ! -f "${pid_file}" ]]; then
+    return
+  fi
+  local pid
+  pid="$(cat "${pid_file}" 2>/dev/null || true)"
+  if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
+    kill "${pid}" >/dev/null 2>&1 || true
+    sleep 0.3
+    kill -9 "${pid}" >/dev/null 2>&1 || true
+  fi
+  rm -f "${pid_file}"
+}
+
+print_startup_failure() {
+  local name="$1"
+  local log_file="$2"
+  echo "[dev-up] ${name} failed to start after retries"
+  if [[ -f "${log_file}" ]]; then
+    echo "[dev-up] --- tail ${log_file} ---"
+    tail -n 120 "${log_file}" || true
+    echo "[dev-up] --- end tail ---"
+  fi
+}
+
 wait_for_json() {
   local url="$1"
   local timeout_s="${2:-30}"
@@ -108,19 +135,32 @@ start_workspace_if_needed() {
     return
   fi
 
-  echo "[dev-up] starting workspace on :${MERIDIAN_WORKSPACE_PORT}"
-  (
-    cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
-    local org_args=()
-    if [[ -n "${MERIDIAN_WORKSPACE_ORG_ID}" ]]; then
-      org_args=(--org-id "${MERIDIAN_WORKSPACE_ORG_ID}")
+  local attempts=3
+  local attempt=1
+  while [[ "${attempt}" -le "${attempts}" ]]; do
+    echo "[dev-up] starting workspace on :${MERIDIAN_WORKSPACE_PORT} (attempt ${attempt}/${attempts})"
+    kill_pid_file_process "workspace"
+    (
+      cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
+      local org_args=()
+      if [[ -n "${MERIDIAN_WORKSPACE_ORG_ID}" ]]; then
+        org_args=(--org-id "${MERIDIAN_WORKSPACE_ORG_ID}")
+      fi
+      MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
+      MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" "${org_args[@]}" \
+        >"${LOG_DIR}/workspace.log" 2>&1 &
+      echo $! > "${PID_DIR}/workspace.pid"
+    )
+    sleep 1
+    if port_listening "${MERIDIAN_WORKSPACE_PORT}"; then
+      return
     fi
-    MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
-    MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
-    nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" "${org_args[@]}" \
-      >"${LOG_DIR}/workspace.log" 2>&1 &
-    echo $! > "${PID_DIR}/workspace.pid"
-  )
+    attempt=$((attempt + 1))
+  done
+
+  print_startup_failure "workspace" "${LOG_DIR}/workspace.log"
+  return 1
 }
 
 start_gateway_if_needed() {
@@ -129,15 +169,29 @@ start_gateway_if_needed() {
     return
   fi
 
-  echo "[dev-up] starting gateway on :${MERIDIAN_GATEWAY_PORT}"
-  (
-    cd "${MERIDIAN_INTELLIGENCE_ROOT}"
-    MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
-    MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
-    MERIDIAN_WORKSPACE_API_BASE="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" \
-    nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
-    echo $! > "${PID_DIR}/gateway.pid"
-  )
+  local attempts=3
+  local attempt=1
+  while [[ "${attempt}" -le "${attempts}" ]]; do
+    echo "[dev-up] starting gateway on :${MERIDIAN_GATEWAY_PORT} (attempt ${attempt}/${attempts})"
+    kill_pid_file_process "gateway"
+    (
+      cd "${MERIDIAN_INTELLIGENCE_ROOT}"
+      MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
+      MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      MERIDIAN_WORKSPACE_API_BASE="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" \
+      MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT}" \
+      nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
+      echo $! > "${PID_DIR}/gateway.pid"
+    )
+    sleep 1
+    if port_listening "${MERIDIAN_GATEWAY_PORT}"; then
+      return
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  print_startup_failure "gateway" "${LOG_DIR}/gateway.log"
+  return 1
 }
 
 start_workspace_if_needed
