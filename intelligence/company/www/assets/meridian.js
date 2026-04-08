@@ -906,7 +906,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
   async function loadLiveSnapshot() {
     if (!latestSnapshot) {
       shells.forEach(function (shell) {
-        setLoadingState(shell, 'Refreshing live host data (15s cadence) while keeping bootstrap baseline visible.');
+        setLoadingState(shell, 'Refreshing live host data (15s cadence). Displaying the latest verified sample.');
       });
     }
     try {
@@ -928,12 +928,12 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         if (latestSnapshot) {
           renderSnapshotIntoShell(shell, latestSnapshot.status, latestSnapshot.proof);
           var staleLabel = snapshotFetchedAt
-            ? 'Stale data from ' + snapshotFetchedAt.toLocaleTimeString() + ' — refresh failed: ' + (error.message || 'unknown')
-            : 'Stale data — refresh failed: ' + (error.message || 'unknown');
+            ? 'Using last verified sample from ' + snapshotFetchedAt.toLocaleTimeString() + '. Refresh failed: ' + (error.message || 'unknown')
+            : 'Using last verified sample. Refresh failed: ' + (error.message || 'unknown');
           setCaption(shell, 'runtime', staleLabel);
         } else {
           ['runtime', 'queue', 'proof'].forEach(function (name) {
-            setCaption(shell, name, 'Error: ' + (error.message || 'Unable to load live host data.'));
+            setCaption(shell, name, 'Live data unavailable: ' + (error.message || 'unable to load host snapshot.'));
           });
           renderLoadingChart(shell.querySelector('[data-live-chart="runtime"]'));
           renderLoadingChart(shell.querySelector('[data-live-chart="queue"]'));
@@ -1083,12 +1083,12 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       renderSummary(status, proof);
     } catch (error) {
       if (lastGoodSummary) {
-        var staleLabel = summaryFetchedAt
-          ? 'Stale (last success ' + summaryFetchedAt.toLocaleTimeString() + ') — ' + safeText(error && error.message)
-          : 'Stale — ' + safeText(error && error.message);
+    var staleLabel = summaryFetchedAt
+          ? 'Using last verified summary from ' + summaryFetchedAt.toLocaleTimeString() + '. Refresh failed: ' + safeText(error && error.message)
+          : 'Using last verified summary. Refresh failed: ' + safeText(error && error.message);
         setText('[data-proof-updated-at]', staleLabel);
       } else {
-        setText('[data-proof-updated-at]', 'Error: ' + safeText(error && error.message));
+        setText('[data-proof-updated-at]', 'Live proof summary unavailable: ' + safeText(error && error.message));
       }
     }
   }
@@ -1125,7 +1125,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         appendStreamEvent('poll', item);
       });
     } catch (error) {
-      setStreamMode('polling', 'Realtime stream unavailable, polling fallback active.', true);
+      setStreamMode('polling', 'Realtime stream unavailable. Polling fallback active.', true);
     }
   }
 
@@ -1133,7 +1133,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     if (pollTimer) {
       return;
     }
-    setStreamMode('polling', 'Realtime stream unavailable, polling /api/events every 4s.', true);
+    setStreamMode('polling', 'Realtime stream unavailable. Polling /api/events every 4 seconds.', true);
     pollEventsOnce();
     pollTimer = window.setInterval(pollEventsOnce, 4000);
   }
@@ -1149,7 +1149,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     setStreamMode('stream', 'Connecting to /api/events/stream…', false);
     var source = new EventSource('/api/events/stream');
     source.addEventListener('open', function () {
-      setStreamMode('stream', 'Realtime stream active from /api/events/stream.', false);
+      setStreamMode('stream', 'Realtime stream active on /api/events/stream.', false);
     });
     source.addEventListener('event', function (event) {
       try {
@@ -1160,7 +1160,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       }
     });
     source.addEventListener('heartbeat', function () {
-      setStreamMode('stream', 'Realtime stream active from /api/events/stream.', false);
+      setStreamMode('stream', 'Realtime stream active on /api/events/stream.', false);
     });
     source.onerror = function () {
       source.close();
@@ -1262,7 +1262,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     }
     var workflows = showcase && Array.isArray(showcase.workflows) ? showcase.workflows : [];
     if (!workflows.length) {
-      showcaseGrid.innerHTML = '<article class="feature-card"><h3>No workflow data</h3><p>Gateway returned no live showcase payload.</p></article>';
+      showcaseGrid.innerHTML = '<article class="feature-card"><h3>No workflow data</h3><p>No live showcase payload was returned by the gateway.</p></article>';
       if (showcaseUpdatedAt) {
         showcaseUpdatedAt.textContent = 'Workflow showcase unavailable.';
       }
@@ -1314,8 +1314,8 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       if (latestShowcase) {
         if (showcaseUpdatedAt) {
           var staleLabel = showcaseFetchedAt
-            ? 'Stale (last success ' + showcaseFetchedAt.toLocaleTimeString() + ') — ' + escapeHtml(String(error && error.message || ''))
-            : 'Stale — ' + escapeHtml(String(error && error.message || ''));
+            ? 'Using last verified showcase from ' + showcaseFetchedAt.toLocaleTimeString() + '. Refresh failed: ' + escapeHtml(String(error && error.message || ''))
+            : 'Using last verified showcase. Refresh failed: ' + escapeHtml(String(error && error.message || ''));
           showcaseUpdatedAt.textContent = staleLabel;
         }
       } else {
@@ -1323,7 +1323,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
           escapeHtml(String(error && error.message || 'unknown_error')) +
           '</p></article>';
         if (showcaseUpdatedAt) {
-          showcaseUpdatedAt.textContent = 'Error: Unable to load /api/workflows/showcase.';
+          showcaseUpdatedAt.textContent = 'Live showcase unavailable: unable to load /api/workflows/showcase.';
         }
       }
       return null;

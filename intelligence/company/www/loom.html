@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meridian Loom — Run governed AI agents locally with cryptographic proof</title>
-<meta name="description" content="Meridian Loom is the governed local agent runtime: one-command install, new-agent, run-agent, channels, memory, and cryptographic proof receipts.">
+<title>Meridian Loom — Governed local runtime for AI agents</title>
+<meta name="description" content="Meridian Loom is the governed local runtime for AI agents: one-command install, agent provisioning, local loops, channels, memory, and verifiable receipts.">
 <link rel="icon" type="image/svg+xml" href="/assets/meridian_mark_flat.svg">
 <link rel="alternate icon" type="image/png" href="/assets/logo_favicon_64.png">
 <link rel="apple-touch-icon" sizes="192x192" href="/assets/logo_avatar_192.png">
-<meta property="og:title" content="Meridian Loom — Run governed AI agents locally with cryptographic proof">
-<meta property="og:description" content="Install Loom, create your first governed personal agent, run it locally, and inspect cryptographic proof receipts immediately.">
+<meta property="og:title" content="Meridian Loom — Governed local runtime for AI agents">
+<meta property="og:description" content="Install Loom, create your first governed local agent, run it locally, and inspect verifiable proof receipts.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://app.welliam.codes/loom">
 <meta property="og:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
@@ -17,10 +17,10 @@
 <meta property="og:image:height" content="630">
 <meta property="og:site_name" content="Meridian">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Meridian Loom — Run governed AI agents locally with cryptographic proof">
-<meta name="twitter:description" content="Install Loom, create your first governed personal agent, run it locally, and inspect cryptographic proof receipts immediately.">
+<meta name="twitter:title" content="Meridian Loom — Governed local runtime for AI agents">
+<meta name="twitter:description" content="Install Loom, create your first governed local agent, run it locally, and inspect verifiable proof receipts.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss10">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss11">
 </head>
 <body class="page-loom">
 
@@ -51,20 +51,20 @@
         <span class="eyebrow-dot"></span>
         <span>Open runtime surface · v0.1.16</span>
       </div>
-      <h1>Run governed AI agents locally with cryptographic proof.</h1>
-      <p class="subtitle">Loom is Meridian's local runtime. Install in one command, create a governed personal agent, run a persistent local loop, and inspect the receipts instead of guessing what the agent actually did.</p>
+      <h1>Run governed AI agents locally with verifiable proof.</h1>
+      <p class="subtitle">Loom is Meridian’s local runtime. Install in one command, provision a governed local agent, run a persistent loop, and inspect receipts instead of relying on opaque execution.</p>
     </div>
     <aside class="page-rail">
       <div class="rail-kicker">Why pick Loom</div>
       <div class="rail-item">
         <span>What it is</span>
         <strong>Governed local runtime first.</strong>
-        <p>Not a hosted theater layer, and not just a governance add-on for someone else's runtime.</p>
+        <p>Not a hosted demo surface, and not a governance wrapper around another runtime.</p>
       </div>
       <div class="rail-item">
         <span>What it is optimized for</span>
         <strong>Governed local execution.</strong>
-        <p>Use Loom when runtime decisions must stay inspectable: proof surfaces, authority state, treasury posture, and court-aware constraints.</p>
+        <p>Use Loom when execution must remain inspectable: proof surfaces, authority state, treasury posture, and court-aware constraints.</p>
       </div>
     </aside>
   </div>
@@ -73,7 +73,7 @@
 <div class="container">
 
   <div class="notice mb-xl">
-    <strong>Loom is Meridian's runtime entry path.</strong>
+    <strong>Loom is Meridian’s primary runtime entry point.</strong>
     <span class="dim">Kernel remains runtime-neutral. Workflows remain proof workloads. The install path stays simple and local-first.</span>
   </div>
 
@@ -86,7 +86,7 @@
     <div class="metric-card">
       <span class="metric-label">Create</span>
       <div class="metric-value">new-agent</div>
-      <p>Provision a governed personal agent and wire it into Kernel.</p>
+      <p>Provision a governed local agent and register it in Kernel.</p>
     </div>
     <div class="metric-card">
       <span class="metric-label">Run</span>
@@ -101,25 +101,25 @@
   </div>
 
   <h2 class="reveal">Live runtime snapshot</h2>
-  <p class="section-intro compact-copy">These numbers come from the live Loom-backed host. They do not replace local install proof, but they show the runtime surface is not hypothetical.</p>
+  <p class="section-intro compact-copy">These values come from the live Loom-backed host. They do not replace local validation, but they demonstrate active runtime operation.</p>
   <div class="live-chart-grid reveal" data-live-snapshot>
     <div class="live-chart-card">
       <span class="lane-kicker">Runtime</span>
       <h3>Footprint now</h3>
       <div class="live-chart-shell" data-live-chart="runtime"></div>
-      <p class="live-chart-caption" data-live-caption="runtime">Bootstrap baseline visible; live runtime data refreshes every 15 seconds.</p>
+      <p class="live-chart-caption" data-live-caption="runtime">Showing the latest verified sample. Runtime metrics refresh every 15 seconds.</p>
     </div>
     <div class="live-chart-card">
       <span class="lane-kicker">Queue</span>
       <h3>Pressure now</h3>
       <div class="live-chart-shell" data-live-chart="queue"></div>
-      <p class="live-chart-caption" data-live-caption="queue">Bootstrap baseline visible; queue metrics refresh every 15 seconds.</p>
+      <p class="live-chart-caption" data-live-caption="queue">Showing the latest verified sample. Queue metrics refresh every 15 seconds.</p>
     </div>
     <div class="live-chart-card">
       <span class="lane-kicker">Proof</span>
       <h3>Boundary now</h3>
       <div class="live-chart-shell" data-live-chart="proof"></div>
-      <p class="live-chart-caption" data-live-caption="proof">Bootstrap baseline visible; proof and SLO boundary refresh every 15 seconds.</p>
+      <p class="live-chart-caption" data-live-caption="proof">Showing the latest verified sample. Proof and SLO metrics refresh every 15 seconds.</p>
     </div>
   </div>
 
@@ -131,7 +131,7 @@
     <p class="dim small mt-md">This bootstraps Kernel + Intelligence and builds the Loom CLI at <code>$HOME/meridian/loom/target/release/loom</code>.</p>
   </div>
 
-  <h2 class="reveal">Create your first governed personal agent</h2>
+  <h2 class="reveal">Create your first governed local agent</h2>
   <div class="process-rail reveal">
     <div class="process-step">
       <div class="process-number">01</div>
@@ -164,28 +164,28 @@ MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre
     <p class="dim small mt-md">This helper initializes kernel state, provisions the agent, and prints run instructions with the resolved slug.</p>
   </div>
 
-  <h2 class="reveal">What Loom ships right now</h2>
+  <h2 class="reveal">What Loom provides today</h2>
   <div class="feature-grid reveal">
     <div class="feature-card">
       <h3>Personal agents</h3>
-      <p>Real agent folders, runtime profiles, heartbeat loops, and Kernel registration instead of a vague assistant prompt.</p>
+      <p>Real agent folders, runtime profiles, heartbeat loops, and Kernel registration.</p>
     </div>
     <div class="feature-card">
       <h3>Terminal and browser jobs</h3>
-      <p>Bounded terminal execution and browser navigation are already live surfaces with receipts and audit artifacts.</p>
+      <p>Bounded terminal execution and browser navigation with receipts and audit artifacts.</p>
     </div>
     <div class="feature-card">
       <h3>Channels and memory</h3>
-      <p>Telegram and webhook delivery can be wired into the generated agent config, and memory operations now emit receipts.</p>
+      <p>Telegram and webhook delivery can be wired into agent config, and memory operations emit receipts.</p>
     </div>
     <div class="feature-card">
       <h3>Doctor and status</h3>
-      <p>First-run commands are built to tell an operator what to do next instead of forcing a source dive.</p>
+      <p>First-run commands are operator-guided and reduce manual troubleshooting.</p>
     </div>
   </div>
 
   <h2 class="reveal">Why Loom instead of the field</h2>
-  <p class="section-intro compact-copy">Loom is not claiming to beat the field on raw breadth. It is trying to become the runtime people choose when governance and inspectable proof matter enough to change the buying decision.</p>
+  <p class="section-intro compact-copy">Loom does not compete on maximum surface breadth. It focuses on governed execution where inspectable proof changes runtime selection criteria.</p>
   <div class="scoreboard-grid reveal">
     <div class="score-card">
       <span class="score-kicker">Loom edge</span>
@@ -201,10 +201,10 @@ MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre
       <span class="score-kicker">Named rivals</span>
       <h3>What Loom still has to beat</h3>
       <div class="bullet-stack">
-        <div class="bullet-item"><span class="bullet-mark">01</span><span><strong>OpenClaw / OpenHands</strong> still own surface breadth and broader user pull.</span></div>
-        <div class="bullet-item"><span class="bullet-mark">02</span><span><strong>OpenFang</strong> still owns the most compact runtime packaging story.</span></div>
-        <div class="bullet-item"><span class="bullet-mark">03</span><span><strong>TEMM1E / Goose / IronClaw</strong> still feel stronger on persistent local agency and memory density.</span></div>
-        <div class="bullet-item"><span class="bullet-mark">04</span><span><strong>CrewAI / LangGraph</strong> still dominate orchestration mindshare.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">01</span><span><strong>OpenClaw / OpenHands</strong> still lead on surface breadth and mainstream pull.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">02</span><span><strong>OpenFang</strong> remains strong on compact runtime packaging.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">03</span><span><strong>TEMM1E / Goose / IronClaw</strong> remain strong on persistent local agency and memory density.</span></div>
+        <div class="bullet-item"><span class="bullet-mark">04</span><span><strong>CrewAI / LangGraph</strong> remain dominant in orchestration mindshare.</span></div>
       </div>
     </div>
   </div>
@@ -221,7 +221,7 @@ MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre
     <div class="footer-inner">
       <div class="footer-brand-col">
         <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
-        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+        <p class="footer-tagline">Open governance infrastructure for local AI agents.</p>
       </div>
       <div class="footer-nav-col">
         <div class="footer-nav-group">
@@ -248,11 +248,11 @@ MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre
       </div>
     </div>
     <div class="footer-bottom">
-      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+      <p>&copy; 2026 Meridian. Open governance infrastructure for local AI agents.</p>
     </div>
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260408-oss10" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss11" defer></script>
 </body>
 </html>

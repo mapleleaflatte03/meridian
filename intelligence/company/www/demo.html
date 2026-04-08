@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Live Loom Demo</title>
-<meta name="description" content="See Loom + Kernel on the live host, plus Meridian workloads that prove the runtime under real workflow pressure.">
+<title>Live Runtime Demo</title>
+<meta name="description" content="View Loom + Kernel on the live host, with governed workflow examples that exercise runtime behavior under operational load.">
 <link rel="icon" type="image/svg+xml" href="/assets/meridian_mark_flat.svg">
 <link rel="alternate icon" type="image/png" href="/assets/logo_favicon_64.png">
 <link rel="apple-touch-icon" sizes="192x192" href="/assets/logo_avatar_192.png">
-<meta property="og:title" content="Live Loom Demo">
-<meta property="og:description" content="See Loom + Kernel on the live host, plus Meridian workloads that prove the runtime under real workflow pressure.">
+<meta property="og:title" content="Live Runtime Demo">
+<meta property="og:description" content="View Loom + Kernel on the live host, with governed workflow examples under operational load.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://app.welliam.codes/demo">
 <meta property="og:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
@@ -17,10 +17,10 @@
 <meta property="og:image:height" content="630">
 <meta property="og:site_name" content="Meridian">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="Live Loom Demo">
-<meta name="twitter:description" content="See Loom + Kernel on the live host, plus Meridian workloads that prove the runtime under real workflow pressure.">
+<meta name="twitter:title" content="Live Runtime Demo">
+<meta name="twitter:description" content="View Loom + Kernel on the live host, with governed workflow examples under operational load.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss10">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss11">
 </head>
 <body class="page-demo">
 
@@ -51,20 +51,20 @@
         <span class="eyebrow-dot"></span>
         <span>Live host demo · Loom-backed workloads</span>
       </div>
-      <h1>See the runtime, then see what runs on top of it.</h1>
-      <p class="subtitle">This page is not the Loom landing page and not the whole platform thesis. It shows how Loom + Kernel look on the live host, then shows Meridian workflows that currently prove the runtime under real pressure.</p>
+      <h1>Inspect the runtime, then inspect real workflows.</h1>
+      <p class="subtitle">This page shows live runtime telemetry from Loom + Kernel, followed by workflow slices that demonstrate governed execution under realistic operator load.</p>
     </div>
     <aside class="page-rail">
       <div class="rail-kicker">Demo boundary</div>
       <div class="rail-item">
         <span>What this proves</span>
         <strong>Loom + Kernel are active on this host.</strong>
-        <p>The charts and workflow slices below are bounded to this host, not to every future deployment mode.</p>
+        <p>The charts and workflow slices below are scoped to this host, not to every potential deployment mode.</p>
       </div>
       <div class="rail-item">
         <span>What it does not prove</span>
         <strong>Universal hosted automation.</strong>
-        <p>The live host shows real runtime and workflow surfaces. It does not magically prove every future channel or scale claim.</p>
+        <p>The live host demonstrates real runtime and workflow surfaces. It does not prove every future channel or scale claim.</p>
       </div>
     </aside>
   </div>
@@ -73,35 +73,35 @@
 <div class="container">
 
   <h2 class="reveal">Live host snapshot</h2>
-  <p class="section-intro compact-copy">These charts read directly from the live proof routes on this host. They stay here so the runtime picture remains visible while you scroll through workflow examples.</p>
+  <p class="section-intro compact-copy">These charts read directly from live proof routes on this host and remain visible while you review workflow examples.</p>
   <div class="live-chart-grid reveal" data-live-snapshot>
     <div class="live-chart-card">
       <span class="lane-kicker">Runtime</span>
       <h3>Footprint now</h3>
       <div class="live-chart-shell" data-live-chart="runtime"></div>
-      <p class="live-chart-caption" data-live-caption="runtime">Bootstrap baseline visible; live runtime data refreshes every 15 seconds.</p>
+      <p class="live-chart-caption" data-live-caption="runtime">Showing the latest verified sample. Runtime metrics refresh every 15 seconds.</p>
     </div>
     <div class="live-chart-card">
       <span class="lane-kicker">Queue</span>
       <h3>Pressure now</h3>
       <div class="live-chart-shell" data-live-chart="queue"></div>
-      <p class="live-chart-caption" data-live-caption="queue">Bootstrap baseline visible; queue metrics refresh every 15 seconds.</p>
+      <p class="live-chart-caption" data-live-caption="queue">Showing the latest verified sample. Queue metrics refresh every 15 seconds.</p>
     </div>
     <div class="live-chart-card">
       <span class="lane-kicker">Proof</span>
       <h3>Boundary now</h3>
       <div class="live-chart-shell" data-live-chart="proof"></div>
-      <p class="live-chart-caption" data-live-caption="proof">Bootstrap baseline visible; proof and SLO boundary refresh every 15 seconds.</p>
+      <p class="live-chart-caption" data-live-caption="proof">Showing the latest verified sample. Proof and SLO metrics refresh every 15 seconds.</p>
     </div>
   </div>
 
   <h2>What a Loom-backed signal stream looks like</h2>
-      <p class="section-intro compact-copy">The workflow example here stresses the runtime under realistic operator pressure. Treat it as an open workflow on Loom, not as Loom's whole identity.</p>
+      <p class="section-intro compact-copy">This workflow example stresses the runtime under realistic operator pressure. It is one open workflow lane, not the full product scope.</p>
   <div class="metric-strip">
     <div class="metric-card">
       <span class="metric-label">tracked rivals</span>
       <div class="metric-value">3</div>
-      <p>OpenAI, Anthropic, Google.</p>
+      <p>OpenAI, Anthropic, and Google.</p>
     </div>
     <div class="metric-card">
       <span class="metric-label">watched themes</span>
@@ -111,27 +111,27 @@
     <div class="metric-card">
       <span class="metric-label">operator state</span>
       <div class="metric-value">governed</div>
-      <p>The workflow stays inside Loom + Kernel instead of loose docs and chat.</p>
+      <p>The workflow stays inside Loom + Kernel instead of scattered notes and ad-hoc chat.</p>
     </div>
   </div>
 
   <div class="feature-grid">
     <div class="feature-card">
       <h3>OpenAI</h3>
-      <p>Pricing shifts, new models, forced migrations, and API deprecations become inputs to a governed signal stream instead of random bookmarks.</p>
+      <p>Pricing shifts, model launches, migration events, and API deprecations are captured as governed signal inputs.</p>
     </div>
     <div class="feature-card">
       <h3>Anthropic</h3>
-      <p>Context changes, Claude launches, and safety posture changes become cited inputs instead of rumor-driven updates.</p>
+      <p>Context changes, model launches, and safety posture updates become cited inputs instead of rumor-driven updates.</p>
     </div>
     <div class="feature-card">
       <h3>Google</h3>
-      <p>Gemini pricing, preview shutdowns, and Vertex changes land as governed runtime artifacts rather than scattered notes.</p>
+      <p>Gemini pricing, preview shutdowns, and Vertex changes are recorded as governed runtime artifacts.</p>
     </div>
   </div>
 
   <h3>What the alert slice looks like</h3>
-  <p class="section-intro compact-copy">This is a shortened reference slice. The point is to show how a Loom workload turns signal into operator-ready shape without turning this page into a wall of prose.</p>
+  <p class="section-intro compact-copy">This is a shortened reference slice that shows how Loom turns signal into operator-ready outputs.</p>
   <div class="split-grid">
     <div class="split-card">
       <h3>Compressed alert</h3>
@@ -152,7 +152,7 @@
   </div>
 
   <h2>Reuse the same governed stream twice</h2>
-  <p class="section-intro compact-copy">One governed stream becomes two different outputs: a calmer leadership brief and a sharper GTM asset. That reuse matters because it proves Loom can back real operator workflows instead of isolated toy prompts.</p>
+  <p class="section-intro compact-copy">One governed stream can produce two outputs: a leadership brief and a GTM-facing artifact. This reuse validates real workflow operations.</p>
   <div class="split-grid">
     <div class="split-card">
       <h3>Weekly brief</h3>
@@ -174,7 +174,7 @@
 
   <div class="notice">
     <strong>One governed stream, two reusable outputs.</strong>
-    <span class="dim">That is why the demo still matters: it proves the runtime can carry real, repeated workflow pressure.</span>
+    <span class="dim">This demonstrates that the runtime can sustain repeatable workflow pressure with clear governance boundaries.</span>
   </div>
 
   <h2>What this host proves cleanly</h2>
@@ -188,7 +188,7 @@
       </div>
     </div>
     <div class="split-card">
-      <h3>Will not fake</h3>
+      <h3>Out of scope</h3>
       <div class="bullet-stack">
         <div class="bullet-item"><span class="bullet-mark">01</span><span>Every future hosted deployment mode.</span></div>
         <div class="bullet-item"><span class="bullet-mark">02</span><span>Universal delivery channel maturity.</span></div>
@@ -196,7 +196,7 @@
       </div>
     </div>
   </div>
-  <p class="note">If you want the runtime itself, go to <a href="/loom">/loom</a>. If you want the truth line for all claims, read the <a href="/boundary">boundary note</a>.</p>
+  <p class="note">For runtime details, visit <a href="/loom">/loom</a>. For claim boundaries, read the <a href="/boundary">boundary note</a>.</p>
 
   <div class="card text-center mt-lg">
     <p><strong>Want the runtime instead of the example?</strong></p>
@@ -209,7 +209,7 @@
     <div class="footer-inner">
       <div class="footer-brand-col">
         <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
-        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+        <p class="footer-tagline">Open governance infrastructure for local AI agents.</p>
       </div>
       <div class="footer-nav-col">
         <div class="footer-nav-group">
@@ -236,11 +236,11 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+      <p>&copy; 2026 Meridian. Open governance infrastructure for local AI agents.</p>
     </div>
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260408-oss10" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss11" defer></script>
 </body>
 </html>

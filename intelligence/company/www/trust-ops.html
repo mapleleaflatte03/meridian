@@ -17,7 +17,7 @@
 <meta name="twitter:title" content="Meridian Trust Ops Queue">
 <meta name="twitter:description" content="Operator surface for Meridian Trust Ops approval queue and questionnaire state.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss10">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss11">
 </head>
 <body class="page-trust-ops">
 
@@ -49,7 +49,7 @@
         <span>Operator surface &middot; governed review queue</span>
       </div>
       <h1>Trust Ops Queue</h1>
-      <p class="subtitle">This protected page is for questionnaire approvals, stale evidence, revoked claims, and final-delivery gates. It sits on the same host boundary as the Trust Ops routes, but it is for operators, not marketing.</p>
+      <p class="subtitle">This protected page is for questionnaire approvals, stale evidence, revoked claims, and final-delivery gates. It runs on the same host boundary as Trust Ops routes and is intended for operators, not marketing.</p>
     </div>
     <aside class="page-rail">
       <div class="rail-kicker">What this page shows</div>
@@ -69,14 +69,14 @@
 
 <div class="container" data-trust-ops-shell>
   <div class="notice mb-xl">
-    <strong>Operator truth:</strong>
-    <span class="dim">This surface is meant to make Trust Ops state usable, not to widen the public claim. If a questionnaire remains unresolved, the page keeps that visible instead of faking a final answer pack.</span>
+    <strong>Operator boundary:</strong>
+    <span class="dim">This surface is designed to keep Trust Ops state actionable, not to widen public claims. If a questionnaire remains unresolved, that state stays visible.</span>
   </div>
 
   <div class="card operator-auth mb-lg">
     <div>
       <strong>Operator access</strong>
-      <p class="dim">Trust Ops data is now behind an operator token. The page shell can stay public; queue state, review actions, and final-delivery controls do not.</p>
+      <p class="dim">Trust Ops data is protected by operator token. The page shell may be public; queue state, review actions, and delivery controls are restricted.</p>
     </div>
     <form class="operator-auth-form" data-trust-ops-auth-form>
       <div class="operator-hidden-field" aria-hidden="true">
@@ -124,7 +124,7 @@
       </label>
       <button type="submit" class="cta cta-outline">Refresh queue</button>
     </form>
-    <p class="operator-status" data-trust-ops-status>Trust Ops sync started.</p>
+    <p class="operator-status" data-trust-ops-status>Trust Ops sync initialized.</p>
   </div>
 
   <div class="card operator-bulk mb-lg" data-trust-ops-bulk-bar hidden>
@@ -199,7 +199,7 @@
     <div class="footer-inner">
       <div class="footer-brand-col">
         <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
-        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+        <p class="footer-tagline">Open governance infrastructure for local AI agents.</p>
       </div>
       <div class="footer-nav-col">
         <div class="footer-nav-group">
@@ -226,11 +226,11 @@
       </div>
     </div>
     <div class="footer-bottom">
-      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+      <p>&copy; 2026 Meridian. Open governance infrastructure for local AI agents.</p>
     </div>
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260408-oss10" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss11" defer></script>
 </body>
 </html>

@@ -42,39 +42,39 @@ FONT_WINDOW = load_font(FONT_PATH_BOLD, 17)
 
 SCENES = [
     {
-        "title": "1-command install",
-        "label": "binary-first install",
-        "command": "curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash",
+        "title": "Clone or reuse monorepo",
+        "label": "repository setup",
+        "command": "git clone https://github.com/mapleleaflatte03/meridian.git && cd meridian",
         "output": [
-            "[loom] preferred release asset: linux-x86_64",
-            "[loom] downloaded v0.1.16",
-            "[loom] linked binary -> ~/.local/bin/loom",
-            "[loom] runtime root -> ~/.local/share/meridian-loom/runtime/default",
-            "[loom] next: loom doctor --root ~/.local/share/meridian-loom/runtime/default --format human",
+            "Cloning into 'meridian'...",
+            "remote: Enumerating objects: done",
+            "remote: Compressing objects: done",
+            "Receiving objects: 100% complete",
+            "Ready: cd meridian",
         ],
     },
     {
-        "title": "Check readiness",
-        "label": "doctor first",
-        "command": "loom doctor --root ~/.local/share/meridian-loom/runtime/default --format human",
+        "title": "Bootstrap full stack",
+        "label": "install-full.sh",
+        "command": "curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash",
         "output": [
-            "Meridian Loom // DOCTOR",
-            "release:     official v0.1 local runtime",
-            "overall:     ready",
-            "checks:      52 total · 52 ok · 0 warn · 0 critical",
-            "next_step:   loom status --root <path>",
+            "[install-full] Running from existing Meridian monorepo: /home/ubuntu/meridian",
+            "[install-full] Running bootstrap",
+            "[install-full] Verifying onboarding-ready contract...",
+            "[acceptance] PASS onboarding-ready lane",
+            "[install-full] Complete.",
         ],
     },
     {
-        "title": "See the proof surface",
-        "label": "status + receipts",
-        "command": "loom status --root ~/.local/share/meridian-loom/runtime/default",
+        "title": "Verify live routes",
+        "label": "runtime validation",
+        "command": "curl -s http://127.0.0.1:8266/api/status | jq '.status,.runtime.agent_count,.runtime.session_count'",
         "output": [
-            "Meridian Loom // STATUS",
-            "release:     official v0.1 local runtime",
-            "runtime:     local queue supervisor + service shell",
-            "governance_surfaces: agent_identity, action_envelope, cost_attribution, approval_hook, audit_emission, sanction_controls, budget_gate",
-            "Next: loom service submit · loom parity report · loom job inspect",
+            "\"healthy\"",
+            "7",
+            "144",
+            "HTTP 200 /api/status",
+            "Next: open /proofs and /workflows",
         ],
     },
 ]
@@ -104,16 +104,16 @@ def wrap_command(text: str, width_chars: int = 76) -> list[str]:
 
 
 def draw_header(draw: ImageDraw.ImageDraw) -> None:
-    draw.text((PADDING_X, PADDING_Y), "Install in 60 seconds", font=FONT_TITLE, fill=TEXT)
+    draw.text((PADDING_X, PADDING_Y), "Meridian install in 60 seconds", font=FONT_TITLE, fill=TEXT)
     draw.text(
         (PADDING_X, PADDING_Y + 44),
-        "One command, then doctor and status. The point is not magic. The point is immediate proof.",
+        "One command to bootstrap the stack, then verify runtime health from live routes.",
         font=FONT_SUBTITLE,
         fill=DIM,
     )
     pill_x = WIDTH - PADDING_X - 248
     rounded(draw, (pill_x, PADDING_Y + 10, WIDTH - PADDING_X, PADDING_Y + 48), 18, ACCENT_SOFT, ACCENT)
-    draw.text((pill_x + 16, PADDING_Y + 19), "Meridian Loom v0.1.16", font=FONT_WINDOW, fill=ACCENT)
+    draw.text((pill_x + 16, PADDING_Y + 19), "Meridian monorepo", font=FONT_WINDOW, fill=ACCENT)
 
 
 def draw_terminal_base(draw: ImageDraw.ImageDraw, title: str, label: str) -> None:
@@ -173,8 +173,17 @@ def draw_scene(
         draw.rectangle((x, y, x + 12, y + 22), fill=CURSOR)
     output_y = start_y + max(1, len(command_lines)) * line_height + 18
     for idx, line in enumerate(scene["output"][:output_lines]):
-        fill = SUCCESS if line.startswith("[loom]") or "overall:" in line or "release:" in line else DIM
-        if "Next:" in line or "next_step:" in line:
+        fill = DIM
+        if (
+            line.startswith("[install-full]")
+            or line.startswith("[acceptance]")
+            or line.startswith("HTTP 200")
+            or line == '"healthy"'
+            or line.startswith("Ready:")
+            or line.startswith("Receiving objects:")
+        ):
+            fill = SUCCESS
+        if "Next:" in line or "Manual" in line:
             fill = WARN
         draw.text((start_x, output_y + idx * 28), line, font=FONT_BODY, fill=fill)
 
@@ -233,16 +242,22 @@ def save_poster(frame: Image.Image, out_path: Path) -> None:
 
 
 def main() -> None:
-    repo = Path(__file__).resolve().parents[1]
-    assets = repo / "docs" / "assets"
-    assets.mkdir(parents=True, exist_ok=True)
-    gif_path = assets / "install_in_60_seconds.gif"
-    poster_path = assets / "install_in_60_seconds.png"
+    repo_root = Path(__file__).resolve().parents[2]
+    docs_assets = repo_root / "docs" / "assets"
+    docs_assets.mkdir(parents=True, exist_ok=True)
+    gif_path = docs_assets / "install_in_60_seconds.gif"
+    poster_path = docs_assets / "install_in_60_seconds.png"
     frames = build_frames()
     save_gif(frames, gif_path)
     save_poster(frames[-1], poster_path)
+    web_assets = repo_root / "intelligence" / "company" / "www" / "assets"
+    web_assets.mkdir(parents=True, exist_ok=True)
+    (web_assets / gif_path.name).write_bytes(gif_path.read_bytes())
+    (web_assets / poster_path.name).write_bytes(poster_path.read_bytes())
     print(gif_path)
     print(poster_path)
+    print(web_assets / gif_path.name)
+    print(web_assets / poster_path.name)
 
 
 if __name__ == "__main__":

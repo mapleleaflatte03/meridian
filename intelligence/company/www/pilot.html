@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="Meridian — Get Started">
 <meta name="twitter:description" content="Open-source onboarding path for Meridian: bootstrap the full stack locally, run governed agents, and verify proofs.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss10">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss11">
 </head>
 <body class="page-pilot">
 <header class="site-header">
@@ -50,8 +50,8 @@
         <span class="eyebrow-dot"></span>
         <span>Open-source onboarding path</span>
       </div>
-      <h1>Get Meridian running locally in one flow.</h1>
-      <p class="subtitle">This page replaces the old intake surface. Meridian is now contribution-first and open-source. Use this path to run Loom + Kernel + Intelligence on your own host.</p>
+      <h1>Get Meridian running locally in one clear flow.</h1>
+      <p class="subtitle">Meridian is contribution-first and fully open source. Use this path to run Loom, Kernel, and Intelligence on your own host.</p>
     </div>
     <aside class="page-rail">
       <div class="rail-kicker">Scope</div>
@@ -78,13 +78,13 @@ cd meridian</code></pre>
   <h2>2. Bootstrap full stack</h2>
   <div class="card">
 <pre><code>curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash</code></pre>
-    <p class="dim mt-sm">This one command clones/reuses the monorepo, initializes kernel state, and builds the Loom CLI in release mode.</p>
+    <p class="dim mt-sm">This command clones or reuses the monorepo, initializes Kernel state, and builds the Loom CLI in release mode.</p>
   </div>
 
   <h2>3. Bring up local stack (workspace + gateway)</h2>
   <div class="card">
 <pre><code>./scripts/dev-up.sh</code></pre>
-    <p class="dim mt-sm">`install-full.sh` already runs this by default. Use it directly when you restart your machine or stop local services.</p>
+    <p class="dim mt-sm"><code>install-full.sh</code> already runs this by default. Use it directly when you restart your machine or stop local services.</p>
     <ul class="rule-list mt-sm">
       <li>Local API status: <code>http://127.0.0.1:8266/api/status</code></li>
       <li>Local institution template: <code>http://127.0.0.1:8266/api/institution/template</code></li>
@@ -102,7 +102,7 @@ cd meridian</code></pre>
 
 # Optional: run immediately
 MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre>
-    <p class="dim mt-sm">Use the helper for the shortest path. It initializes kernel state, provisions the agent, and prints the exact run command.</p>
+    <p class="dim mt-sm">Use the helper for the shortest path. It initializes Kernel state, provisions the agent, and prints the exact run command.</p>
   </div>
 
   <h2>5. Contribute back</h2>
@@ -120,7 +120,7 @@ MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre
     <div class="footer-inner">
       <div class="footer-brand-col">
         <img src="/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" class="footer-lockup">
-        <p class="footer-tagline">Constitutional governance for agent infrastructure.</p>
+        <p class="footer-tagline">Open governance infrastructure for local AI agents.</p>
       </div>
       <div class="footer-nav-col">
         <div class="footer-nav-group">
@@ -147,11 +147,11 @@ MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre
       </div>
     </div>
     <div class="footer-bottom">
-      <p>&copy; 2026 Meridian. Constitutional governance for governed digital labor.</p>
+      <p>&copy; 2026 Meridian. Open governance infrastructure for local AI agents.</p>
     </div>
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260408-oss10" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss11" defer></script>
 </body>
 </html>
