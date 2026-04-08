@@ -33,6 +33,7 @@ court_block = status.get("court") or {}
 marketplace_block = status.get("marketplace") or {}
 memory_block = status.get("memory") or {}
 memory_temporal_integrity = memory_block.get("temporal_integrity") or memory_block
+commonwealth_block = status.get("commonwealth") or {}
 kernel_aggregate = (
     kernel_bundle.get("aggregate")
     or ((kernel_bundle.get("kernel_proof_bundle") or {}).get("aggregate"))
@@ -56,6 +57,8 @@ payload = {
         "court_dynamic": court_block.get("dynamic") or court_block,
         "marketplace": marketplace_block,
         "memory_temporal_integrity": memory_temporal_integrity,
+        "commonwealth_federation": commonwealth_block.get("federation"),
+        "commonwealth_settlement": commonwealth_block.get("settlement"),
     },
     "runtime_proof": {
         "runtime_id": runtime_proof.get("runtime_id"),

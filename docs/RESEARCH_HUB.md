@@ -1,6 +1,8 @@
 # Meridian Research Hub
 
-This page collects canonical research artifacts for governance and verifiable local agent execution.
+**Meridian — Open Research Platform for Verifiable AI Commonwealth**
+
+This page collects canonical research artifacts for governance and verifiable local agent execution across institutions.
 
 ## Core Artifacts (Canonical)
 
@@ -28,6 +30,15 @@ This page collects canonical research artifacts for governance and verifiable lo
 - Baseline capture script: `scripts/research_capture_baseline.sh`
 - Case-study capture script: `scripts/research_capture_case_study.sh`
 
+## Commonwealth RFC Track (V5)
+
+- Commonwealth federation RFC: `docs/research/RFC-0005-commonwealth-federation.md`
+- Inter-institution settlement RFC: `docs/research/RFC-0006-inter-institution-settlement.md`
+- Dynamic constitutional federation RFC: `docs/research/RFC-0007-dynamic-constitutional-federation.md`
+- Verifiable agent exchange RFC: `docs/research/RFC-0008-verifiable-agent-exchange.md`
+- Temporal memory commonwealth chain RFC: `docs/research/RFC-0009-temporal-memory-commonwealth-chain.md`
+- IP split document: `docs/IP_SPLIT.md`
+
 ## PoGE + Governance RFC Track
 
 Use the `Research RFC` issue template to propose protocol/runtime changes:
@@ -41,13 +52,23 @@ Every RFC must include:
 2. measurable acceptance criteria,
 3. rollback strategy.
 
-## V4 Contract Blocks
+## V5 Contract Blocks
 
-The `/api/status` endpoint includes five contract blocks that track the state of
-recursive proofs, aggregate bundles, dynamic court, agent marketplace, and
-temporal memory integrity. These blocks are captured by the baseline script
-under the `contract_blocks` key. See `docs/research/README.md` for the full
-field reference.
+The `/api/status` endpoint includes seven contract blocks:
+
+- `proof.recursive.{enabled,depth,root}` — single-session recursive PoGE
+- `proof.aggregate.{topology,bundle_id,member_count,integrity_hash}` — hypercube aggregate bundle
+- `court.dynamic.{ruleset_version,proposal_count,active_rules}` — dynamic constitutional court
+- `marketplace.{mode,open_bids,active_assignments,settled_count}` — verifiable agent marketplace
+- `memory.temporal_integrity.{enabled,index_version}` — temporal memory chain
+- `commonwealth.federation.{enabled,peer_count,last_sync_ms}` — inter-institution federation
+- `commonwealth.settlement.{inter_institution_enabled,pending_count,settled_count}` — cross-institution settlement
+
+These blocks are captured by the baseline script under the `contract_blocks` key. See `docs/research/README.md` for the full field reference.
+
+## V4 Contract Blocks (Superseded by V5)
+
+V4 defined the first five blocks above. V5 adds the `commonwealth` block. All V4 fields are preserved.
 
 ## Baseline Reproduction Commands
 

@@ -1,6 +1,8 @@
 # Meridian Research Artifacts
 
-This folder contains reproducible research artifacts for governed local AI agents.
+**Meridian — Open Research Platform for Verifiable AI Commonwealth**
+
+This folder contains reproducible research artifacts for governed local AI agents and verifiable AI commonwealth protocols.
 
 ## Contents
 
@@ -10,6 +12,11 @@ This folder contains reproducible research artifacts for governed local AI agent
 - `RFC-0002-hypercube-proof-aggregation.md`
 - `RFC-0003-dynamic-constitutional-court.md`
 - `RFC-0004-on-device-verifiable-agent-marketplace.md`
+- `RFC-0005-commonwealth-federation.md` *(V5 target)*
+- `RFC-0006-inter-institution-settlement.md` *(V5 target)*
+- `RFC-0007-dynamic-constitutional-federation.md` *(V5 target)*
+- `RFC-0008-verifiable-agent-exchange.md` *(V5 target)*
+- `RFC-0009-temporal-memory-commonwealth-chain.md` *(V5 target)*
 
 ### Benchmarks
 
@@ -27,9 +34,9 @@ This folder contains reproducible research artifacts for governed local AI agent
 - `CASE-STUDY-0004-marketplace-dispute-resolution.md`
 - `CASE-STUDY-0005-memory-integrity-mismatch.md`
 
-## Contract Blocks (V4)
+## Contract Blocks (V5)
 
-The `/api/status` endpoint exposes five contract blocks for verifiable governance:
+The `/api/status` endpoint exposes seven contract blocks for verifiable governance:
 
 | Block | Path | Fields |
 |-------|------|--------|
@@ -38,12 +45,16 @@ The `/api/status` endpoint exposes five contract blocks for verifiable governanc
 | Dynamic Court | `court.dynamic` | `ruleset_version`, `proposal_count`, `active_rules` |
 | Agent Marketplace | `marketplace` | `mode`, `open_bids`, `active_assignments`, `settled_count` |
 | Memory Integrity | `memory.temporal_integrity` | `enabled`, `index_version` |
+| Commonwealth Federation | `commonwealth.federation` | `enabled`, `peer_count`, `last_sync_ms` |
+| Commonwealth Settlement | `commonwealth.settlement` | `inter_institution_enabled`, `pending_count`, `settled_count` |
+
+V4 fields are fully preserved — all V4 contract blocks remain present in V5.
 
 ## Capture Scripts
 
 - `scripts/research_capture_baseline.sh`
   - Captures stable baseline fields from `/api/status`, `/api/runtime-proof`, `/api/kernel-proof-bundle`, `/api/treasury`.
-  - Includes all 5 V4 contract blocks in `contract_blocks` section.
+  - Includes all 7 V5 contract blocks in `contract_blocks` section.
 - `scripts/research_capture_case_study.sh`
   - Captures before/after case snapshots and emits a normalized summary with invariants.
 

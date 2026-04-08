@@ -1,11 +1,11 @@
 # Meridian
 
 <p align="center">
-  <img src="intelligence/company/www/assets/meridian_lockup.svg" alt="Meridian — Governed Agent Runtime" width="720">
+  <img src="intelligence/company/www/assets/meridian_lockup.svg" alt="Meridian — Open Research Platform for Verifiable AI Commonwealth" width="720">
 </p>
 
 <p align="center">
-  <strong>Open research platform for governed local AI agents.</strong><br>
+  <strong>Meridian — Open Research Platform for Verifiable AI Commonwealth</strong><br>
   Loom runs the local runtime. Kernel enforces governance. Intelligence exposes public proof/workflow surfaces.
 </p>
 
