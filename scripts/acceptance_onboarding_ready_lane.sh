@@ -59,14 +59,27 @@ echo "[onboarding-lane] verify local API readiness contract"
 python3 - <<'PY'
 import json
 import os
+import time
 from pathlib import Path
 import urllib.request
+import urllib.error
 
 BASE = f"http://127.0.0.1:{os.environ['ONBOARDING_GATEWAY_PORT']}"
 
 def get_json(path: str):
-    with urllib.request.urlopen(BASE + path, timeout=20) as response:
-        return json.loads(response.read().decode("utf-8"))
+    last_error = None
+    for _attempt in range(20):
+        try:
+            with urllib.request.urlopen(BASE + path, timeout=20) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code not in {502, 503, 504}:
+                raise
+        except urllib.error.URLError as exc:
+            last_error = exc
+        time.sleep(0.4)
+    raise RuntimeError(f"API probe failed for {path}: {last_error}")
 
 status = get_json("/api/status")
 template = get_json("/api/institution/template")
