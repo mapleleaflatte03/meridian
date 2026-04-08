@@ -8,6 +8,8 @@ export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
 export LOOM_RUNTIME_ROOT="${LOOM_RUNTIME_ROOT:-$MERIDIAN_ROOT/runtime/default}"
+export MERIDIAN_AUTO_START_STACK="${MERIDIAN_AUTO_START_STACK:-1}"
+export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
 
 require_cmd() {
   local cmd="$1"
@@ -19,6 +21,7 @@ require_cmd() {
 
 require_cmd python3
 require_cmd cargo
+require_cmd curl
 
 resolve_kernel_org_id() {
   python3 - <<'PY'
@@ -49,9 +52,9 @@ print(selected)
 PY
 }
 
-run_smoke_check() {
+run_kernel_smoke_check() {
   if [ "${MERIDIAN_SKIP_SMOKE_CHECK:-0}" = "1" ]; then
-    echo "[bootstrap] Skipping smoke check (MERIDIAN_SKIP_SMOKE_CHECK=1)"
+    echo "[bootstrap] Skipping kernel smoke check (MERIDIAN_SKIP_SMOKE_CHECK=1)"
     return
   fi
 
@@ -130,6 +133,78 @@ PY
   )
 }
 
+run_gateway_smoke_check() {
+  if [ "${MERIDIAN_SKIP_GATEWAY_SMOKE_CHECK:-0}" = "1" ]; then
+    echo "[bootstrap] Skipping gateway smoke check (MERIDIAN_SKIP_GATEWAY_SMOKE_CHECK=1)"
+    return
+  fi
+
+  local base_url="http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}"
+  local report_path="${MERIDIAN_ROOT}/runtime/bootstrap_gateway_smoke.json"
+  echo "[bootstrap] Running gateway smoke check via ${base_url}..."
+  BASE_URL="${base_url}" REPORT_PATH="${report_path}" python3 - <<'PY'
+import json
+import os
+import time
+import urllib.request
+
+base = os.environ["BASE_URL"].rstrip("/")
+report_path = os.environ["REPORT_PATH"]
+
+def fetch(path: str, timeout: float = 4.0):
+    with urllib.request.urlopen(base + path, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+deadline = time.time() + 35
+status = None
+last_error = None
+while time.time() < deadline:
+    try:
+        status = fetch("/api/status", timeout=2.5)
+        break
+    except Exception as exc:  # noqa: BLE001
+        last_error = exc
+        time.sleep(0.5)
+
+if status is None:
+    raise SystemExit(f"gateway smoke-check failed: {last_error}")
+
+template = fetch("/api/institution/template")
+treasury = fetch("/api/treasury")
+
+if template.get("schema_version") != "meridian.institution_template.v1":
+    raise SystemExit("gateway smoke-check failed: invalid institution template schema")
+if len(template.get("court_rule_set") or []) < 3:
+    raise SystemExit("gateway smoke-check failed: court_rule_set is not initialized")
+if "balance_usd" not in treasury or "reserve_floor_usd" not in treasury:
+    raise SystemExit("gateway smoke-check failed: treasury snapshot missing baseline keys")
+
+court = status.get("court") or {}
+open_violations = court.get("open_violations")
+pending_appeals = court.get("pending_appeals")
+if not isinstance(open_violations, list) or not isinstance(pending_appeals, list):
+    raise SystemExit("gateway smoke-check failed: status snapshot missing court counters")
+
+report = {
+    "status": "ok",
+    "org_id": ((status.get("context") or {}).get("bound_org_id") or "").strip(),
+    "runtime_id": status.get("runtime_id"),
+    "slo_status": (status.get("slo") or {}).get("status"),
+    "institution_template_schema": template.get("schema_version"),
+    "court_rule_count": len(template.get("court_rule_set") or []),
+    "treasury_balance_usd": treasury.get("balance_usd"),
+    "treasury_reserve_floor_usd": treasury.get("reserve_floor_usd"),
+    "court_open_violations": len(open_violations),
+    "court_pending_appeals": len(pending_appeals),
+}
+
+os.makedirs(os.path.dirname(report_path), exist_ok=True)
+with open(report_path, "w", encoding="utf-8") as f:
+    json.dump(report, f, indent=2)
+print(json.dumps(report))
+PY
+}
+
 echo "[bootstrap] Meridian root: $MERIDIAN_ROOT"
 echo "[bootstrap] Initializing kernel state..."
 (
@@ -143,19 +218,34 @@ if [ -n "$RESOLVED_KERNEL_ORG_ID" ]; then
 fi
 echo "[bootstrap] Kernel org id: $MERIDIAN_ORG_ID"
 
-echo "[bootstrap] Building Loom CLI..."
-(
-  cd "$MERIDIAN_LOOM_ROOT"
-  cargo build -p meridian-loom --release
-)
+if [ "${MERIDIAN_SKIP_LOOM_BUILD:-0}" = "1" ]; then
+  echo "[bootstrap] Skipping Loom build (MERIDIAN_SKIP_LOOM_BUILD=1)"
+else
+  echo "[bootstrap] Building Loom CLI..."
+  (
+    cd "$MERIDIAN_LOOM_ROOT"
+    cargo build -p meridian-loom --release
+  )
+fi
 
 mkdir -p "$LOOM_RUNTIME_ROOT"
-run_smoke_check
+run_kernel_smoke_check
+
+if [ "${MERIDIAN_AUTO_START_STACK}" = "1" ]; then
+  echo "[bootstrap] Starting local workspace+gateway stack..."
+  "${MERIDIAN_ROOT}/scripts/dev-up.sh" --no-summary
+else
+  echo "[bootstrap] Auto-start disabled (MERIDIAN_AUTO_START_STACK=${MERIDIAN_AUTO_START_STACK})"
+fi
+
+run_gateway_smoke_check
 
 echo "[bootstrap] Bootstrap complete."
 echo
 echo "Next steps:"
 echo "1) export MERIDIAN_ROOT=\"$MERIDIAN_ROOT\""
 echo "2) export MERIDIAN_ORG_ID=\"$MERIDIAN_ORG_ID\""
-echo "3) Run gateway: cd \"$MERIDIAN_INTELLIGENCE_ROOT\" && python3 meridian_gateway.py"
-echo "4) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
+echo "3) Stack up: \"$MERIDIAN_ROOT/scripts/dev-up.sh\""
+echo "4) Stack down: \"$MERIDIAN_ROOT/scripts/dev-down.sh\""
+echo "5) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
+echo "6) Gateway smoke report: \"$MERIDIAN_ROOT/runtime/bootstrap_gateway_smoke.json\""

@@ -25,11 +25,19 @@ for channel in ("x", "reddit", "hn", "discord"):
 PY
 
 MOCK_SERVER_PY="$(mktemp)"
-MOCK_PORT=18777
+MOCK_PORT="$(python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+)"
 cat >"${MOCK_SERVER_PY}" <<'PY'
 #!/usr/bin/env python3
 from __future__ import annotations
 import json
+import os
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -77,11 +85,12 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = ThreadingHTTPServer(("127.0.0.1", 18777), Handler)
+    port = int(os.environ.get("MERIDIAN_MOCK_PORT", "18777"))
+    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.serve_forever()
 PY
 
-python3 "${MOCK_SERVER_PY}" &
+MERIDIAN_MOCK_PORT="${MOCK_PORT}" python3 "${MOCK_SERVER_PY}" &
 MOCK_PID=$!
 trap 'kill ${MOCK_PID} >/dev/null 2>&1 || true; rm -f "${MOCK_SERVER_PY}"; rm -rf "${ARTIFACT_DIR}"' EXIT
 sleep 1
@@ -194,14 +203,19 @@ for path, mode in checks:
         assert isinstance(payload, dict), payload
         assert payload.get("proof_bundle_version"), payload
         assert payload.get("public_routes", {}).get("kernel_proof_bundle") == "/api/kernel-proof-bundle", payload
+        cache = payload.get("cache") or {}
+        cache_state = cache.get("state")
+        assert cache_state in {"fresh", "stale_fallback", "building", "error_fallback", "bootstrap"}, payload
         live_host = payload.get("live_host_receipt") or {}
         live_runtime = payload.get("live_runtime_receipt") or {}
-        assert live_host.get("included") is True, payload
-        assert live_runtime.get("included") is True, payload
-        runtime_receipt = (live_runtime.get("receipt") or {}).get("health") or {}
-        assert runtime_receipt.get("status") in {"healthy", "degraded"}, payload
-        cache = payload.get("cache") or {}
-        assert cache.get("state") in {"fresh", "stale_fallback", "building", "error_fallback", "bootstrap"}, payload
+        if cache_state == "building" and payload.get("degraded_reason") == "public_bundle_build_in_progress":
+            assert live_host.get("included") in {False, None}, payload
+            assert live_runtime.get("included") in {False, None}, payload
+        else:
+            assert live_host.get("included") is True, payload
+            assert live_runtime.get("included") is True, payload
+            runtime_receipt = (live_runtime.get("receipt") or {}).get("health") or {}
+            assert runtime_receipt.get("status") in {"healthy", "degraded"}, payload
     elif mode == "json_status_clean":
         _, body = fetch(path)
         payload = json.loads(body)

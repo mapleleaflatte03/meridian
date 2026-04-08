@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="Meridian — Get Started">
 <meta name="twitter:description" content="Open-source onboarding path for Meridian: bootstrap the full stack locally, run governed agents, and verify proofs.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260407-oss4">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss6">
 </head>
 <body class="page-pilot">
 <header class="site-header">
@@ -81,11 +81,13 @@ cd meridian</code></pre>
     <p class="dim mt-sm">This one command clones/reuses the monorepo, initializes kernel state, and builds the Loom CLI in release mode.</p>
   </div>
 
-  <h2>3. Run gateway and inspect live surfaces</h2>
+  <h2>3. Bring up local stack (workspace + gateway)</h2>
   <div class="card">
-<pre><code>cd intelligence
-python3 meridian_gateway.py</code></pre>
+<pre><code>./scripts/dev-up.sh</code></pre>
+    <p class="dim mt-sm">`install-full.sh` already runs this by default. Use it directly when you restart your machine or stop local services.</p>
     <ul class="rule-list mt-sm">
+      <li>Local API status: <code>http://127.0.0.1:8266/api/status</code></li>
+      <li>Local institution template: <code>http://127.0.0.1:8266/api/institution/template</code></li>
       <li>Open <a href="/proofs">/proofs</a> for runtime proof posture.</li>
       <li>Open <a href="/workflows">/workflows</a> for live workflow showcase.</li>
       <li>Open <a href="/boundary">/boundary</a> for current claim boundary.</li>
@@ -158,6 +160,6 @@ cd "${MERIDIAN_ROOT}/loom"
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260407-oss4" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss6" defer></script>
 </body>
 </html>

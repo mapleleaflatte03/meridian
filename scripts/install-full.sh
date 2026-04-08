@@ -28,4 +28,6 @@ echo "[install-full] Running bootstrap"
 
 echo
 echo "[install-full] Complete."
-echo "Next: cd $TARGET_DIR/intelligence && python3 meridian_gateway.py"
+echo "Gateway smoke report: $TARGET_DIR/runtime/bootstrap_gateway_smoke.json"
+echo "If needed: MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh"
+echo "Manual controls: ./scripts/dev-up.sh and ./scripts/dev-down.sh"

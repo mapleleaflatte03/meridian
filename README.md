@@ -53,11 +53,29 @@ It also bootstraps workspace institution state and runs a smoke check for:
 - institution template availability
 - treasury snapshot keys
 - baseline court rule set
+- gateway status + runtime proof + treasury route readiness
+
+By default, bootstrap also brings up local workspace + gateway (`scripts/dev-up.sh`) and writes:
+
+- `runtime/bootstrap_gateway_smoke.json`
 
 If you already cloned the repo:
 
 ```bash
 ./scripts/bootstrap_full.sh
+```
+
+To skip auto-start and run checks only:
+
+```bash
+MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
+```
+
+To manage local processes directly:
+
+```bash
+./scripts/dev-up.sh
+./scripts/dev-down.sh
 ```
 
 ## Module Commands
@@ -88,6 +106,7 @@ Meridian is open-source and contribution-first. Hosted services and external pub
 - Community map: `docs/COMMUNITY_MAP.md`
 - Public roadmap: `ROADMAP.md`
 - Research hub: `docs/RESEARCH_HUB.md`
+- RFC issues: `/.github/ISSUE_TEMPLATE/research_rfc.yml`
 
 ## Support (Optional)
 
