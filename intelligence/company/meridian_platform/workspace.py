@@ -314,6 +314,8 @@ from court import (file_violation, resolve_violation,
                    propose_rule, vote_on_proposal, tally_proposal,
                    activate_rule, get_proposals, get_dynamic_rules,
                    dynamic_court_status)
+from marketplace import (post_bid, assign_bid, settle_bid, cancel_bid,
+                         get_bids, get_settlements, marketplace_status)
 from session import SessionAuthority
 from app import (
     PUBLIC_UNAUTHENTICATED_PATHS,
@@ -4109,6 +4111,14 @@ def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expi
     }
 
 
+def _marketplace_status(org_id=None):
+    """Collect marketplace status for the /api/status block."""
+    try:
+        return marketplace_status(org_id)
+    except Exception:
+        return {'mode': 'disabled', 'open_bids': 0, 'active_assignments': 0, 'settled_count': 0}
+
+
 def _dynamic_court_status(org_id: str | None = None) -> dict:
     """Collect dynamic court status for the /api/status block."""
     try:
@@ -4312,12 +4322,7 @@ def api_status(context_source='configured_default', institution_context=None):
             'recursive': _recursive_proof_status(),
             'aggregate': _aggregate_proof_status(),
         },
-        'marketplace': {
-            'mode': 'disabled',
-            'open_bids': 0,
-            'active_assignments': 0,
-            'settled_count': 0,
-        },
+        'marketplace': _marketplace_status(org_id),
         'memory': {
             'temporal_integrity': {
                 'enabled': False,
@@ -6048,6 +6053,70 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             elif path == '/api/court/rules':
                 rules = get_dynamic_rules(org_id=org_id)
                 return self._json({'rules': rules, 'count': len(rules)})
+
+            elif path == '/api/marketplace/bid':
+                bid_id, receipt = post_bid(
+                    agent_id=body['agent_id'],
+                    task_description=body['task_description'],
+                    amount_usd=float(body.get('amount_usd', 0)),
+                    org_id=org_id,
+                    action_ids=body.get('action_ids'),
+                )
+                log_event(org_id, by, 'marketplace_bid_posted', resource=bid_id,
+                          outcome='success', details={'receipt': receipt},
+                          session_id=_sid)
+                return self._json({'message': f'Bid posted: {bid_id}',
+                                   'bid_id': bid_id, 'receipt_hash': receipt})
+
+            elif path == '/api/marketplace/assign':
+                assignment_id = assign_bid(
+                    bid_id=body['bid_id'],
+                    assigned_by=by,
+                    org_id=org_id,
+                )
+                log_event(org_id, by, 'marketplace_bid_assigned', resource=body['bid_id'],
+                          outcome='success', details={'assignment_id': assignment_id},
+                          session_id=_sid)
+                return self._json({'message': f'Bid assigned: {assignment_id}',
+                                   'assignment_id': assignment_id})
+
+            elif path == '/api/marketplace/settle':
+                settlement_id, settlement_receipt = settle_bid(
+                    bid_id=body['bid_id'],
+                    proof_receipt=body['proof_receipt'],
+                    settled_by=by,
+                    org_id=org_id,
+                )
+                log_event(org_id, by, 'marketplace_bid_settled', resource=body['bid_id'],
+                          outcome='success',
+                          details={'settlement_id': settlement_id, 'receipt': settlement_receipt},
+                          session_id=_sid)
+                return self._json({'message': f'Bid settled: {settlement_id}',
+                                   'settlement_id': settlement_id,
+                                   'settlement_receipt': settlement_receipt})
+
+            elif path == '/api/marketplace/cancel':
+                cancel_bid(
+                    bid_id=body['bid_id'],
+                    cancelled_by=by,
+                    reason=body.get('reason', ''),
+                    org_id=org_id,
+                )
+                log_event(org_id, by, 'marketplace_bid_cancelled', resource=body['bid_id'],
+                          outcome='success', session_id=_sid)
+                return self._json({'message': f'Bid cancelled: {body["bid_id"]}'})
+
+            elif path == '/api/marketplace/bids':
+                bids = get_bids(
+                    status=body.get('status'),
+                    agent_id=body.get('agent_id'),
+                    org_id=org_id,
+                )
+                return self._json({'bids': bids, 'count': len(bids)})
+
+            elif path == '/api/marketplace/settlements':
+                settlements = get_settlements(org_id=org_id)
+                return self._json({'settlements': settlements, 'count': len(settlements)})
 
             elif path == '/api/treasury/contribute':
                 result = contribute_owner_capital(body['amount'], body.get('note', ''),
