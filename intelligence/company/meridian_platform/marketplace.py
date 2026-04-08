@@ -268,20 +268,25 @@ def resolve_dispute(
     if not bid:
         raise ValueError(f'Bid not found for dispute: {bid_id}')
 
-    dispute['status'] = 'resolved'
     dispute['decision'] = normalized
-    dispute['resolved_by'] = resolved_by
     dispute['court_decision_ref'] = str(court_decision_ref or '').strip()
-    dispute['resolved_at'] = _now()
     dispute['note'] = note
+
+    if normalized == 'stay':
+        # 'stay' halts proceedings — dispute remains open for future resolution.
+        # The bid stays 'disputed' because the dispute is still active.
+        _save_marketplace(data, org_id)
+        return dict(dispute)
+
+    dispute['status'] = 'resolved'
+    dispute['resolved_by'] = resolved_by
+    dispute['resolved_at'] = _now()
 
     if normalized == 'refund':
         bid['status'] = 'cancelled'
         bid['cancel_reason'] = note or 'dispute_refund'
     elif normalized == 'release':
         bid['status'] = 'settled'
-    elif normalized == 'stay':
-        bid['status'] = 'disputed'
 
     # Mirror decision into latest settlement when present.
     for settlement in data.get('settlements', {}).values():
