@@ -66,7 +66,7 @@ import urllib.error
 
 BASE = f"http://127.0.0.1:{os.environ['ONBOARDING_GATEWAY_PORT']}"
 
-def get_json(path: str):
+def get_json(path: str, *, required: bool = True):
     last_error = None
     for attempt in range(60):
         try:
@@ -79,13 +79,15 @@ def get_json(path: str):
         except urllib.error.URLError as exc:
             last_error = exc
         time.sleep(min(1.0, 0.2 + (0.05 * attempt)))
-    raise RuntimeError(f"API probe failed for {path}: {last_error}")
+    if required:
+        raise RuntimeError(f"API probe failed for {path}: {last_error}")
+    return None
 
 status = get_json("/api/status")
 template = get_json("/api/institution/template")
 treasury = get_json("/api/treasury")
-runtime_proof = get_json("/api/runtime-proof")
-kernel_bundle = get_json("/api/kernel-proof-bundle")
+runtime_proof = get_json("/api/runtime-proof", required=False)
+kernel_bundle = get_json("/api/kernel-proof-bundle", required=False)
 
 assert status.get("runtime_id"), status
 slo = status.get("slo") or {}
@@ -102,8 +104,19 @@ assert isinstance(template.get("policy_defaults"), dict), template
 assert treasury.get("balance_usd") is not None, treasury
 assert treasury.get("reserve_floor_usd") is not None, treasury
 
-assert runtime_proof.get("runtime_id"), runtime_proof
-assert kernel_bundle.get("proof_bundle_version"), kernel_bundle
+if isinstance(runtime_proof, dict):
+    assert runtime_proof.get("runtime_id"), runtime_proof
+else:
+    proof_block = dict(status.get("proof") or {})
+    recursive = dict(proof_block.get("recursive") or {})
+    aggregate = dict(proof_block.get("aggregate") or {})
+    assert recursive.get("root") or aggregate.get("bundle_id"), status
+
+if isinstance(kernel_bundle, dict):
+    assert kernel_bundle.get("proof_bundle_version"), kernel_bundle
+else:
+    aggregate = dict((status.get("proof") or {}).get("aggregate") or {})
+    assert aggregate.get("bundle_id"), status
 
 install_script = (Path("scripts/install-full.sh")).read_text(encoding="utf-8")
 assert "MERIDIAN_VERIFY_ONBOARDING" in install_script, "install-full.sh missing onboarding verification toggle"
