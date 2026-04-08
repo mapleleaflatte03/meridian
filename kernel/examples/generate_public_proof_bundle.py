@@ -265,7 +265,7 @@ def _summarize_legacy_reference_proof(proof):
     }
 
 
-def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
+def build_bundle(live_manifest_url=None, live_runtime_proof_url=None, run_reference_proofs=True):
     def _run_reference_proof(fn, label, summarize=None):
         try:
             summary = fn()
@@ -289,27 +289,40 @@ def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
                 'reason': f'{label}_failed: {type(exc).__name__}: {exc}',
             }
 
-    three_host = _run_reference_proof(
-        _run_three_host_federation_proof,
-        'three_host_federation',
-    )
-    handoff_dispatch = _run_reference_proof(
-        _run_handoff_dispatch_proof,
-        'handoff_dispatch',
-    )
-    execution_loop = _run_reference_proof(
-        _run_execution_settlement_loop_proof,
-        'execution_settlement_loop',
-    )
-    external_settlement = _run_reference_proof(
-        _run_base_usdc_x402_settlement_proof,
-        'external_settlement_adapter',
-    )
-    legacy_proof = _run_reference_proof(
-        _run_legacy_reference_adapter_federation_proof,
-        'legacy_reference_adapter',
-        summarize=_summarize_legacy_reference_proof,
-    )
+    def _skip_reference_proof(label):
+        return {
+            'passed': False,
+            'skipped': True,
+            'reason': f'{label}_skipped_fast_mode',
+        }
+    if run_reference_proofs:
+        three_host = _run_reference_proof(
+            _run_three_host_federation_proof,
+            'three_host_federation',
+        )
+        handoff_dispatch = _run_reference_proof(
+            _run_handoff_dispatch_proof,
+            'handoff_dispatch',
+        )
+        execution_loop = _run_reference_proof(
+            _run_execution_settlement_loop_proof,
+            'execution_settlement_loop',
+        )
+        external_settlement = _run_reference_proof(
+            _run_base_usdc_x402_settlement_proof,
+            'external_settlement_adapter',
+        )
+        legacy_proof = _run_reference_proof(
+            _run_legacy_reference_adapter_federation_proof,
+            'legacy_reference_adapter',
+            summarize=_summarize_legacy_reference_proof,
+        )
+    else:
+        three_host = _skip_reference_proof('three_host_federation')
+        handoff_dispatch = _skip_reference_proof('handoff_dispatch')
+        execution_loop = _skip_reference_proof('execution_settlement_loop')
+        external_settlement = _skip_reference_proof('external_settlement_adapter')
+        legacy_proof = _skip_reference_proof('legacy_reference_adapter')
     live_host_receipt = (
         _fetch_live_manifest(live_manifest_url)
         if live_manifest_url else

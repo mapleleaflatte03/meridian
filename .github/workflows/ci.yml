@@ -35,8 +35,6 @@ jobs:
 
   loom-rust:
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.loom == 'true'
     defaults:
       run:
         working-directory: loom
@@ -51,8 +49,6 @@ jobs:
 
   python-kernel-intelligence:
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.kernel == 'true' || needs.changes.outputs.intelligence == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -66,14 +62,12 @@ jobs:
           python3 -m pip install mcp
 
       - name: Kernel tests
-        if: needs.changes.outputs.kernel == 'true'
         run: |
           cd kernel
           python3 -m unittest discover -s kernel/tests -p 'test_*.py'
           python3 -m unittest discover -s economy/tests -p 'test_*.py'
 
       - name: Intelligence tests
-        if: needs.changes.outputs.intelligence == 'true'
         run: |
           cd intelligence
           python3 -m unittest -v test_gateway_brain_router.py
@@ -83,8 +77,6 @@ jobs:
 
   onboarding-ready-lane:
     runs-on: ubuntu-latest
-    needs: changes
-    if: needs.changes.outputs.kernel == 'true' || needs.changes.outputs.intelligence == 'true' || needs.changes.outputs.bootstrap == 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

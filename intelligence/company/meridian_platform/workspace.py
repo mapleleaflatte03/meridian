@@ -219,6 +219,10 @@ KERNEL_MODULE_DIR = os.path.join(KERNEL_ROOT, 'kernel')
 KERNEL_RUNTIME_ADAPTER_FILE = os.path.join(KERNEL_ROOT, 'kernel', 'runtime_adapter.py')
 KERNEL_PUBLIC_PROOF_BUNDLE_FILE = os.path.join(KERNEL_ROOT, 'examples', 'generate_public_proof_bundle.py')
 PUBLIC_BASE_URL = (os.environ.get('MERIDIAN_PUBLIC_BASE_URL') or 'https://app.welliam.codes').strip() or 'https://app.welliam.codes'
+PUBLIC_PROOF_INTERNAL_BASE_URL = (
+    os.environ.get('MERIDIAN_PUBLIC_PROOF_INTERNAL_BASE_URL')
+    or 'http://127.0.0.1:18901'
+).strip() or 'http://127.0.0.1:18901'
 PUBLIC_PROOF_CACHE_TTL_SECONDS = max(0, int(os.environ.get('MERIDIAN_PUBLIC_PROOF_CACHE_TTL_SECONDS', '300') or '300'))
 PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS = max(
     0.5,
@@ -662,6 +666,7 @@ def _kernel_public_proof_bundle(*, base_url=None):
             f'Kernel public proof bundle builder unavailable at {KERNEL_PUBLIC_PROOF_BUNDLE_FILE}'
         )
     normalized_base = _normalized_public_base_url(base_url)
+    internal_base = _normalized_public_base_url(PUBLIC_PROOF_INTERNAL_BASE_URL)
     now = time.time()
 
     def _decorate_payload(payload, *, cache_state):
@@ -671,6 +676,7 @@ def _kernel_public_proof_bundle(*, base_url=None):
             'kernel_root': KERNEL_ROOT,
             'bundle_builder': KERNEL_PUBLIC_PROOF_BUNDLE_FILE,
             'public_base_url': normalized_base,
+            'internal_base_url': internal_base,
         })
         enriched['generated_from'] = generated_from
         enriched['public_routes'] = {
@@ -719,10 +725,17 @@ def _kernel_public_proof_bundle(*, base_url=None):
         })
 
     def _build_payload():
-        raw_payload = builder(
-            live_manifest_url=f'{normalized_base}/api/federation/manifest',
-            live_runtime_proof_url=f'{normalized_base}/api/runtime-proof',
-        )
+        try:
+            raw_payload = builder(
+                live_manifest_url=f'{internal_base}/api/federation/manifest',
+                live_runtime_proof_url=f'{internal_base}/api/runtime-proof',
+                run_reference_proofs=False,
+            )
+        except TypeError:
+            raw_payload = builder(
+                live_manifest_url=f'{internal_base}/api/federation/manifest',
+                live_runtime_proof_url=f'{internal_base}/api/runtime-proof',
+            )
         cached_payload = _decorate_payload(raw_payload, cache_state={
             'state': 'fresh',
             'generated_at_epoch': now,
@@ -4333,14 +4346,44 @@ def _aggregate_proof_status():
         return {'topology': 'hypercube', 'bundle_id': None, 'member_count': 0, 'integrity_hash': None}
 
 
+def _proof_agents_for_org(org_id: str | None):
+    """Return normalized proof agents with scoped-first, unscoped fallback selection.
+
+    Runtime/public proof endpoints must stay stable even when registry org ids drift
+    from the active runtime-bound org. We prefer org-scoped agents first, but if
+    that projection is empty we fall back to all normalized registry agents.
+    """
+    registry_agents = [
+        normalize_agent_record(agent)
+        for agent in load_registry().get('agents', {}).values()
+    ]
+    if not registry_agents:
+        return []
+    if not org_id:
+        return registry_agents
+
+    scoped = [
+        agent for agent in registry_agents
+        if agent.get('org_id') in (None, '', org_id)
+    ]
+    if scoped:
+        return scoped
+
+    if WORKSPACE_ORG_ID and WORKSPACE_ORG_ID != org_id:
+        workspace_scoped = [
+            agent for agent in registry_agents
+            if agent.get('org_id') in (None, '', WORKSPACE_ORG_ID)
+        ]
+        if workspace_scoped:
+            return workspace_scoped
+
+    return registry_agents
+
+
 def _recursive_proof_status():
     """Collect recursive proof chain status from the Loom runtime."""
     try:
-        proof_agents = [
-            normalize_agent_record(agent)
-            for agent in load_registry().get('agents', {}).values()
-            if agent.get('org_id') in (None, '', WORKSPACE_ORG_ID)
-        ]
+        proof_agents = _proof_agents_for_org(WORKSPACE_ORG_ID)
         proof = loom_runtime_proof.collect_loom_runtime_proof(
             include_service_probe=True,
             agents=proof_agents or None,
@@ -5549,11 +5592,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         elif path == '/api/alerts':
             return self._json(alerting.alert_queue_snapshot(org_id))
         elif path == '/api/runtime-proof':
-            proof_agents = [
-                normalize_agent_record(agent)
-                for agent in load_registry().get('agents', {}).values()
-                if agent.get('org_id') in (None, '', org_id)
-            ]
+            proof_agents = _proof_agents_for_org(org_id)
             proof = loom_runtime_proof.collect_loom_runtime_proof(
                 include_service_probe=True,
                 agents=proof_agents or None,
@@ -5565,11 +5604,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 )
             )
         elif path == '/api/runtime-proof-contract':
-            proof_agents = [
-                normalize_agent_record(agent)
-                for agent in load_registry().get('agents', {}).values()
-                if agent.get('org_id') in (None, '', org_id)
-            ]
+            proof_agents = _proof_agents_for_org(org_id)
             proof = loom_runtime_proof.collect_loom_runtime_proof(
                 include_service_probe=True,
                 agents=proof_agents or None,
