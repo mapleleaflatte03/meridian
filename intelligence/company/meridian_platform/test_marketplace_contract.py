@@ -67,7 +67,7 @@ class MarketplaceContractTests(unittest.TestCase):
             org_id='org_test',
             action_ids=['act_1'],
         )
-        resolved = resolve_dispute(
+        stayed = resolve_dispute(
             dispute_id=dispute_id,
             decision='stay',
             resolved_by='court',
@@ -76,16 +76,32 @@ class MarketplaceContractTests(unittest.TestCase):
             note='manual review required',
         )
 
-        self.assertEqual(resolved['status'], 'resolved')
-        self.assertEqual(resolved['decision'], 'stay')
-        self.assertEqual(resolved['court_decision_ref'], 'court_decision_1')
+        # 'stay' halts proceedings — dispute remains open for future resolution
+        self.assertEqual(stayed['status'], 'open')
+        self.assertEqual(stayed['decision'], 'stay')
+        self.assertEqual(stayed['court_decision_ref'], 'court_decision_1')
 
         disputes = get_disputes(org_id='org_test')
         self.assertEqual(len(disputes), 1)
         self.assertEqual(disputes[0]['id'], dispute_id)
         snapshot = marketplace_snapshot(org_id='org_test')
-        self.assertEqual(snapshot['status']['open_disputes'], 0)
+        self.assertEqual(snapshot['status']['open_disputes'], 1)
         self.assertEqual(snapshot['bids'][0]['status'], 'disputed')
+
+        # Now actually resolve the dispute with a final decision
+        resolved = resolve_dispute(
+            dispute_id=dispute_id,
+            decision='release',
+            resolved_by='court',
+            org_id='org_test',
+            note='approved after review',
+        )
+        self.assertEqual(resolved['status'], 'resolved')
+        self.assertEqual(resolved['decision'], 'release')
+
+        snapshot = marketplace_snapshot(org_id='org_test')
+        self.assertEqual(snapshot['status']['open_disputes'], 0)
+        self.assertEqual(snapshot['bids'][0]['status'], 'settled')
 
 
 if __name__ == '__main__':
