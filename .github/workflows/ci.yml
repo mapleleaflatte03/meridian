@@ -45,7 +45,9 @@ jobs:
         with:
           workspaces: loom
       - name: Test loom workspace
-        run: cargo test --workspace
+        run: |
+          export MERIDIAN_TEST_KERNEL_PATH="${GITHUB_WORKSPACE}/kernel"
+          cargo test --workspace
 
   python-kernel-intelligence:
     runs-on: ubuntu-latest
