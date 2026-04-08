@@ -27,13 +27,33 @@ if [ ! -x "./scripts/new-first-agent.sh" ]; then
 fi
 
 echo "[onboarding-lane] bootstrap full stack (skip loom build for fast/portable gate)"
-echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
-if ! MERIDIAN_SKIP_LOOM_BUILD=1 \
-  MERIDIAN_AUTO_START_STACK=1 \
-  MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
-  MERIDIAN_GATEWAY_PORT="${ONBOARDING_GATEWAY_PORT}" \
-  ./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log 2>&1; then
-  echo "[onboarding-lane] bootstrap failed; dumping /tmp/meridian_onboarding_bootstrap.log" >&2
+bootstrap_ok=0
+for bootstrap_attempt in 1 2 3; do
+  if [[ "${bootstrap_attempt}" -gt 1 ]]; then
+    ONBOARDING_WORKSPACE_PORT="$(find_free_port)"
+    ONBOARDING_GATEWAY_PORT="$(find_free_port)"
+    if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_GATEWAY_PORT}" ]]; then
+      ONBOARDING_GATEWAY_PORT="$(find_free_port)"
+    fi
+    export ONBOARDING_GATEWAY_PORT
+    ./scripts/dev-down.sh >/dev/null 2>&1 || true
+    sleep 1
+  fi
+  echo "[onboarding-lane] bootstrap attempt ${bootstrap_attempt}/3"
+  echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
+  if MERIDIAN_SKIP_LOOM_BUILD=1 \
+    MERIDIAN_AUTO_START_STACK=1 \
+    MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
+    MERIDIAN_GATEWAY_PORT="${ONBOARDING_GATEWAY_PORT}" \
+    ./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log 2>&1; then
+    bootstrap_ok=1
+    break
+  fi
+  echo "[onboarding-lane] bootstrap attempt ${bootstrap_attempt} failed" >&2
+done
+
+if [[ "${bootstrap_ok}" -ne 1 ]]; then
+  echo "[onboarding-lane] bootstrap failed after 3 attempts; dumping /tmp/meridian_onboarding_bootstrap.log" >&2
   cat /tmp/meridian_onboarding_bootstrap.log >&2 || true
   exit 1
 fi

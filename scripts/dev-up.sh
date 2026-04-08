@@ -152,10 +152,17 @@ start_workspace_if_needed() {
         >"${LOG_DIR}/workspace.log" 2>&1 &
       echo $! > "${PID_DIR}/workspace.pid"
     )
-    sleep 1
-    if port_listening "${MERIDIAN_WORKSPACE_PORT}"; then
-      return
-    fi
+    local workspace_pid=""
+    workspace_pid="$(cat "${PID_DIR}/workspace.pid" 2>/dev/null || true)"
+    for _ in $(seq 1 30); do
+      if port_listening "${MERIDIAN_WORKSPACE_PORT}"; then
+        return
+      fi
+      if [[ -n "${workspace_pid}" ]] && ! kill -0 "${workspace_pid}" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.5
+    done
     attempt=$((attempt + 1))
   done
 
@@ -183,10 +190,17 @@ start_gateway_if_needed() {
       nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
       echo $! > "${PID_DIR}/gateway.pid"
     )
-    sleep 1
-    if port_listening "${MERIDIAN_GATEWAY_PORT}"; then
-      return
-    fi
+    local gateway_pid=""
+    gateway_pid="$(cat "${PID_DIR}/gateway.pid" 2>/dev/null || true)"
+    for _ in $(seq 1 40); do
+      if port_listening "${MERIDIAN_GATEWAY_PORT}"; then
+        return
+      fi
+      if [[ -n "${gateway_pid}" ]] && ! kill -0 "${gateway_pid}" >/dev/null 2>&1; then
+        break
+      fi
+      sleep 0.5
+    done
     attempt=$((attempt + 1))
   done
 
