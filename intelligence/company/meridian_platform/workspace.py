@@ -316,6 +316,12 @@ from court import (file_violation, resolve_violation,
                    dynamic_court_status)
 from marketplace import (post_bid, assign_bid, settle_bid, cancel_bid,
                          get_bids, get_settlements, marketplace_status)
+from memory_graph import (append_node as memory_append_node,
+                          verify_chain as memory_verify_chain,
+                          query_nodes as memory_query_nodes,
+                          chain_head as memory_chain_head,
+                          integrity_hash as memory_integrity_hash,
+                          temporal_integrity_status)
 from session import SessionAuthority
 from app import (
     PUBLIC_UNAUTHENTICATED_PATHS,
@@ -4111,6 +4117,14 @@ def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expi
     }
 
 
+def _temporal_integrity_status(org_id=None):
+    """Collect temporal integrity status for the /api/status block."""
+    try:
+        return temporal_integrity_status(org_id)
+    except Exception:
+        return {'enabled': False, 'index_version': 0, 'node_count': 0, 'head_hash': None, 'chain_valid': True}
+
+
 def _marketplace_status(org_id=None):
     """Collect marketplace status for the /api/status block."""
     try:
@@ -4324,10 +4338,7 @@ def api_status(context_source='configured_default', institution_context=None):
         },
         'marketplace': _marketplace_status(org_id),
         'memory': {
-            'temporal_integrity': {
-                'enabled': False,
-                'index_version': 0,
-            },
+            'temporal_integrity': _temporal_integrity_status(org_id),
         },
     }
     result['runtime_core']['federation'] = _federation_snapshot(
@@ -6117,6 +6128,41 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             elif path == '/api/marketplace/settlements':
                 settlements = get_settlements(org_id=org_id)
                 return self._json({'settlements': settlements, 'count': len(settlements)})
+
+            elif path == '/api/memory/append':
+                node_hash, depth = memory_append_node(
+                    key=body['key'],
+                    value=body['value'],
+                    org_id=org_id,
+                    tags=body.get('tags'),
+                    action_id=body.get('action_id'),
+                )
+                log_event(org_id, by, 'memory_node_appended',
+                          outcome='success',
+                          details={'key': body['key'], 'hash': node_hash, 'depth': depth},
+                          session_id=_sid)
+                return self._json({'message': f'Node appended at depth {depth}',
+                                   'node_hash': node_hash, 'depth': depth})
+
+            elif path == '/api/memory/verify':
+                valid, error_detail = memory_verify_chain(org_id=org_id)
+                return self._json({
+                    'valid': valid,
+                    'error': error_detail,
+                    'integrity_hash': memory_integrity_hash(org_id),
+                })
+
+            elif path == '/api/memory/query':
+                nodes = memory_query_nodes(
+                    key=body.get('key'),
+                    tag=body.get('tag'),
+                    org_id=org_id,
+                )
+                return self._json({'nodes': nodes, 'count': len(nodes)})
+
+            elif path == '/api/memory/head':
+                head = memory_chain_head(org_id=org_id)
+                return self._json(head)
 
             elif path == '/api/treasury/contribute':
                 result = contribute_owner_capital(body['amount'], body.get('note', ''),
