@@ -11,7 +11,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/ci.yml?branch=main&style=flat-square" alt="CI status">
-  <img src="https://img.shields.io/badge/license-Apache--2.0-475569?style=flat-square" alt="Apache-2.0">
+  <img src="https://img.shields.io/badge/license-MIT-475569?style=flat-square" alt="MIT">
   <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="GitHub stars">
   <img src="https://img.shields.io/badge/focus-open%20research-0f766e?style=flat-square" alt="Open research">
   <img src="https://img.shields.io/badge/runtime-local%20first-1f6feb?style=flat-square" alt="Local-first runtime">
@@ -33,6 +33,11 @@ Meridian is a governance-first stack for local AI agent systems:
 - `loom/` — sovereign local runtime + PoGE execution layer (Rust)
 - `kernel/` — constitutional governance core (Institution, Agent, Authority, Treasury, Court + 3-ledger economy)
 - `intelligence/` — workflows, public surfaces, gateway, and operator tooling
+
+License scope:
+- monorepo root: MIT ([`LICENSE`](LICENSE))
+- `kernel/`: Apache-2.0 ([`kernel/LICENSE`](kernel/LICENSE))
+- `loom/` and `intelligence/`: MIT ([`loom/LICENSE`](loom/LICENSE), [`intelligence/LICENSE`](intelligence/LICENSE))
 
 Canonical source is this monorepo.
 
