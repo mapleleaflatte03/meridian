@@ -24,3 +24,11 @@ body:
       description: Benchmarks, metrics, or proofs required to accept/reject the RFC.
     validations:
       required: true
+  - type: textarea
+    id: reproducibility
+    attributes:
+      label: Reproducibility Commands
+      description: Provide exact commands expected to produce benchmark/case artifacts.
+      placeholder: |
+        ./scripts/research_capture_baseline.sh
+        ./scripts/research_capture_case_study.sh sanction_remediation_loop

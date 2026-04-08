@@ -14,6 +14,8 @@ This page collects canonical research artifacts for governance and verifiable lo
 - Recursive PoGE RFC draft: `docs/research/RFC-0001-recursive-poge-aggregation.md`
 - Governance runtime baseline benchmark: `docs/research/BENCHMARK-0001-governance-runtime-baseline.md`
 - Sanction/remediation case study: `docs/research/CASE-STUDY-0001-sanction-remediation-loop.md`
+- Baseline capture script: `scripts/research_capture_baseline.sh`
+- Case-study capture script: `scripts/research_capture_case_study.sh`
 
 ## PoGE + Governance RFC Track
 
@@ -43,6 +45,10 @@ curl -fsS http://127.0.0.1:8266/api/kernel-proof-bundle
 curl -fsS http://127.0.0.1:8266/api/institution/template
 curl -fsS http://127.0.0.1:8266/api/treasury
 curl -fsS http://127.0.0.1:8266/api/status
+
+# Canonical capture scripts (runtime/research/*.json)
+./scripts/research_capture_baseline.sh
+./scripts/research_capture_case_study.sh sanction_remediation_loop
 ```
 
 ## Killer Example (Governed Runtime Loop)

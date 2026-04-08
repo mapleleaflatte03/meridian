@@ -21,6 +21,9 @@ curl -fsS http://127.0.0.1:8266/api/status | python3 -m json.tool
 curl -fsS http://127.0.0.1:8266/api/runtime-proof | python3 -m json.tool
 curl -fsS http://127.0.0.1:8266/api/kernel-proof-bundle | python3 -m json.tool
 curl -fsS http://127.0.0.1:8266/api/treasury | python3 -m json.tool
+
+# canonical capture script (writes runtime/research/baseline_*.json)
+./scripts/research_capture_baseline.sh
 ```
 
 ## Metrics Contract
@@ -43,3 +46,4 @@ Record at minimum:
 
 - This benchmark is boundary-health oriented, not throughput micro-benchmark.
 - Results are valid only with command evidence and payload snapshots attached.
+- The capture artifact includes only stable route fields to avoid accidental over-claiming from ephemeral internals.

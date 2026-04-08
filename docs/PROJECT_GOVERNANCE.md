@@ -16,6 +16,9 @@ This document defines how decisions and merges are handled in the Meridian monor
   - `kernel/` governance primitives and economy surfaces
   - `intelligence/` public surfaces, gateway, workflows
 - Changes touching multiple modules require explicit cross-module verification.
+- Merge authority:
+  - governance/runtime-critical changes require maintainer approval,
+  - docs-only or non-critical UI copy can be merged after one maintainer review with passing CI.
 
 ## Required Verification Before Merge
 
@@ -23,6 +26,7 @@ This document defines how decisions and merges are handled in the Meridian monor
 - Acceptance lanes for changed operator/public surfaces
 - Command evidence in PR description
 - Rollback note for non-trivial behavior changes
+- If onboarding paths changed, `scripts/acceptance_onboarding_ready_lane.sh` must pass.
 
 ## Ownership Guidance
 

@@ -3,9 +3,9 @@
   <desc id="desc">Warrior mark alongside the Meridian wordmark.</desc>
   <defs>
     <style>
-      .mk { fill: #e6edf5; }
-      .word { fill: #e6edf5; font: 700 88px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 7px; }
-      .accent { fill: #7d8a99; font: 500 20px/1 'JetBrains Mono', monospace; letter-spacing: 4.5px; text-transform: uppercase; }
+      .mk { fill: #d7e1eb; }
+      .word { fill: #d7e1eb; font: 700 88px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 7px; }
+      .accent { fill: #7f92a6; font: 500 20px/1 'JetBrains Mono', monospace; letter-spacing: 4.5px; text-transform: uppercase; }
     </style>
   </defs>
   <!-- Warrior mark scaled to fit 256x256 area -->

@@ -24,6 +24,8 @@ must produce a local state where a new user can immediately inspect governance/r
    - `/api/runtime-proof`
    - `/api/kernel-proof-bundle`
 5. Court rule set initialized (>=3 rules in template path).
+6. First agent can be provisioned through one helper command:
+   - `./scripts/new-first-agent.sh "My Assistant"`
 
 ## Verification Gate
 

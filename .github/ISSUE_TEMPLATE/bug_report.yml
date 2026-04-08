@@ -21,12 +21,31 @@ body:
         3. ...
     validations:
       required: true
+  - type: dropdown
+    id: module_scope
+    attributes:
+      label: Primary Module
+      options:
+        - loom
+        - kernel
+        - intelligence
+        - docs/web
+    validations:
+      required: true
   - type: textarea
     id: expected
     attributes:
       label: Expected Behavior
     validations:
       required: true
+  - type: textarea
+    id: acceptance_gate
+    attributes:
+      label: Acceptance Gate Impact
+      description: Which acceptance lane currently fails or should be added?
+      placeholder: |
+        ./scripts/acceptance_onboarding_ready_lane.sh
+        ./intelligence/scripts/acceptance_publish_live_lane.sh
   - type: textarea
     id: evidence
     attributes:

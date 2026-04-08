@@ -240,6 +240,7 @@ for path, mode in checks:
             "governance-model",
             "research-hub",
             "how-to-contribute",
+            "install-demo",
             "live-snapshot-section",
             "premium-footer",
         ):
@@ -264,6 +265,8 @@ for path, mode in checks:
         assert "Local-first" in body, "Missing trust bar copy on homepage"
         assert "Contribute" in body, "Missing contribution link on homepage"
         assert "/support" in body, "Missing support link on homepage"
+        assert "install_in_60_seconds.gif" in body, "Missing install GIF media on homepage"
+        assert "meridian_demo_2m20s.mp4" in body, "Missing install video media on homepage"
         # Legacy commercial strings must be absent
         assert "Constitutional Institution License" not in body, "Legacy 'Constitutional Institution License' found on homepage"
         assert "Get License" not in body, "Legacy 'Get License' found on homepage"

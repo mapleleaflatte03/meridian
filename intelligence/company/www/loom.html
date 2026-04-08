@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="Meridian Loom — Run governed AI agents locally with cryptographic proof">
 <meta name="twitter:description" content="Install Loom, create your first governed personal agent, run it locally, and inspect cryptographic proof receipts immediately.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss8">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss9">
 </head>
 <body class="page-loom">
 
@@ -49,10 +49,10 @@
       <img src="/assets/meridian_wordmark.svg" alt="Meridian — Governed Agent Runtime" class="page-wordmark">
       <div class="eyebrow">
         <span class="eyebrow-dot"></span>
-        <span>Official first-party runtime · v0.1.16</span>
+        <span>Open runtime surface · v0.1.16</span>
       </div>
       <h1>Run governed AI agents locally with cryptographic proof.</h1>
-      <p class="subtitle">Loom is Meridian's flagship runtime product. Install in one command, create a governed personal agent, run a persistent local loop, and inspect the receipts instead of guessing what the agent actually did.</p>
+      <p class="subtitle">Loom is Meridian's local runtime. Install in one command, create a governed personal agent, run a persistent local loop, and inspect the receipts instead of guessing what the agent actually did.</p>
     </div>
     <aside class="page-rail">
       <div class="rail-kicker">Why pick Loom</div>
@@ -62,9 +62,9 @@
         <p>Not a hosted theater layer, and not just a governance add-on for someone else's runtime.</p>
       </div>
       <div class="rail-item">
-        <span>What it is trying to beat</span>
-        <strong>Claw-family runtime gravity.</strong>
-        <p>Loom is aimed directly at OpenClaw, OpenFang, IronClaw, TEMM1E, Goose, OpenHands, CrewAI, and LangGraph.</p>
+        <span>What it is optimized for</span>
+        <strong>Governed local execution.</strong>
+        <p>Use Loom when runtime decisions must stay inspectable: proof surfaces, authority state, treasury posture, and court-aware constraints.</p>
       </div>
     </aside>
   </div>
@@ -73,8 +73,8 @@
 <div class="container">
 
   <div class="notice mb-xl">
-    <strong>Loom is the product front door now.</strong>
-    <span class="dim">Kernel remains runtime-neutral. First-party Meridian apps remain valuable. But if someone asks what to install instead of another local agent runtime, the answer is Loom.</span>
+    <strong>Loom is Meridian's runtime entry path.</strong>
+    <span class="dim">Kernel remains runtime-neutral. Workflows remain proof workloads. The install path stays simple and local-first.</span>
   </div>
 
   <div class="metric-strip reveal">
@@ -107,19 +107,19 @@
       <span class="lane-kicker">Runtime</span>
       <h3>Footprint now</h3>
       <div class="live-chart-shell" data-live-chart="runtime"></div>
-      <p class="live-chart-caption" data-live-caption="runtime">Awaiting first runtime snapshot (15s cadence).</p>
+      <p class="live-chart-caption" data-live-caption="runtime">Bootstrap baseline visible; live runtime data refreshes every 15 seconds.</p>
     </div>
     <div class="live-chart-card">
       <span class="lane-kicker">Queue</span>
       <h3>Pressure now</h3>
       <div class="live-chart-shell" data-live-chart="queue"></div>
-      <p class="live-chart-caption" data-live-caption="queue">Awaiting first queue snapshot (15s cadence).</p>
+      <p class="live-chart-caption" data-live-caption="queue">Bootstrap baseline visible; queue metrics refresh every 15 seconds.</p>
     </div>
     <div class="live-chart-card">
       <span class="lane-kicker">Proof</span>
       <h3>Boundary now</h3>
       <div class="live-chart-shell" data-live-chart="proof"></div>
-      <p class="live-chart-caption" data-live-caption="proof">Awaiting first proof snapshot (15s cadence).</p>
+      <p class="live-chart-caption" data-live-caption="proof">Bootstrap baseline visible; proof and SLO boundary refresh every 15 seconds.</p>
     </div>
   </div>
 
@@ -156,22 +156,12 @@
   </div>
 
   <div class="card">
-    <pre class="sample-box"><code class="language-bash">export MERIDIAN_ROOT="${HOME}/meridian"
-export LOOM_BIN="${MERIDIAN_ROOT}/loom/target/release/loom"
-export LOOM_ROOT="${MERIDIAN_ROOT}/runtime/default"
-export MERIDIAN_KERNEL_PATH="${MERIDIAN_ROOT}/kernel"
-export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
+    <pre class="sample-box"><code class="language-bash">cd ~/meridian
+./scripts/new-first-agent.sh "My Assistant"
 
-cd "${MERIDIAN_KERNEL_PATH}"
-python3 quickstart.py --init-only
-
-"${LOOM_BIN}" new-agent \
-  --name "My Assistant" \
-  --root "$LOOM_ROOT" \
-  --kernel-path "$MERIDIAN_KERNEL_PATH" \
-  --org-id "$MERIDIAN_ORG_ID"
-
-"${LOOM_BIN}" run-agent my-assistant</code></pre>
+# optional immediate run
+MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre>
+    <p class="dim small mt-md">This helper initializes kernel state, provisions the agent, and prints run instructions with the resolved slug.</p>
   </div>
 
   <h2 class="reveal">What Loom ships right now</h2>
@@ -223,7 +213,7 @@ python3 quickstart.py --init-only
   <div class="card text-center mt-lg">
     <p><strong>Need the next step?</strong></p>
     <a class="cta cta-primary" href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">Open Meridian Monorepo</a>
-    <a class="cta cta-outline" href="/demo">See first-party apps on Loom</a>
+    <a class="cta cta-outline" href="/demo">See workflow demos on Loom</a>
     <a class="cta cta-outline" href="/boundary">Read the boundary note</a>
   </div>
 
@@ -263,6 +253,6 @@ python3 quickstart.py --init-only
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260408-oss8" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss9" defer></script>
 </body>
 </html>

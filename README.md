@@ -70,10 +70,12 @@ By default bootstrap initializes institution state, treasury baseline, and court
 - `/api/institution/template`
 - `/api/treasury`
 - `/api/status` + runtime proof readiness
+- onboarding-ready contract verification (`MERIDIAN_VERIFY_ONBOARDING=1` by default)
 
 Ready-to-run definition and gate:
 - [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
 - `./scripts/acceptance_onboarding_ready_lane.sh`
+- first agent helper: `./scripts/new-first-agent.sh "My Assistant"`
 
 ## Quick Visuals
 
@@ -97,6 +99,9 @@ Live surfaces:
 # Bootstrap only (without auto-start)
 MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
 
+# Create first governed agent quickly
+./scripts/new-first-agent.sh "My Assistant"
+
 # Loom tests
 cargo test --manifest-path loom/Cargo.toml --workspace
 
@@ -108,6 +113,11 @@ python3 -m unittest discover -s economy/tests -p 'test_*.py'
 # Intelligence tests
 cd ../intelligence
 python3 -m unittest -v test_gateway_brain_router.py
+
+# Research capture artifacts
+cd ..
+./scripts/research_capture_baseline.sh
+./scripts/research_capture_case_study.sh sanction_remediation_loop
 ```
 
 ## Open-Source Boundary

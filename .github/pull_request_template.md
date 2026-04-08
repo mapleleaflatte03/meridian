@@ -2,6 +2,7 @@
 
 - What changed:
 - Why it changed:
+- Primary module scope (`loom/kernel/intelligence/docs`):
 
 ## Verification
 
@@ -9,6 +10,7 @@
 - [ ] Local tests pass
 - [ ] Acceptance lanes pass (if touched)
 - [ ] API/UI probes verified (if touched)
+- [ ] Onboarding gate verified if bootstrap/install path changed
 
 Commands run:
 
@@ -22,6 +24,7 @@ Commands run:
 - [ ] Governance semantics preserved (PoGE / warrant / court / authority / treasury / ledgers)
 - [ ] No commercial wording reintroduced on OSS surfaces
 - [ ] Public claims stay within verified boundary
+- [ ] Legacy mirror/archive routing unchanged or intentionally updated
 
 ## Rollback Note
 

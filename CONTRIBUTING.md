@@ -18,7 +18,13 @@ curl -fsS http://127.0.0.1:8266/api/institution/template | python3 -m json.tool
 curl -fsS http://127.0.0.1:8266/api/treasury | python3 -m json.tool
 ```
 
-3. Pick an issue:
+3. Verify onboarding contract:
+
+```bash
+./scripts/acceptance_onboarding_ready_lane.sh
+```
+
+4. Pick an issue:
 - `good first issue` for onboarding/docs/tests
 - `research` for protocol/RFC/benchmark work
 - `governance` for court/authority/treasury paths

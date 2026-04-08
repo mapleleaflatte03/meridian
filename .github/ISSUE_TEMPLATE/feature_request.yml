@@ -17,6 +17,17 @@ body:
       description: Describe expected behavior and module scope.
     validations:
       required: true
+  - type: dropdown
+    id: module_scope
+    attributes:
+      label: Primary Module
+      options:
+        - loom
+        - kernel
+        - intelligence
+        - cross-module
+    validations:
+      required: true
   - type: textarea
     id: acceptance
     attributes:

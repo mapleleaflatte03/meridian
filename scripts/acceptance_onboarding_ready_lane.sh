@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+if [ ! -x "./scripts/new-first-agent.sh" ]; then
+  echo "[onboarding-lane] missing executable helper: ./scripts/new-first-agent.sh" >&2
+  exit 1
+fi
+
 echo "[onboarding-lane] bootstrap full stack (skip loom build for fast/portable gate)"
 MERIDIAN_SKIP_LOOM_BUILD=1 \
 MERIDIAN_AUTO_START_STACK=1 \
@@ -29,6 +34,7 @@ PY
 echo "[onboarding-lane] verify local API readiness contract"
 python3 - <<'PY'
 import json
+from pathlib import Path
 import urllib.request
 
 BASE = "http://127.0.0.1:8266"
@@ -60,6 +66,9 @@ assert treasury.get("reserve_floor_usd") is not None, treasury
 
 assert runtime_proof.get("runtime_id"), runtime_proof
 assert kernel_bundle.get("proof_bundle_version"), kernel_bundle
+
+install_script = (Path("scripts/install-full.sh")).read_text(encoding="utf-8")
+assert "MERIDIAN_VERIFY_ONBOARDING" in install_script, "install-full.sh missing onboarding verification toggle"
 PY
 
 echo "[onboarding-lane] PASS"

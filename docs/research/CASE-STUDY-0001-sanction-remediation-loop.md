@@ -23,15 +23,10 @@ Show a minimal governed loop where runtime behavior triggers governance controls
 cd /path/to/meridian
 ./scripts/dev-up.sh
 
-# Capture baseline
-curl -fsS http://127.0.0.1:8266/api/status > /tmp/status.before.json
-curl -fsS http://127.0.0.1:8266/api/kernel-proof-bundle > /tmp/proof.before.json
+# Capture before/after snapshots and a normalized summary artifact
+./scripts/research_capture_case_study.sh sanction_remediation_loop
 
 # (module-specific sanction trigger/review commands go here)
-
-# Capture after remediation
-curl -fsS http://127.0.0.1:8266/api/status > /tmp/status.after.json
-curl -fsS http://127.0.0.1:8266/api/kernel-proof-bundle > /tmp/proof.after.json
 ```
 
 ## Acceptance
@@ -39,6 +34,10 @@ curl -fsS http://127.0.0.1:8266/api/kernel-proof-bundle > /tmp/proof.after.json
 1. Violation/sanction counters move in expected direction.
 2. Proof surfaces remain reachable and coherent before/after remediation.
 3. No silent state mutation without observable route evidence.
+4. Case summary file exists with stable invariants:
+   - `runtime_id_stable`
+   - `proof_mode_stable`
+   - `kernel_bundle_route_present`
 
 ## Boundary
 

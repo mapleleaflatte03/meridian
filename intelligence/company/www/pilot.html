@@ -20,7 +20,7 @@
 <meta name="twitter:title" content="Meridian — Get Started">
 <meta name="twitter:description" content="Open-source onboarding path for Meridian: bootstrap the full stack locally, run governed agents, and verify proofs.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
-<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss8">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss9">
 </head>
 <body class="page-pilot">
 <header class="site-header">
@@ -97,22 +97,12 @@ cd meridian</code></pre>
 
   <h2>4. Create and run your first agent</h2>
   <div class="card">
-<pre><code>export MERIDIAN_ROOT="$(pwd)"
-export LOOM_ROOT="${MERIDIAN_ROOT}/runtime/default"
-export MERIDIAN_KERNEL_PATH="${MERIDIAN_ROOT}/kernel"
-export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
+<pre><code>cd ~/meridian
+./scripts/new-first-agent.sh "My Assistant"
 
-cd "${MERIDIAN_KERNEL_PATH}"
-python3 quickstart.py --init-only
-
-cd "${MERIDIAN_ROOT}/loom"
-./target/release/loom new-agent \
-  --name "My Assistant" \
-  --root "$LOOM_ROOT" \
-  --kernel-path "$MERIDIAN_KERNEL_PATH" \
-  --org-id "$MERIDIAN_ORG_ID"
-
-./target/release/loom run-agent my-assistant</code></pre>
+# Optional: run immediately
+MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre>
+    <p class="dim mt-sm">Use the helper for the shortest path. It initializes kernel state, provisions the agent, and prints the exact run command.</p>
   </div>
 
   <h2>5. Contribute back</h2>
@@ -162,6 +152,6 @@ cd "${MERIDIAN_ROOT}/loom"
   </footer>
 </div>
 
-<script src="/assets/meridian.js?v=20260408-oss8" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss9" defer></script>
 </body>
 </html>
