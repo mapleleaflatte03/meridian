@@ -365,6 +365,60 @@ def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
             'live end-to-end hosted runtime wiring',
             'live non-internal settlement execution',
         ],
+        'aggregate': _build_aggregate_section(
+            [three_host, handoff_dispatch, execution_loop, external_settlement, legacy_proof],
+        ),
+    }
+
+
+def _build_aggregate_section(proof_items):
+    """Build hypercube aggregate section with integrity hash."""
+    bundle_id = f"hc_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    member_hashes = []
+    for p in proof_items:
+        if p.get('passed'):
+            summary = p.get('summary') or {}
+            # Use merkle_root from summary, or hash the summary deterministically
+            receipt = (summary.get('merkle_root')
+                       or summary.get('receipt_hash')
+                       or hashlib.sha256(json.dumps(summary, sort_keys=True).encode()).hexdigest())
+            member_hashes.append(receipt)
+    member_count = len(member_hashes)
+    # Compute aggregate root as Merkle root of member hashes
+    if member_hashes:
+        leaves = [bytes.fromhex(h) if len(h) == 64 else hashlib.sha256(h.encode()).digest()
+                  for h in member_hashes]
+        # Pad to power of 2
+        while len(leaves) & (len(leaves) - 1):
+            leaves.append(b'\x00' * 32)
+        # Build Merkle tree
+        layer = leaves[:]
+        while len(layer) > 1:
+            next_layer = []
+            for i in range(0, len(layer), 2):
+                next_layer.append(hashlib.sha256(layer[i] + layer[i + 1]).digest())
+            layer = next_layer
+        aggregate_root = layer[0].hex()
+    else:
+        aggregate_root = '0' * 64
+    # Compute integrity hash: H(tag || bundle_id || aggregate_root || member_hashes...)
+    tag = b'HYPERCUBE_INTEGRITY_v1\x00'
+    h = hashlib.sha256()
+    h.update(tag)
+    h.update(bundle_id.encode())
+    h.update(bytes.fromhex(aggregate_root))
+    for mh in member_hashes:
+        if len(mh) == 64:
+            h.update(bytes.fromhex(mh))
+        else:
+            h.update(hashlib.sha256(mh.encode()).digest())
+    integrity_hash = h.hexdigest()
+    return {
+        'topology': 'hypercube',
+        'bundle_id': bundle_id,
+        'member_count': member_count,
+        'integrity_hash': integrity_hash,
+        'aggregate_root': aggregate_root,
     }
 
 

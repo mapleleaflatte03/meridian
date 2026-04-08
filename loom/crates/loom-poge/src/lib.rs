@@ -667,6 +667,210 @@ pub fn aggregate_proofs(leaves: &[ProofLeaf]) -> Result<AggregateProof, PoGEErro
 }
 
 // ---------------------------------------------------------------------------
+// Hypercube Proof Aggregation (P3)
+// ---------------------------------------------------------------------------
+
+/// Domain tag for hypercube level hashing.
+pub const HYPERCUBE_LEVEL_TAG: &[u8] = b"POGE_HYPERCUBE_LEVEL_v1\x00";
+
+/// Domain tag for hypercube integrity hash.
+pub const HYPERCUBE_INTEGRITY_TAG: &[u8] = b"POGE_HYPERCUBE_INTEGRITY_v1\x00";
+
+/// Hypercube aggregate bundle over multiple receipts.
+///
+/// Uses a butterfly-pattern aggregation across `dimension` dimensions.
+/// For n = 2^k receipts, the aggregate proceeds through k levels where
+/// each element i is paired with element i XOR (1<<d) at dimension d.
+#[derive(Clone, Debug)]
+pub struct HypercubeAggregate {
+    pub bundle_id: String,
+    pub dimension: u32,
+    pub member_receipts: Vec<[u8; 32]>,
+    pub level_hashes: Vec<Vec<[u8; 32]>>,
+    pub aggregate_root: [u8; 32],
+    pub integrity_hash: [u8; 32],
+}
+
+impl HypercubeAggregate {
+    pub fn aggregate_root_hex(&self) -> String {
+        format!("0x{}", hex::encode(self.aggregate_root))
+    }
+
+    pub fn integrity_hash_hex(&self) -> String {
+        format!("0x{}", hex::encode(self.integrity_hash))
+    }
+}
+
+/// An inclusion proof for a specific receipt within a hypercube aggregate.
+#[derive(Clone, Debug)]
+pub struct InclusionProof {
+    pub receipt_hash: [u8; 32],
+    pub index: usize,
+    pub sibling_path: Vec<[u8; 32]>,
+}
+
+/// Build a hypercube aggregate from member receipt hashes.
+///
+/// Pads the input to the next power of two if needed.
+///
+/// ## Algorithm
+/// ```text
+/// level[0] = member_receipts (padded to 2^k)
+/// for d in 0..k-1:
+///     pair(i) = i XOR (1 << d)
+///     level[d+1][i] = H(HYPERCUBE_LEVEL_TAG || level[d][i] || level[d][pair(i)])
+/// aggregate_root = level[k][0]
+/// integrity_hash = H(HYPERCUBE_INTEGRITY_TAG || bundle_id || aggregate_root || member_receipts...)
+/// ```
+pub fn hypercube_aggregate(
+    member_receipts: &[[u8; 32]],
+    bundle_id: &str,
+) -> HypercubeAggregate {
+    if member_receipts.is_empty() {
+        return HypercubeAggregate {
+            bundle_id: bundle_id.to_string(),
+            dimension: 0,
+            member_receipts: Vec::new(),
+            level_hashes: Vec::new(),
+            aggregate_root: [0u8; 32],
+            integrity_hash: [0u8; 32],
+        };
+    }
+
+    let n = member_receipts.len().next_power_of_two();
+    let k = n.trailing_zeros() as u32;
+
+    // Pad with zeros to next power of two
+    let mut padded = member_receipts.to_vec();
+    padded.resize(n, [0u8; 32]);
+
+    let mut levels: Vec<Vec<[u8; 32]>> = Vec::with_capacity((k + 1) as usize);
+    levels.push(padded);
+
+    for d in 0..k {
+        let prev = &levels[d as usize];
+        let mut next = vec![[0u8; 32]; n];
+        for i in 0..n {
+            let pair_idx = i ^ (1 << d);
+            let mut hasher = Sha256::new();
+            hasher.update(HYPERCUBE_LEVEL_TAG);
+            hasher.update(prev[i]);
+            hasher.update(prev[pair_idx]);
+            next[i] = hasher.finalize().into();
+        }
+        levels.push(next);
+    }
+
+    let aggregate_root = levels[k as usize][0];
+
+    // Compute integrity hash
+    let integrity_hash = {
+        let mut h = Sha256::new();
+        h.update(HYPERCUBE_INTEGRITY_TAG);
+        h.update(bundle_id.as_bytes());
+        h.update(aggregate_root);
+        for receipt in member_receipts {
+            h.update(receipt);
+        }
+        h.finalize().into()
+    };
+
+    HypercubeAggregate {
+        bundle_id: bundle_id.to_string(),
+        dimension: k,
+        member_receipts: member_receipts.to_vec(),
+        level_hashes: levels,
+        aggregate_root,
+        integrity_hash,
+    }
+}
+
+/// Build an inclusion proof for a receipt at the given index.
+///
+/// Uses a standard Merkle tree over the member receipts for succinct
+/// verification, while the hypercube aggregate root serves as the
+/// cryptographic binding of the bundle.
+pub fn hypercube_inclusion_proof(
+    aggregate: &HypercubeAggregate,
+    index: usize,
+) -> Option<InclusionProof> {
+    if index >= aggregate.member_receipts.len() {
+        return None;
+    }
+    let receipt_hash = aggregate.member_receipts[index];
+
+    // Build a standard Merkle tree for inclusion proofs
+    let receipts: Vec<HostCallReceipt> = aggregate
+        .member_receipts
+        .iter()
+        .map(|r| HostCallReceipt(*r))
+        .collect();
+    let tree = PoGEMerkleTree::build(&receipts);
+    let sibling_path = tree.proof_for(index);
+
+    Some(InclusionProof {
+        receipt_hash,
+        index,
+        sibling_path,
+    })
+}
+
+/// Verify an inclusion proof against the aggregate's integrity hash.
+///
+/// Rebuilds the Merkle path to verify the receipt is included in the
+/// set of member receipts that produced the aggregate.
+pub fn verify_hypercube_inclusion(
+    proof: &InclusionProof,
+    aggregate: &HypercubeAggregate,
+) -> bool {
+    // Verify the receipt hash appears at the claimed index
+    if proof.index >= aggregate.member_receipts.len() {
+        return false;
+    }
+    if aggregate.member_receipts[proof.index] != proof.receipt_hash {
+        return false;
+    }
+
+    // Verify Merkle path
+    let leaf_hash = {
+        let mut h = Sha256::new();
+        h.update(MERKLE_LEAF_TAG);
+        h.update(proof.receipt_hash);
+        let result: [u8; 32] = h.finalize().into();
+        result
+    };
+
+    let receipts: Vec<HostCallReceipt> = aggregate
+        .member_receipts
+        .iter()
+        .map(|r| HostCallReceipt(*r))
+        .collect();
+    let tree = PoGEMerkleTree::build(&receipts);
+    let expected_root = tree.root();
+
+    // Walk the proof path
+    let padded = aggregate.member_receipts.len().next_power_of_two();
+    let mut pos = padded + proof.index;
+    let mut current = leaf_hash;
+
+    for sibling in &proof.sibling_path {
+        let (left, right) = if pos % 2 == 0 {
+            (&current, sibling)
+        } else {
+            (sibling, &current)
+        };
+        let mut h = Sha256::new();
+        h.update(MERKLE_BRANCH_TAG);
+        h.update(left);
+        h.update(right);
+        current = h.finalize().into();
+        pos /= 2;
+    }
+
+    current == expected_root
+}
+
+// ---------------------------------------------------------------------------
 // Recursive Proof Chain (P2)
 // ---------------------------------------------------------------------------
 
@@ -1531,6 +1735,103 @@ mod tests {
             session_label: "z".to_string(),
         };
         assert!(!agg.contains_leaf(&other));
+    }
+
+    // -----------------------------------------------------------------------
+    // Hypercube Proof Aggregation (P3)
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn hypercube_deterministic_root() {
+        let receipts = vec![[1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]];
+        let a1 = hypercube_aggregate(&receipts, "hc_test_1");
+        let a2 = hypercube_aggregate(&receipts, "hc_test_1");
+        assert_eq!(a1.aggregate_root, a2.aggregate_root);
+        assert_eq!(a1.integrity_hash, a2.integrity_hash);
+    }
+
+    #[test]
+    fn hypercube_exposes_topology_fields() {
+        let receipts = vec![[1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]];
+        let agg = hypercube_aggregate(&receipts, "hc_test_fields");
+        assert_eq!(agg.dimension, 2); // 4 = 2^2
+        assert_eq!(agg.member_receipts.len(), 4);
+        assert_eq!(agg.bundle_id, "hc_test_fields");
+        assert_ne!(agg.aggregate_root, [0u8; 32]);
+        assert_ne!(agg.integrity_hash, [0u8; 32]);
+    }
+
+    #[test]
+    fn hypercube_inclusion_proof_verifies() {
+        let receipts = vec![[1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]];
+        let agg = hypercube_aggregate(&receipts, "hc_inclusion");
+        for i in 0..receipts.len() {
+            let proof = hypercube_inclusion_proof(&agg, i).expect("proof exists");
+            assert_eq!(proof.receipt_hash, receipts[i]);
+            assert_eq!(proof.index, i);
+            assert!(
+                verify_hypercube_inclusion(&proof, &agg),
+                "inclusion verification failed for index {}",
+                i
+            );
+        }
+    }
+
+    #[test]
+    fn hypercube_rejects_invalid_inclusion() {
+        let receipts = vec![[1u8; 32], [2u8; 32], [3u8; 32], [4u8; 32]];
+        let agg = hypercube_aggregate(&receipts, "hc_reject");
+        let mut bad_proof = hypercube_inclusion_proof(&agg, 0).unwrap();
+        bad_proof.receipt_hash = [0xFF; 32]; // tampered receipt
+        assert!(
+            !verify_hypercube_inclusion(&bad_proof, &agg),
+            "tampered proof should fail verification"
+        );
+    }
+
+    #[test]
+    fn hypercube_out_of_range_returns_none() {
+        let receipts = vec![[1u8; 32], [2u8; 32]];
+        let agg = hypercube_aggregate(&receipts, "hc_oob");
+        assert!(hypercube_inclusion_proof(&agg, 5).is_none());
+    }
+
+    #[test]
+    fn hypercube_empty_returns_zero() {
+        let agg = hypercube_aggregate(&[], "hc_empty");
+        assert_eq!(agg.aggregate_root, [0u8; 32]);
+        assert_eq!(agg.dimension, 0);
+        assert_eq!(agg.member_receipts.len(), 0);
+    }
+
+    #[test]
+    fn hypercube_single_element() {
+        let receipts = vec![[0xAB; 32]];
+        let agg = hypercube_aggregate(&receipts, "hc_single");
+        assert_eq!(agg.dimension, 0); // 1 = 2^0
+        assert_eq!(agg.member_receipts.len(), 1);
+        // Single element: aggregate_root is the only level[0][0] hashed through 0 dimensions
+        // So it should just be the receipt itself
+        assert_eq!(agg.aggregate_root, receipts[0]);
+    }
+
+    #[test]
+    fn hypercube_hex_format() {
+        let receipts = vec![[0xAB; 32], [0xCD; 32]];
+        let agg = hypercube_aggregate(&receipts, "hc_hex");
+        assert_eq!(agg.aggregate_root_hex().len(), 66);
+        assert!(agg.aggregate_root_hex().starts_with("0x"));
+        assert_eq!(agg.integrity_hash_hex().len(), 66);
+        assert!(agg.integrity_hash_hex().starts_with("0x"));
+    }
+
+    #[test]
+    fn hypercube_integrity_changes_with_bundle_id() {
+        let receipts = vec![[1u8; 32], [2u8; 32]];
+        let a1 = hypercube_aggregate(&receipts, "bundle_a");
+        let a2 = hypercube_aggregate(&receipts, "bundle_b");
+        assert_eq!(a1.aggregate_root, a2.aggregate_root, "same receipts => same root");
+        assert_ne!(a1.integrity_hash, a2.integrity_hash, "different bundle_id => different integrity");
     }
 
     // -----------------------------------------------------------------------

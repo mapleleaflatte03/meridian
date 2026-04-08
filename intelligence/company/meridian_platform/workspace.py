@@ -4100,6 +4100,21 @@ def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expi
     }
 
 
+def _aggregate_proof_status():
+    """Collect aggregate proof status from the kernel proof bundle."""
+    try:
+        bundle = _kernel_public_proof_bundle(base_url=None)
+        agg = bundle.get('aggregate') or {}
+        return {
+            'topology': agg.get('topology', 'hypercube'),
+            'bundle_id': agg.get('bundle_id'),
+            'member_count': int(agg.get('member_count', 0)),
+            'integrity_hash': agg.get('integrity_hash'),
+        }
+    except Exception:
+        return {'topology': 'hypercube', 'bundle_id': None, 'member_count': 0, 'integrity_hash': None}
+
+
 def _recursive_proof_status():
     """Collect recursive proof chain status from the Loom runtime."""
     try:
@@ -4282,12 +4297,7 @@ def api_status(context_source='configured_default', institution_context=None):
         'timestamp': _now(),
         'proof': {
             'recursive': _recursive_proof_status(),
-            'aggregate': {
-                'topology': 'none',
-                'bundle_id': None,
-                'member_count': 0,
-                'integrity_hash': None,
-            },
+            'aggregate': _aggregate_proof_status(),
         },
         'marketplace': {
             'mode': 'disabled',
