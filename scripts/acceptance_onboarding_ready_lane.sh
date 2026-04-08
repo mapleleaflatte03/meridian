@@ -28,11 +28,15 @@ fi
 
 echo "[onboarding-lane] bootstrap full stack (skip loom build for fast/portable gate)"
 echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
-MERIDIAN_SKIP_LOOM_BUILD=1 \
-MERIDIAN_AUTO_START_STACK=1 \
-MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
-MERIDIAN_GATEWAY_PORT="${ONBOARDING_GATEWAY_PORT}" \
-./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log
+if ! MERIDIAN_SKIP_LOOM_BUILD=1 \
+  MERIDIAN_AUTO_START_STACK=1 \
+  MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
+  MERIDIAN_GATEWAY_PORT="${ONBOARDING_GATEWAY_PORT}" \
+  ./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log 2>&1; then
+  echo "[onboarding-lane] bootstrap failed; dumping /tmp/meridian_onboarding_bootstrap.log" >&2
+  cat /tmp/meridian_onboarding_bootstrap.log >&2 || true
+  exit 1
+fi
 
 echo "[onboarding-lane] validate bootstrap smoke report"
 python3 - <<'PY'
