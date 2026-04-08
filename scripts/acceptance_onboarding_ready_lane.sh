@@ -80,6 +80,7 @@ python3 - <<'PY'
 import json
 import os
 import time
+import datetime
 from pathlib import Path
 import urllib.request
 import urllib.error
@@ -103,11 +104,42 @@ def get_json(path: str, *, required: bool = True):
         raise RuntimeError(f"API probe failed for {path}: {last_error}")
     return None
 
+def post_json(path: str, payload: dict, *, allow_forbidden: bool = False):
+    body = json.dumps(payload).encode("utf-8")
+    last_error = None
+    for attempt in range(40):
+        request = urllib.request.Request(
+            BASE + path,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            raw = exc.read().decode("utf-8", errors="replace")
+            last_error = RuntimeError(f"{exc.code} {path}: {raw}")
+            if allow_forbidden and exc.code in {401, 403}:
+                return {
+                    "_forbidden": True,
+                    "status_code": exc.code,
+                    "raw": raw,
+                }
+            if exc.code not in {502, 503, 504}:
+                raise last_error
+        except urllib.error.URLError as exc:
+            last_error = exc
+        time.sleep(min(1.0, 0.2 + (0.05 * attempt)))
+    raise RuntimeError(f"POST probe failed for {path}: {last_error}")
+
 status = get_json("/api/status")
 template = get_json("/api/institution/template")
 treasury = get_json("/api/treasury")
 runtime_proof = get_json("/api/runtime-proof", required=False)
+runtime_proof_contract = get_json("/api/runtime-proof-contract", required=False)
 kernel_bundle = get_json("/api/kernel-proof-bundle", required=False)
+agents_payload = get_json("/api/agents")
 
 assert status.get("runtime_id"), status
 slo = status.get("slo") or {}
@@ -124,6 +156,11 @@ assert isinstance(template.get("policy_defaults"), dict), template
 assert treasury.get("balance_usd") is not None, treasury
 assert treasury.get("reserve_floor_usd") is not None, treasury
 
+if isinstance(runtime_proof_contract, dict):
+    contract_block = runtime_proof_contract.get("runtime_proof_contract") or {}
+    assert contract_block.get("proof_chain_status") in {"complete", "partial", "degraded"}, runtime_proof_contract
+    assert contract_block.get("runtime_proof_status") in {"proven", "degraded"}, runtime_proof_contract
+
 if isinstance(runtime_proof, dict):
     assert runtime_proof.get("runtime_id"), runtime_proof
 else:
@@ -137,6 +174,138 @@ if isinstance(kernel_bundle, dict):
 else:
     aggregate = dict((status.get("proof") or {}).get("aggregate") or {})
     assert aggregate.get("bundle_id"), status
+
+agents = []
+if isinstance(agents_payload, dict):
+    if isinstance(agents_payload.get("output"), list):
+        agents = agents_payload["output"]
+    elif isinstance(agents_payload.get("agents"), list):
+        agents = agents_payload["agents"]
+assert agents, agents_payload
+agent_id = str(agents[0].get("id") or "").strip()
+assert agent_id, agents[0]
+
+# Marketplace full-stack smoke: bid -> assign -> settle -> dispute(stay/refund)
+stamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
+bid = post_json(
+    "/api/marketplace/bids",
+    {
+        "agent_id": agent_id,
+        "task_description": f"onboarding-ready-{stamp}",
+        "amount_usd": 0.05,
+        "action_ids": ["acceptance_onboarding_marketplace"],
+    },
+    allow_forbidden=True,
+)
+if bid.get("_forbidden"):
+    marketplace_snapshot = get_json("/api/marketplace")
+    assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
+else:
+    bid_id = str(bid.get("bid_id") or "").strip()
+    assert bid_id, bid
+
+    assignment = post_json("/api/marketplace/assign", {"bid_id": bid_id})
+    reservation_id = str(assignment.get("reservation_id") or "").strip()
+    assert reservation_id, assignment
+
+    settlement = post_json(
+        "/api/marketplace/settle",
+        {
+            "bid_id": bid_id,
+            "proof_receipt": f"proof_onboarding_{stamp}",
+            "reservation_id": reservation_id,
+        },
+    )
+    split = settlement.get("split") or {}
+    total = float(split.get("total_usd") or 0.0)
+    worker = float(split.get("worker_usd") or 0.0)
+    royalty = float(split.get("royalty_usd") or 0.0)
+    assert round(worker + royalty, 4) == round(total, 4), settlement
+
+    opened_dispute = post_json(
+        "/api/marketplace/dispute",
+        {
+            "bid_id": bid_id,
+            "reason": "acceptance_dispute_lifecycle",
+            "action_ids": ["acceptance_onboarding_marketplace_dispute"],
+        },
+    )
+    dispute_id = str(opened_dispute.get("dispute_id") or "").strip()
+    assert dispute_id, opened_dispute
+
+    stayed_dispute = post_json(
+        "/api/marketplace/dispute",
+        {
+            "dispute_id": dispute_id,
+            "decision": "stay",
+            "reservation_id": reservation_id,
+            "court_decision_ref": f"court_acceptance_stay_{stamp}",
+        },
+    )
+    assert (stayed_dispute.get("dispute") or {}).get("decision") == "stay", stayed_dispute
+
+    refunded_dispute = post_json(
+        "/api/marketplace/dispute",
+        {
+            "dispute_id": dispute_id,
+            "decision": "refund",
+            "reservation_id": reservation_id,
+            "court_decision_ref": f"court_acceptance_refund_{stamp}",
+        },
+    )
+    release_status = ((refunded_dispute.get("treasury_release") or {}).get("status") or "").strip().lower()
+    assert release_status in {"released", "refunded"}, refunded_dispute
+
+    marketplace_snapshot = get_json("/api/marketplace")
+    settlements = list(marketplace_snapshot.get("settlements") or [])
+    matching_settlements = [row for row in settlements if row.get("bid_id") == bid_id]
+    assert matching_settlements, marketplace_snapshot
+    assert matching_settlements[-1].get("proof_receipt"), matching_settlements[-1]
+    assert matching_settlements[-1].get("reservation_id") == reservation_id, matching_settlements[-1]
+
+# Dynamic court lifecycle smoke: proposal -> vote -> tally -> activate
+proposal = post_json(
+    "/api/court/proposals",
+    {
+        "title": f"onboarding-court-{stamp}",
+        "rule_text": "onboarding_ready_lane=true",
+    },
+    allow_forbidden=True,
+)
+if proposal.get("_forbidden"):
+    rules = get_json("/api/court/rules")
+    assert isinstance(rules.get("rules"), list), rules
+else:
+    proposal_id = str(proposal.get("proposal_id") or "").strip()
+    assert proposal_id, proposal
+    vote = post_json(
+        "/api/court/vote",
+        {
+            "proposal_id": proposal_id,
+            "vote": "for",
+            "justification": "acceptance lane requires activation lifecycle smoke",
+        },
+    )
+    assert (vote.get("vote") or {}).get("vote") == "for", vote
+    tally = post_json("/api/court/tally", {"proposal_id": proposal_id})
+    assert bool((tally.get("tally") or {}).get("approved")), tally
+    activation = post_json("/api/court/proposals/activate", {"proposal_id": proposal_id})
+    rule_id = str(activation.get("rule_id") or "").strip()
+    assert rule_id, activation
+    rules = get_json("/api/court/rules")
+    active_rules = list(rules.get("rules") or [])
+    assert any((row.get("id") or "") == rule_id for row in active_rules), rules
+
+status_after = get_json("/api/status")
+dynamic = ((status_after.get("court") or {}).get("dynamic") or {})
+assert dynamic.get("ruleset_version") is not None, status_after
+active_rules = dynamic.get("active_rules")
+assert active_rules is not None, status_after
+try:
+    active_rules_count = int(active_rules)
+except (TypeError, ValueError) as exc:
+    raise AssertionError(f"invalid court.dynamic.active_rules: {active_rules!r}") from exc
+assert active_rules_count >= 0, status_after
 
 install_script = (Path("scripts/install-full.sh")).read_text(encoding="utf-8")
 assert "MERIDIAN_VERIFY_ONBOARDING" in install_script, "install-full.sh missing onboarding verification toggle"
