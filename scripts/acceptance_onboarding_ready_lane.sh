@@ -68,7 +68,7 @@ BASE = f"http://127.0.0.1:{os.environ['ONBOARDING_GATEWAY_PORT']}"
 
 def get_json(path: str):
     last_error = None
-    for _attempt in range(20):
+    for attempt in range(60):
         try:
             with urllib.request.urlopen(BASE + path, timeout=20) as response:
                 return json.loads(response.read().decode("utf-8"))
@@ -78,7 +78,7 @@ def get_json(path: str):
                 raise
         except urllib.error.URLError as exc:
             last_error = exc
-        time.sleep(0.4)
+        time.sleep(min(1.0, 0.2 + (0.05 * attempt)))
     raise RuntimeError(f"API probe failed for {path}: {last_error}")
 
 status = get_json("/api/status")
