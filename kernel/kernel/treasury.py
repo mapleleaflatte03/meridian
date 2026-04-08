@@ -197,10 +197,22 @@ def _ensure_runtime_budget_fields(ledger):
 
 
 def _resolve_budget_agent(agent_id, org_id=None):
+    # Prefer institution-scoped lookups, but allow a deterministic fallback
+    # to unscoped resolution when the bound org has no mirrored registry row.
     agent = _registry_get_agent_by_economy_key(agent_id, org_id=org_id)
     if agent:
         return agent
-    return _registry_resolve_agent(agent_id, org_id=org_id)
+    if org_id:
+        agent = _registry_get_agent_by_economy_key(agent_id, org_id=None)
+        if agent:
+            return agent
+
+    resolved = _registry_resolve_agent(agent_id, org_id=org_id)
+    if resolved:
+        return resolved
+    if org_id:
+        return _registry_resolve_agent(agent_id, org_id=None)
+    return None
 
 
 def _registry_get_agent_by_economy_key(agent_id, org_id=None):

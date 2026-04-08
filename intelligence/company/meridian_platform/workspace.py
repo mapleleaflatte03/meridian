@@ -341,19 +341,25 @@ from court import (file_violation, resolve_violation,
                    propose_rule, vote_on_proposal, tally_proposal,
                    activate_rule, get_proposals, get_dynamic_rules,
                    dynamic_court_status)
-from marketplace import (
-    post_bid,
-    assign_bid,
-    settle_bid,
-    cancel_bid,
-    open_dispute,
-    resolve_dispute,
-    get_bids,
-    get_settlements,
-    get_disputes,
-    marketplace_status,
-    marketplace_snapshot,
+# Load workspace marketplace module by absolute file path to avoid import
+# collisions with similarly named kernel modules already present in sys.modules.
+_workspace_marketplace_spec = importlib.util.spec_from_file_location(
+    'meridian_workspace_marketplace',
+    os.path.join(PLATFORM_DIR, 'marketplace.py'),
 )
+_workspace_marketplace_mod = importlib.util.module_from_spec(_workspace_marketplace_spec)
+_workspace_marketplace_spec.loader.exec_module(_workspace_marketplace_mod)
+post_bid = _workspace_marketplace_mod.post_bid
+assign_bid = _workspace_marketplace_mod.assign_bid
+settle_bid = _workspace_marketplace_mod.settle_bid
+cancel_bid = _workspace_marketplace_mod.cancel_bid
+open_dispute = _workspace_marketplace_mod.open_dispute
+resolve_dispute = _workspace_marketplace_mod.resolve_dispute
+get_bids = _workspace_marketplace_mod.get_bids
+get_settlements = _workspace_marketplace_mod.get_settlements
+get_disputes = _workspace_marketplace_mod.get_disputes
+marketplace_status = _workspace_marketplace_mod.marketplace_status
+marketplace_snapshot = _workspace_marketplace_mod.marketplace_snapshot
 from memory_graph import (append_node as memory_append_node,
                           verify_chain as memory_verify_chain,
                           query_nodes as memory_query_nodes,

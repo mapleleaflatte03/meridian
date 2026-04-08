@@ -46,6 +46,32 @@ class TreasuryRegistryCompatTests(unittest.TestCase):
             else:
                 sys.modules.pop('agent_registry', None)
 
+    def test_resolve_budget_agent_falls_back_to_unscoped_lookup_when_org_scope_misses(self):
+        fallback_registry = types.ModuleType('agent_registry')
+
+        def _scoped_lookup(economy_key, org_id=None):
+            if economy_key != 'forge':
+                return None
+            if org_id:
+                return None
+            return {'id': 'agent_forge', 'economy_key': 'forge', 'org_id': 'org_kernel'}
+
+        fallback_registry.get_agent_by_economy_key = _scoped_lookup
+        fallback_registry.resolve_agent = lambda _agent_ref, org_id=None: None
+
+        original_module = sys.modules.get('agent_registry')
+        sys.modules['agent_registry'] = fallback_registry
+        try:
+            resolved = treasury._resolve_budget_agent('forge', org_id='org_runtime')
+            self.assertIsNotNone(resolved)
+            self.assertEqual(resolved['id'], 'agent_forge')
+            self.assertEqual(resolved['economy_key'], 'forge')
+        finally:
+            if original_module is not None:
+                sys.modules['agent_registry'] = original_module
+            else:
+                sys.modules.pop('agent_registry', None)
+
 
 if __name__ == '__main__':
     unittest.main()

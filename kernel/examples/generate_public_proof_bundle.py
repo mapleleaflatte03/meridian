@@ -310,6 +310,31 @@ def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
         'legacy_reference_adapter',
         summarize=_summarize_legacy_reference_proof,
     )
+    live_host_receipt = (
+        _fetch_live_manifest(live_manifest_url)
+        if live_manifest_url else
+        {
+            'included': False,
+            'attempted': False,
+            'route': '',
+            'reason': 'no_live_manifest_url_supplied',
+        }
+    )
+    live_runtime_receipt = (
+        _fetch_live_runtime_proof(
+            live_runtime_proof_url
+            or _derive_sibling_url(live_manifest_url or '', '/api/federation/manifest', '/api/runtime-proof')
+        )
+        if (live_runtime_proof_url or live_manifest_url) else
+        {
+            'included': False,
+            'attempted': False,
+            'route': '',
+            'reason': 'no_live_runtime_proof_url_supplied',
+        }
+    )
+    local_loom_runtime_receipt = _latest_local_runtime_receipt()
+
     return {
         'proof_bundle_version': 4,
         'generated_at': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
@@ -319,30 +344,9 @@ def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
         'execution_settlement_loop_reference': execution_loop,
         'external_settlement_adapter_reference': external_settlement,
         'legacy_reference_adapter_federation': legacy_proof,
-        'live_host_receipt': (
-            _fetch_live_manifest(live_manifest_url)
-            if live_manifest_url else
-            {
-                'included': False,
-                'attempted': False,
-                'route': '',
-                'reason': 'no_live_manifest_url_supplied',
-            }
-        ),
-        'live_runtime_receipt': (
-            _fetch_live_runtime_proof(
-                live_runtime_proof_url
-                or _derive_sibling_url(live_manifest_url or '', '/api/federation/manifest', '/api/runtime-proof')
-            )
-            if (live_runtime_proof_url or live_manifest_url) else
-            {
-                'included': False,
-                'attempted': False,
-                'route': '',
-                'reason': 'no_live_runtime_proof_url_supplied',
-            }
-        ),
-        'local_loom_runtime_receipt': _latest_local_runtime_receipt(),
+        'live_host_receipt': live_host_receipt,
+        'live_runtime_receipt': live_runtime_receipt,
+        'local_loom_runtime_receipt': local_loom_runtime_receipt,
         'not_live_proven': [
             'live multi-host federation between independent deployments',
             'live end-to-end hosted runtime wiring',
@@ -350,11 +354,42 @@ def build_bundle(live_manifest_url=None, live_runtime_proof_url=None):
         ],
         'aggregate': _build_aggregate_section(
             [three_host, handoff_dispatch, execution_loop, external_settlement, legacy_proof],
+            supplemental_members=[
+                {'label': 'live_host_receipt', 'item': live_host_receipt},
+                {'label': 'live_runtime_receipt', 'item': live_runtime_receipt},
+                {'label': 'local_loom_runtime_receipt', 'item': local_loom_runtime_receipt},
+            ],
         ),
     }
 
 
-def _build_aggregate_section(proof_items):
+def _normalize_member_hash(value):
+    candidate = str(value or '').strip().lower()
+    if candidate.startswith('0x'):
+        candidate = candidate[2:]
+    if len(candidate) == 64 and all(ch in '0123456789abcdef' for ch in candidate):
+        return candidate
+    return None
+
+
+def _supplemental_member_hash(label, item):
+    if not isinstance(item, dict) or not item.get('included'):
+        return None
+    body_hash = _normalize_member_hash(item.get('body_sha256'))
+    if body_hash:
+        return body_hash
+    basis = item.get('receipt') or item.get('manifest') or item
+    payload = json.dumps(
+        {
+            'label': str(label or '').strip(),
+            'basis': basis,
+        },
+        sort_keys=True,
+    ).encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _build_aggregate_section(proof_items, supplemental_members=None):
     """Build hypercube aggregate section with integrity hash."""
     bundle_id = f"hc_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     member_hashes = []
@@ -370,6 +405,17 @@ def _build_aggregate_section(proof_items):
             if not isinstance(receipt, str) or len(receipt) != 64:
                 receipt = hashlib.sha256(str(receipt).encode()).hexdigest()
             member_hashes.append(receipt)
+    for entry in supplemental_members or []:
+        label = ''
+        item = None
+        if isinstance(entry, dict):
+            label = entry.get('label', '')
+            item = entry.get('item')
+        else:
+            item = entry
+        supplemental_hash = _supplemental_member_hash(label, item)
+        if supplemental_hash and supplemental_hash not in member_hashes:
+            member_hashes.append(supplemental_hash)
     member_count = len(member_hashes)
     # Compute aggregate root as Merkle root of member hashes (hypercube-padded).
     if member_hashes:
