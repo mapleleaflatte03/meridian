@@ -73,8 +73,16 @@ Endpoints:
   POST /api/court/vote            → Cast a vote on a proposal
   POST /api/court/tally           → Tally votes and determine outcome
   POST /api/court/activate        → Activate an approved rule
-  POST /api/court/proposals       → List proposals (optional status filter)
-  POST /api/court/rules           → List active dynamic rules
+  GET  /api/court/proposals       → List proposals (optional status filter)
+  GET  /api/court/rules           → List active dynamic rules
+  POST /api/court/proposals       → Submit a constitutional rule proposal
+  POST /api/court/proposals/activate → Activate an approved proposal
+  GET  /api/marketplace           → Marketplace summary snapshot
+  GET  /api/marketplace/bids      → Marketplace bids
+  GET  /api/marketplace/settlements → Marketplace settlements
+  GET  /api/marketplace/disputes  → Marketplace disputes
+  POST /api/marketplace/bids      → Create a marketplace bid
+  POST /api/marketplace/dispute   → Open/resolve marketplace dispute
   POST /api/warrants/issue        → Issue a warrant record
   POST /api/warrants/approve      → Approve a warrant for execution
   POST /api/warrants/stay         → Stay a warrant before execution
@@ -191,7 +199,22 @@ WORKSPACE_ORG_ID = (os.environ.get('MERIDIAN_WORKSPACE_ORG_ID') or '').strip() o
 WORKSPACE_AUTH_REQUIRED = os.environ.get('MERIDIAN_WORKSPACE_AUTH_REQUIRED', '').lower() in (
     '1', 'true', 'yes', 'on'
 )
-KERNEL_ROOT = os.environ.get('MERIDIAN_KERNEL_ROOT', '/opt/meridian-kernel')
+
+
+def _resolve_kernel_root():
+    explicit = (os.environ.get('MERIDIAN_KERNEL_ROOT') or '').strip()
+    if explicit:
+        return explicit
+    for candidate in (
+        '/opt/meridian-kernel',
+        '/home/ubuntu/meridian/kernel',
+    ):
+        if os.path.exists(candidate):
+            return candidate
+    return '/opt/meridian-kernel'
+
+
+KERNEL_ROOT = _resolve_kernel_root()
 KERNEL_MODULE_DIR = os.path.join(KERNEL_ROOT, 'kernel')
 KERNEL_RUNTIME_ADAPTER_FILE = os.path.join(KERNEL_ROOT, 'kernel', 'runtime_adapter.py')
 KERNEL_PUBLIC_PROOF_BUNDLE_FILE = os.path.join(KERNEL_ROOT, 'examples', 'generate_public_proof_bundle.py')
@@ -259,6 +282,10 @@ _kernel_treasury_spec = importlib.util.spec_from_file_location(
 _kernel_treasury_mod = importlib.util.module_from_spec(_kernel_treasury_spec)
 _kernel_treasury_spec.loader.exec_module(_kernel_treasury_mod)
 kernel_load_maintainers = _kernel_treasury_mod.load_maintainers
+kernel_reserve_runtime_budget = _kernel_treasury_mod.reserve_runtime_budget
+kernel_commit_runtime_budget = _kernel_treasury_mod.commit_runtime_budget
+kernel_release_runtime_budget = _kernel_treasury_mod.release_runtime_budget
+kernel_refund_runtime_budget = getattr(_kernel_treasury_mod, 'refund_runtime_budget', None)
 kernel_payout_plan_preview_queue_snapshot = _kernel_treasury_mod.payout_plan_preview_queue_snapshot
 kernel_inspect_payout_plan_preview_queue = _kernel_treasury_mod.inspect_payout_plan_preview_queue
 kernel_payout_plan_approval_candidate_queue_snapshot = _kernel_treasury_mod.payout_plan_approval_candidate_queue_snapshot
@@ -314,11 +341,23 @@ from court import (file_violation, resolve_violation,
                    propose_rule, vote_on_proposal, tally_proposal,
                    activate_rule, get_proposals, get_dynamic_rules,
                    dynamic_court_status)
-from marketplace import (post_bid, assign_bid, settle_bid, cancel_bid,
-                         get_bids, get_settlements, marketplace_status)
+from marketplace import (
+    post_bid,
+    assign_bid,
+    settle_bid,
+    cancel_bid,
+    open_dispute,
+    resolve_dispute,
+    get_bids,
+    get_settlements,
+    get_disputes,
+    marketplace_status,
+    marketplace_snapshot,
+)
 from memory_graph import (append_node as memory_append_node,
                           verify_chain as memory_verify_chain,
                           query_nodes as memory_query_nodes,
+                          temporal_query_with_proof as memory_temporal_query_with_proof,
                           chain_head as memory_chain_head,
                           integrity_hash as memory_integrity_hash,
                           temporal_integrity_status)
@@ -4159,7 +4198,15 @@ def _aggregate_proof_status():
 def _recursive_proof_status():
     """Collect recursive proof chain status from the Loom runtime."""
     try:
-        proof = loom_runtime_proof.collect_loom_runtime_proof(include_service_probe=True)
+        proof_agents = [
+            normalize_agent_record(agent)
+            for agent in load_registry().get('agents', {}).values()
+            if agent.get('org_id') in (None, '', WORKSPACE_ORG_ID)
+        ]
+        proof = loom_runtime_proof.collect_loom_runtime_proof(
+            include_service_probe=True,
+            agents=proof_agents or None,
+        )
         rp = proof.get('recursive_proof') or {}
         return {
             'enabled': bool(rp.get('enabled', False)),
@@ -4970,9 +5017,15 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         '/api/admission',
         '/api/session/validate',
         '/api/court',
+        '/api/court/rules',
+        '/api/court/proposals',
         '/api/warrants',
         '/api/commitments',
         '/api/cases',
+        '/api/marketplace',
+        '/api/marketplace/bids',
+        '/api/marketplace/settlements',
+        '/api/marketplace/disputes',
     }
 
     def _json(self, data, status=200):
@@ -5358,7 +5411,15 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         elif path == '/api/alerts':
             return self._json(alerting.alert_queue_snapshot(org_id))
         elif path == '/api/runtime-proof':
-            proof = loom_runtime_proof.collect_loom_runtime_proof(include_service_probe=True)
+            proof_agents = [
+                normalize_agent_record(agent)
+                for agent in load_registry().get('agents', {}).values()
+                if agent.get('org_id') in (None, '', org_id)
+            ]
+            proof = loom_runtime_proof.collect_loom_runtime_proof(
+                include_service_probe=True,
+                agents=proof_agents or None,
+            )
             return self._json(
                 loom_runtime_proof.public_loom_runtime_receipt(
                     proof,
@@ -5366,7 +5427,15 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 )
             )
         elif path == '/api/runtime-proof-contract':
-            proof = loom_runtime_proof.collect_loom_runtime_proof(include_service_probe=True)
+            proof_agents = [
+                normalize_agent_record(agent)
+                for agent in load_registry().get('agents', {}).values()
+                if agent.get('org_id') in (None, '', org_id)
+            ]
+            proof = loom_runtime_proof.collect_loom_runtime_proof(
+                include_service_probe=True,
+                agents=proof_agents or None,
+            )
             return self._json(
                 loom_runtime_proof.public_loom_surface_contract_receipt(
                     proof,
@@ -5446,6 +5515,41 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 'violations': [v for v in records['violations'].values() if v.get('org_id') in (None, '', org_id)],
                 'appeals': [a for a in records['appeals'].values() if a.get('org_id') in (None, '', org_id)],
             })
+        elif path == '/api/court/rules':
+            rules = get_dynamic_rules(org_id=org_id)
+            status = dynamic_court_status(org_id=org_id)
+            return self._json({
+                'ruleset_version': status.get('ruleset_version', 0),
+                'proposal_count': status.get('proposal_count', 0),
+                'active_rules': status.get('active_rules', len(rules)),
+                'pending_proposals': status.get('pending_proposals', 0),
+                'rules': rules,
+                'count': len(rules),
+            })
+        elif path == '/api/court/proposals':
+            status = parse_qs(parsed.query).get('status', [''])[-1].strip() or None
+            proposals = get_proposals(status=status, org_id=org_id)
+            return self._json({'proposals': proposals, 'count': len(proposals)})
+        elif path == '/api/marketplace':
+            return self._json(marketplace_snapshot(org_id=org_id))
+        elif path == '/api/marketplace/bids':
+            query = parse_qs(parsed.query)
+            bids = get_bids(
+                status=(query.get('status', [''])[-1].strip() or None),
+                agent_id=(query.get('agent_id', [''])[-1].strip() or None),
+                org_id=org_id,
+            )
+            return self._json({'bids': bids, 'count': len(bids)})
+        elif path == '/api/marketplace/settlements':
+            settlements = get_settlements(org_id=org_id)
+            return self._json({'settlements': settlements, 'count': len(settlements)})
+        elif path == '/api/marketplace/disputes':
+            query = parse_qs(parsed.query)
+            disputes = get_disputes(
+                status=(query.get('status', [''])[-1].strip() or None),
+                org_id=org_id,
+            )
+            return self._json({'disputes': disputes, 'count': len(disputes)})
         elif path == '/api/warrants':
             include_expired = parse_qs(parsed.query).get('include_expired', ['0'])[-1].lower() in ('1', 'true', 'yes', 'on')
             include_archived = parse_qs(parsed.query).get('include_archived', ['0'])[-1].lower() in ('1', 'true', 'yes', 'on')
@@ -6002,17 +6106,33 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 return self._json({'message': f'Remediation complete: lifted {lifted}',
                                    'lifted': lifted})
 
-            elif path == '/api/court/propose':
+            elif path in ('/api/court/propose', '/api/court/proposals'):
+                # Backward-compatible listing path.
+                if path == '/api/court/proposals' and not any(
+                    key in body for key in ('title', 'rule_text', 'patch')
+                ):
+                    proposals = get_proposals(
+                        status=body.get('status'),
+                        org_id=org_id,
+                    )
+                    return self._json({'proposals': proposals, 'count': len(proposals)})
+                title = str(body.get('title') or '').strip()
+                rule_text = str(body.get('rule_text') or body.get('patch') or '').strip()
+                if not title or not rule_text:
+                    return self._json(
+                        {'error': 'title and rule_text (or patch) are required'},
+                        400,
+                    )
                 proposal_id = propose_rule(
-                    title=body['title'],
+                    title=title,
                     description=body.get('description', ''),
-                    rule_text=body['rule_text'],
-                    proposed_by=by,
+                    rule_text=rule_text,
+                    proposed_by=str(body.get('proposer_id') or by or '').strip() or by,
                     org_id=org_id,
                     action_ids=body.get('action_ids'),
                 )
                 log_event(org_id, by, 'court_rule_proposed', resource=proposal_id,
-                          outcome='success', details={'title': body['title']},
+                          outcome='success', details={'title': title},
                           session_id=_sid)
                 return self._json({'message': f'Proposal submitted: {proposal_id}',
                                    'proposal_id': proposal_id})
@@ -6043,7 +6163,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 return self._json({'message': f'Tally complete for {body["proposal_id"]}',
                                    'tally': tally_result})
 
-            elif path == '/api/court/activate':
+            elif path in ('/api/court/activate', '/api/court/proposals/activate'):
                 rule_id = activate_rule(
                     proposal_id=body['proposal_id'],
                     org_id=org_id,
@@ -6054,18 +6174,17 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 return self._json({'message': f'Rule activated: {rule_id}',
                                    'rule_id': rule_id})
 
-            elif path == '/api/court/proposals':
-                proposals = get_proposals(
-                    status=body.get('status'),
-                    org_id=org_id,
-                )
-                return self._json({'proposals': proposals, 'count': len(proposals)})
-
-            elif path == '/api/court/rules':
-                rules = get_dynamic_rules(org_id=org_id)
-                return self._json({'rules': rules, 'count': len(rules)})
-
-            elif path == '/api/marketplace/bid':
+            elif path in ('/api/marketplace/bid', '/api/marketplace/bids'):
+                # Backward-compatible list behavior when no create payload is provided.
+                if path == '/api/marketplace/bids' and not {
+                    'agent_id', 'task_description'
+                }.issubset(set(body.keys())):
+                    bids = get_bids(
+                        status=body.get('status'),
+                        agent_id=body.get('agent_id'),
+                        org_id=org_id,
+                    )
+                    return self._json({'bids': bids, 'count': len(bids)})
                 bid_id, receipt = post_bid(
                     agent_id=body['agent_id'],
                     task_description=body['task_description'],
@@ -6080,31 +6199,151 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                                    'bid_id': bid_id, 'receipt_hash': receipt})
 
             elif path == '/api/marketplace/assign':
+                snapshot = marketplace_snapshot(org_id=org_id)
+                bids_by_id = {record.get('id'): record for record in snapshot.get('bids', [])}
+                bid = bids_by_id.get(body.get('bid_id'))
+                if not bid:
+                    return self._json({'error': f"Bid not found: {body.get('bid_id')}"}, 404)
+                reserve = kernel_reserve_runtime_budget(
+                    agent_id=str(bid.get('agent_id') or ''),
+                    estimated_cost_usd=float(bid.get('amount_usd') or 0),
+                    org_id=org_id,
+                    action='marketplace_assignment',
+                    resource=str(bid.get('id') or ''),
+                    context={'surface': '/api/marketplace/assign'},
+                )
+                if not bool(reserve.get('allowed')):
+                    return self._json(
+                        {
+                            'error': 'treasury_reserve_denied',
+                            'reason': reserve.get('reason'),
+                            'treasury': reserve.get('budget'),
+                        },
+                        409,
+                    )
+                reservation = reserve.get('reservation') or {}
+                reservation_id = str(reservation.get('reservation_id') or '').strip()
                 assignment_id = assign_bid(
                     bid_id=body['bid_id'],
                     assigned_by=by,
                     org_id=org_id,
+                    reservation_id=reservation_id,
                 )
                 log_event(org_id, by, 'marketplace_bid_assigned', resource=body['bid_id'],
-                          outcome='success', details={'assignment_id': assignment_id},
+                          outcome='success',
+                          details={'assignment_id': assignment_id, 'reservation_id': reservation_id},
                           session_id=_sid)
                 return self._json({'message': f'Bid assigned: {assignment_id}',
-                                   'assignment_id': assignment_id})
+                                   'assignment_id': assignment_id,
+                                   'reservation_id': reservation_id})
 
             elif path == '/api/marketplace/settle':
-                settlement_id, settlement_receipt = settle_bid(
+                snapshot = marketplace_snapshot(org_id=org_id)
+                assignments = [
+                    row for row in snapshot.get('assignments', [])
+                    if row.get('bid_id') == body.get('bid_id')
+                ]
+                reservation_id = str(body.get('reservation_id') or '').strip()
+                if not reservation_id and assignments:
+                    reservation_id = str(assignments[-1].get('reservation_id') or '').strip()
+                settlement_id, settlement_receipt, split = settle_bid(
                     bid_id=body['bid_id'],
                     proof_receipt=body['proof_receipt'],
                     settled_by=by,
                     org_id=org_id,
+                    royalty_share=float(body.get('royalty_share', 0.10)),
+                    reservation_id=reservation_id,
                 )
+                treasury_commit = None
+                if reservation_id:
+                    try:
+                        treasury_commit = kernel_commit_runtime_budget(
+                            reservation_id=reservation_id,
+                            actual_cost_usd=float(split.get('total_usd') or 0),
+                            org_id=org_id,
+                            note='marketplace_settlement',
+                        )
+                    except Exception as exc:
+                        treasury_commit = {'status': 'error', 'reason': str(exc)}
                 log_event(org_id, by, 'marketplace_bid_settled', resource=body['bid_id'],
                           outcome='success',
-                          details={'settlement_id': settlement_id, 'receipt': settlement_receipt},
+                          details={
+                              'settlement_id': settlement_id,
+                              'receipt': settlement_receipt,
+                              'reservation_id': reservation_id,
+                              'split': split,
+                          },
                           session_id=_sid)
                 return self._json({'message': f'Bid settled: {settlement_id}',
                                    'settlement_id': settlement_id,
-                                   'settlement_receipt': settlement_receipt})
+                                   'settlement_receipt': settlement_receipt,
+                                   'split': split,
+                                   'reservation_id': reservation_id or None,
+                                   'treasury_commit': treasury_commit})
+
+            elif path == '/api/marketplace/dispute':
+                decision = str(body.get('decision') or '').strip().lower()
+                dispute_id = str(body.get('dispute_id') or '').strip()
+                if decision and dispute_id:
+                    dispute = resolve_dispute(
+                        dispute_id=dispute_id,
+                        decision=decision,
+                        resolved_by=by,
+                        org_id=org_id,
+                        court_decision_ref=str(body.get('court_decision_ref') or '').strip(),
+                        note=str(body.get('note') or body.get('reason') or '').strip(),
+                    )
+                    reservation_id = str(body.get('reservation_id') or '').strip()
+                    treasury_release = None
+                    if decision in ('stay', 'refund') and reservation_id:
+                        try:
+                            treasury_release = kernel_release_runtime_budget(
+                                reservation_id=reservation_id,
+                                org_id=org_id,
+                                reason=f'marketplace_dispute_{decision}',
+                            )
+                        except Exception as exc:
+                            reason = str(exc)
+                            if (
+                                decision == 'refund'
+                                and kernel_refund_runtime_budget is not None
+                                and 'already committed' in reason.lower()
+                            ):
+                                try:
+                                    treasury_release = kernel_refund_runtime_budget(
+                                        reservation_id=reservation_id,
+                                        org_id=org_id,
+                                        reason='marketplace_dispute_refund',
+                                    )
+                                except Exception as refund_exc:
+                                    treasury_release = {'status': 'error', 'reason': str(refund_exc)}
+                            else:
+                                treasury_release = {'status': 'error', 'reason': reason}
+                    log_event(org_id, by, 'marketplace_dispute_resolved', resource=dispute_id,
+                              outcome='success',
+                              details={'decision': decision, 'reservation_id': reservation_id},
+                              session_id=_sid)
+                    return self._json({
+                        'message': f'Dispute resolved: {dispute_id}',
+                        'dispute': dispute,
+                        'treasury_release': treasury_release,
+                    })
+
+                opened_dispute_id = open_dispute(
+                    bid_id=body['bid_id'],
+                    opened_by=by,
+                    reason=body.get('reason', ''),
+                    org_id=org_id,
+                    action_ids=body.get('action_ids'),
+                )
+                log_event(org_id, by, 'marketplace_dispute_opened', resource=opened_dispute_id,
+                          outcome='success',
+                          details={'bid_id': body['bid_id']},
+                          session_id=_sid)
+                return self._json({
+                    'message': f'Dispute opened: {opened_dispute_id}',
+                    'dispute_id': opened_dispute_id,
+                })
 
             elif path == '/api/marketplace/cancel':
                 cancel_bid(
@@ -6116,14 +6355,6 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 log_event(org_id, by, 'marketplace_bid_cancelled', resource=body['bid_id'],
                           outcome='success', session_id=_sid)
                 return self._json({'message': f'Bid cancelled: {body["bid_id"]}'})
-
-            elif path == '/api/marketplace/bids':
-                bids = get_bids(
-                    status=body.get('status'),
-                    agent_id=body.get('agent_id'),
-                    org_id=org_id,
-                )
-                return self._json({'bids': bids, 'count': len(bids)})
 
             elif path == '/api/marketplace/settlements':
                 settlements = get_settlements(org_id=org_id)
@@ -6153,12 +6384,32 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 })
 
             elif path == '/api/memory/query':
-                nodes = memory_query_nodes(
-                    key=body.get('key'),
-                    tag=body.get('tag'),
-                    org_id=org_id,
-                )
-                return self._json({'nodes': nodes, 'count': len(nodes)})
+                try:
+                    payload = memory_temporal_query_with_proof(
+                        org_id=org_id,
+                        agent_id=body.get('agent_id'),
+                        start_ts=body.get('start_ts'),
+                        end_ts=body.get('end_ts'),
+                    )
+                except ValueError as exc:
+                    message = str(exc)
+                    if message.startswith('memory_integrity_mismatch:'):
+                        return self._json(
+                            {
+                                'error': 'memory_integrity_mismatch',
+                                'detail': message.partition(':')[2] or '',
+                            },
+                            409,
+                        )
+                    raise
+                nodes = payload.get('events', [])
+                if body.get('key'):
+                    nodes = [node for node in nodes if node.get('key') == body.get('key')]
+                if body.get('tag'):
+                    nodes = [node for node in nodes if body.get('tag') in (node.get('tags') or [])]
+                proof = dict(payload.get('proof') or {})
+                proof['selected_count'] = len(nodes)
+                return self._json({'nodes': nodes, 'count': len(nodes), 'proof': proof})
 
             elif path == '/api/memory/head':
                 head = memory_chain_head(org_id=org_id)

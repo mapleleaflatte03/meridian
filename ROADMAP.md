@@ -38,4 +38,22 @@
 - Runtime/memory optimization for long-lived local agents.
 - Institutional/federation extensions only via open RFC path.
 
+## Phase F — Living Institution Surfaces
+
+- Institution status bar on public surfaces sourced from `/api/status`.
+- Court voting chamber wired to dynamic court APIs.
+- Proof explorer wired to recursive + aggregate payloads.
+- Marketplace panel wired to live bid/assign/settle/dispute state.
+
+## Open vs Patent-Candidate Boundaries
+
+- Open by default:
+  - protocol specs
+  - reference code
+  - tests and reproducible benchmark artifacts
+- Patent-candidate topics (investigation only, no lock-in in current repo):
+  - hypercube pairing optimization strategy
+  - adaptive constitutional sanction scoring
+  - royalty-proof binding design
+
 Roadmap updates happen in issues/discussions before implementation.

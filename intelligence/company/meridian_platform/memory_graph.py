@@ -35,6 +35,20 @@ def _now():
     return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
+def _parse_ts(value):
+    if not value:
+        return None
+    if isinstance(value, datetime.datetime):
+        return value
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        return datetime.datetime.strptime(raw, '%Y-%m-%dT%H:%M:%SZ')
+    except ValueError:
+        return None
+
+
 def _graph_path(org_id=None):
     return capsule_path(org_id, 'memory_graph.json')
 
@@ -75,12 +89,20 @@ def _compute_node_hash(prev_hash, key, value_json, timestamp, depth):
     return h.hexdigest()
 
 
-def append_node(key, value, org_id=None, tags=None, action_id=None):
+def append_node(
+    key,
+    value,
+    org_id=None,
+    tags=None,
+    action_id=None,
+    agent_id=None,
+    timestamp=None,
+):
     """Append a memory node to the chain. Returns (node_hash, depth)."""
     graph = _load_graph(org_id)
     prev_hash = graph['head_hash']
     depth = len(graph['nodes'])
-    timestamp = _now()
+    timestamp = str(timestamp or _now())
     value_json = json.dumps(value, sort_keys=True)
 
     node_hash = _compute_node_hash(prev_hash, key, value_json, timestamp, depth)
@@ -92,6 +114,7 @@ def append_node(key, value, org_id=None, tags=None, action_id=None):
         'value': value,
         'depth': depth,
         'timestamp': timestamp,
+        'agent_id': str(agent_id or (value.get('agent_id') if isinstance(value, dict) else '') or ''),
         'tags': tags or [],
         'action_id': action_id or '',
     }
@@ -142,15 +165,65 @@ def verify_chain(org_id=None):
     return True, None
 
 
-def query_nodes(key=None, tag=None, org_id=None):
-    """Query memory nodes by key and/or tag."""
+def query_nodes(key=None, tag=None, org_id=None, agent_id=None, start_ts=None, end_ts=None):
+    """Query memory nodes by key/tag/agent/time range."""
     graph = _load_graph(org_id)
     nodes = graph.get('nodes', [])
     if key:
         nodes = [n for n in nodes if n['key'] == key]
     if tag:
         nodes = [n for n in nodes if tag in n.get('tags', [])]
+    if agent_id:
+        lookup = str(agent_id).strip().lower()
+        nodes = [n for n in nodes if str(n.get('agent_id') or '').strip().lower() == lookup]
+    start_dt = _parse_ts(start_ts)
+    end_dt = _parse_ts(end_ts)
+    if start_dt or end_dt:
+        filtered = []
+        for node in nodes:
+            node_dt = _parse_ts(node.get('timestamp'))
+            if node_dt is None:
+                continue
+            if start_dt and node_dt < start_dt:
+                continue
+            if end_dt and node_dt > end_dt:
+                continue
+            filtered.append(node)
+        nodes = filtered
     return nodes
+
+
+def temporal_query_with_proof(org_id=None, *, agent_id=None, start_ts=None, end_ts=None):
+    """Return timeline query + integrity proof for 'who knew what when' checks."""
+    valid, error_detail = verify_chain(org_id)
+    if not valid:
+        raise ValueError(f'memory_integrity_mismatch:{json.dumps(error_detail, sort_keys=True)}')
+    nodes = query_nodes(
+        org_id=org_id,
+        agent_id=agent_id,
+        start_ts=start_ts,
+        end_ts=end_ts,
+    )
+    graph = _load_graph(org_id)
+    proof_nodes = [
+        {
+            'hash': node.get('hash'),
+            'prev_hash': node.get('prev_hash'),
+            'depth': node.get('depth'),
+            'timestamp': node.get('timestamp'),
+        }
+        for node in nodes
+    ]
+    return {
+        'events': nodes,
+        'proof': {
+            'chain_valid': True,
+            'head_hash': graph.get('head_hash'),
+            'index_version': graph.get('index_version'),
+            'selected_count': len(nodes),
+            'proof_nodes': proof_nodes,
+        },
+    }
 
 
 def chain_head(org_id=None):

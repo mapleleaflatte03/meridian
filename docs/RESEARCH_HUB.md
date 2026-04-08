@@ -12,8 +12,19 @@ This page collects canonical research artifacts for governance and verifiable lo
 - Community routing for RFCs: `docs/COMMUNITY_MAP.md`
 - Research artifacts index: `docs/research/README.md`
 - Recursive PoGE RFC draft: `docs/research/RFC-0001-recursive-poge-aggregation.md`
+- Hypercube RFC draft: `docs/research/RFC-0002-hypercube-proof-aggregation.md`
+- Dynamic Court RFC draft: `docs/research/RFC-0003-dynamic-constitutional-court.md`
+- Marketplace RFC draft: `docs/research/RFC-0004-on-device-verifiable-agent-marketplace.md`
 - Governance runtime baseline benchmark: `docs/research/BENCHMARK-0001-governance-runtime-baseline.md`
+- Hypercube benchmark: `docs/research/BENCHMARK-0002-hypercube-aggregation-latency.md`
+- Dynamic court benchmark: `docs/research/BENCHMARK-0003-dynamic-court-lifecycle.md`
+- Marketplace benchmark: `docs/research/BENCHMARK-0004-marketplace-settlement-dispute.md`
+- Memory integrity benchmark: `docs/research/BENCHMARK-0005-memory-temporal-integrity.md`
 - Sanction/remediation case study: `docs/research/CASE-STUDY-0001-sanction-remediation-loop.md`
+- Hypercube inclusion case study: `docs/research/CASE-STUDY-0002-hypercube-inclusion-verification.md`
+- Dynamic court activation case study: `docs/research/CASE-STUDY-0003-dynamic-court-activation.md`
+- Marketplace dispute case study: `docs/research/CASE-STUDY-0004-marketplace-dispute-resolution.md`
+- Memory mismatch case study: `docs/research/CASE-STUDY-0005-memory-integrity-mismatch.md`
 - Baseline capture script: `scripts/research_capture_baseline.sh`
 - Case-study capture script: `scripts/research_capture_case_study.sh`
 
@@ -61,23 +72,27 @@ curl -fsS http://127.0.0.1:8266/api/status
 
 ## V4 Implementation Summary
 
-All five contract blocks are live and verified:
-
-| Block | Gate | Status | Commit |
-|-------|------|--------|--------|
-| `proof.recursive` | P2 | Recursive chain with deterministic root | `6f3d485` |
-| `proof.aggregate` | P3 | Hypercube topology + Merkle inclusion proofs | `9396429` |
-| `court.dynamic` | P4 | Proposal/vote/tally/activate lifecycle | `6492523` |
-| `marketplace` | P5 | Bid/assign/settle with receipt chain | `f1ed98b` |
-| `memory.temporal_integrity` | Track M | Hash-chained memory graph | `aa1c44e` |
+The V4 contract is validated by gate scripts and route probes, not by static claims.
+Use the commands in this document to verify the current runtime state directly.
 
 ### API Endpoints Added
 
-**Court (P4):** `/api/court/propose`, `/api/court/vote`, `/api/court/tally`, `/api/court/activate`, `/api/court/proposals`, `/api/court/rules`
+**Court (P4):** `/api/court/propose`, `/api/court/vote`, `/api/court/tally`, `/api/court/activate`, `/api/court/proposals`, `/api/court/proposals/activate`, `/api/court/rules`
 
-**Marketplace (P5):** `/api/marketplace/bid`, `/api/marketplace/assign`, `/api/marketplace/settle`, `/api/marketplace/cancel`, `/api/marketplace/bids`, `/api/marketplace/settlements`
+**Marketplace (P5):** `/api/marketplace`, `/api/marketplace/bid`, `/api/marketplace/bids`, `/api/marketplace/assign`, `/api/marketplace/settle`, `/api/marketplace/dispute`, `/api/marketplace/cancel`, `/api/marketplace/settlements`, `/api/marketplace/disputes`
 
 **Memory (Track M):** `/api/memory/append`, `/api/memory/verify`, `/api/memory/query`, `/api/memory/head`
+
+## Moat/IP Split
+
+- Open:
+  - protocol specs and RFCs
+  - reference implementations and tests
+  - reproducible benchmarks and case studies
+- Patent-candidate (documented candidate areas):
+  - hypercube pairing optimization strategy
+  - adaptive court sanction scoring design
+  - royalty-proof binding design for settlement receipts
 
 ### Rust Crate: loom-poge
 

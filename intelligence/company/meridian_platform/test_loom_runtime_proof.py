@@ -86,6 +86,47 @@ class LoomRuntimeProofTests(unittest.TestCase):
         self.assertEqual(mapped[0]['handle_source'], 'runtime_match')
         self.assertEqual(mapped[0]['handle_candidates'], ['main', 'leviathann', 'agent_main'])
 
+    def test_recursive_proof_root_is_deterministic_for_same_input(self):
+        mapped = [
+            {
+                'agent_id': 'agent_atlas',
+                'org_id': 'org_1',
+                'loom_handle': 'atlas',
+                'role': 'researcher',
+            },
+            {
+                'agent_id': 'agent_quill',
+                'org_id': 'org_1',
+                'loom_handle': 'quill',
+                'role': 'writer',
+            },
+        ]
+        with mock.patch.dict('os.environ', {'MERIDIAN_RECURSIVE_POGE_ENABLED': 'true'}):
+            first = proof._build_recursive_proof(mapped)
+            second = proof._build_recursive_proof(list(reversed(mapped)))
+
+        self.assertTrue(first['enabled'])
+        self.assertFalse(first['fallback_mode'])
+        self.assertEqual(first['depth'], 2)
+        self.assertEqual(first['root'], second['root'])
+
+    def test_recursive_proof_fallback_mode_when_disabled(self):
+        mapped = [
+            {
+                'agent_id': 'agent_main',
+                'org_id': 'org_1',
+                'loom_handle': 'leviathann',
+                'role': 'manager',
+            }
+        ]
+        with mock.patch.dict('os.environ', {'MERIDIAN_RECURSIVE_POGE_ENABLED': 'false'}):
+            payload = proof._build_recursive_proof(mapped)
+
+        self.assertFalse(payload['enabled'])
+        self.assertTrue(payload['fallback_mode'])
+        self.assertEqual(payload['depth'], 1)
+        self.assertRegex(payload['root'], r'^[0-9a-f]{64}$')
+
     def test_collect_loom_runtime_proof_combines_health_and_registry_truth(self):
         service_status = json.dumps({
             'running': True,

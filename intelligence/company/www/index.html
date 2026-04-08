@@ -107,6 +107,34 @@
     <span>Research-first</span>
   </div>
 
+  <section id="institution-status" class="reveal">
+    <h2>Institution Status Bar</h2>
+    <p class="section-intro compact-copy">Live institution posture from <code>/api/status</code>. This status bar is the baseline operator view: treasury, court, agents, and latest sanction posture.</p>
+    <div class="institution-status-grid" data-institution-status>
+      <article class="status-chip">
+        <span class="status-label">Treasury balance</span>
+        <strong data-inst-treasury-balance>--</strong>
+        <p data-inst-treasury-note>Awaiting live treasury snapshot.</p>
+      </article>
+      <article class="status-chip">
+        <span class="status-label">Court health</span>
+        <strong data-inst-court-health>--</strong>
+        <p data-inst-court-note>Awaiting dynamic court status.</p>
+      </article>
+      <article class="status-chip">
+        <span class="status-label">Active agents</span>
+        <strong data-inst-agent-count>--</strong>
+        <p data-inst-agent-note>Awaiting runtime proof state.</p>
+      </article>
+      <article class="status-chip">
+        <span class="status-label">Last sanction</span>
+        <strong data-inst-last-sanction>--</strong>
+        <p data-inst-sanction-note>Awaiting sanction feed.</p>
+      </article>
+    </div>
+    <p class="note" data-inst-updated-at>Institution status refreshes every 20 seconds.</p>
+  </section>
+
   <section id="non-goals" class="reveal">
     <h2>Non-Goals</h2>
     <p class="section-intro compact-copy">Meridian is open research infrastructure. The public surface intentionally avoids commercial lock-in patterns.</p>
@@ -172,6 +200,104 @@
     </div>
   </section>
 
+  <section id="court-voting-chamber" class="reveal">
+    <h2>Court Voting Chamber</h2>
+    <p class="section-intro compact-copy">Track constitutional proposals, quorum status, and active ruleset progression from live court APIs.</p>
+    <div class="split-grid">
+      <article class="split-card">
+        <h3>Active constitutional rules</h3>
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rule ID</th>
+                <th>Version</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody data-court-rules-body>
+              <tr><td colspan="3">Loading active rules…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+      <article class="split-card">
+        <h3>Open proposals and tally state</h3>
+        <div class="table-shell">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Proposal</th>
+                <th>State</th>
+                <th>Votes</th>
+              </tr>
+            </thead>
+            <tbody data-court-proposals-body>
+              <tr><td colspan="3">Loading proposals…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </article>
+    </div>
+    <p class="note" data-court-updated-at>Court voting chamber refreshes every 20 seconds.</p>
+  </section>
+
+  <section id="proof-explorer" class="reveal">
+    <h2>Proof Explorer</h2>
+    <p class="section-intro compact-copy">Inspect recursive proof depth, hypercube bundle identity, and inclusion integrity in one view.</p>
+    <div class="proof-explorer-grid" data-proof-explorer>
+      <article class="proof-block">
+        <span class="lane-kicker">Recursive PoGE</span>
+        <h3>Chain root</h3>
+        <p><strong data-proof-recursive-root>--</strong></p>
+        <p class="dim small">depth: <span data-proof-recursive-depth>0</span> · enabled: <span data-proof-recursive-enabled>--</span></p>
+      </article>
+      <article class="proof-block">
+        <span class="lane-kicker">Hypercube aggregate</span>
+        <h3>Bundle</h3>
+        <p><strong data-proof-bundle-id>--</strong></p>
+        <p class="dim small">members: <span data-proof-member-count>0</span> · integrity: <span data-proof-integrity-prefix>--</span></p>
+      </article>
+      <article class="proof-block">
+        <span class="lane-kicker">Inclusion verification</span>
+        <h3>Sample path state</h3>
+        <p><strong data-proof-inclusion-status>--</strong></p>
+        <p class="dim small" data-proof-inclusion-note>Awaiting kernel proof bundle.</p>
+      </article>
+    </div>
+  </section>
+
+  <section id="marketplace-panel" class="reveal">
+    <h2>Marketplace Panel</h2>
+    <p class="section-intro compact-copy">Live on-device marketplace lifecycle: bids, assignments, settlements, and dispute resolution state from <code>/api/marketplace</code>.</p>
+    <div class="metric-strip" data-marketplace-panel>
+      <div class="metric-card">
+        <span class="metric-label">open bids</span>
+        <div class="metric-value" data-market-open-bids>0</div>
+        <p>Awaiting open bid snapshot.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">active assignments</span>
+        <div class="metric-value" data-market-active-assignments>0</div>
+        <p>Assignments with treasury reservation.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">settled</span>
+        <div class="metric-value" data-market-settled>0</div>
+        <p>Settlements with proof-linked receipts.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">open disputes</span>
+        <div class="metric-value" data-market-open-disputes>0</div>
+        <p>Disputes currently waiting court decision.</p>
+      </div>
+    </div>
+    <div class="card small">
+      <p><strong>Latest marketplace event</strong></p>
+      <p class="dim small" data-marketplace-latest-event>Awaiting live marketplace state.</p>
+    </div>
+  </section>
+
   <section id="research-hub" class="reveal">
     <h2>Research Hub</h2>
     <p class="section-intro compact-copy">Use these canonical artifacts to study, reproduce, and extend governance for local agent systems.</p>
@@ -202,6 +328,9 @@
         <div class="lane-tags">
           <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/tree/main/docs/research" target="_blank" rel="noopener">docs/research</a>
           <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0001-recursive-poge-aggregation.md" target="_blank" rel="noopener">RFC-0001</a>
+          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0002-hypercube-proof-aggregation.md" target="_blank" rel="noopener">RFC-0002</a>
+          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0003-dynamic-constitutional-court.md" target="_blank" rel="noopener">RFC-0003</a>
+          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0004-on-device-verifiable-agent-marketplace.md" target="_blank" rel="noopener">RFC-0004</a>
           <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/BENCHMARK-0001-governance-runtime-baseline.md" target="_blank" rel="noopener">BENCHMARK-0001</a>
         </div>
       </div>

@@ -4,12 +4,28 @@ This folder contains reproducible research artifacts for governed local AI agent
 
 ## Contents
 
+### RFC track
+
 - `RFC-0001-recursive-poge-aggregation.md`
-  - Proposal for recursive/aggregated PoGE proofs as an open research track.
+- `RFC-0002-hypercube-proof-aggregation.md`
+- `RFC-0003-dynamic-constitutional-court.md`
+- `RFC-0004-on-device-verifiable-agent-marketplace.md`
+
+### Benchmarks
+
 - `BENCHMARK-0001-governance-runtime-baseline.md`
-  - Reproducible benchmark protocol and baseline metrics contract.
+- `BENCHMARK-0002-hypercube-aggregation-latency.md`
+- `BENCHMARK-0003-dynamic-court-lifecycle.md`
+- `BENCHMARK-0004-marketplace-settlement-dispute.md`
+- `BENCHMARK-0005-memory-temporal-integrity.md`
+
+### Case studies
+
 - `CASE-STUDY-0001-sanction-remediation-loop.md`
-  - End-to-end governance case study: detection -> sanction -> remediation.
+- `CASE-STUDY-0002-hypercube-inclusion-verification.md`
+- `CASE-STUDY-0003-dynamic-court-activation.md`
+- `CASE-STUDY-0004-marketplace-dispute-resolution.md`
+- `CASE-STUDY-0005-memory-integrity-mismatch.md`
 
 ## Contract Blocks (V4)
 
@@ -37,3 +53,15 @@ The `/api/status` endpoint exposes five contract blocks for verifiable governanc
 2. Every claim must define acceptance criteria and rollback caveats.
 3. Artifacts are append-only history for research traceability.
 4. Capture scripts should prefer boundary-stable fields over transient internals.
+
+## Open vs Patent-Candidate Split
+
+- Open research (default):
+  - protocol specs
+  - reference implementations
+  - test harnesses
+  - reproducible benchmarks and case studies
+- Patent-candidate areas (documented, not restricted in this repo):
+  - hypercube pairing optimization strategy
+  - adaptive court sanction scoring policy
+  - royalty-proof binding composition for settlement receipts

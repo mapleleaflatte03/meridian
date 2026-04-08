@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import math
 import os
 import sys
 import unittest
@@ -382,25 +383,29 @@ def _build_aggregate_section(proof_items):
             receipt = (summary.get('merkle_root')
                        or summary.get('receipt_hash')
                        or hashlib.sha256(json.dumps(summary, sort_keys=True).encode()).hexdigest())
+            if isinstance(receipt, str) and receipt.startswith('0x'):
+                receipt = receipt[2:]
+            if not isinstance(receipt, str) or len(receipt) != 64:
+                receipt = hashlib.sha256(str(receipt).encode()).hexdigest()
             member_hashes.append(receipt)
     member_count = len(member_hashes)
-    # Compute aggregate root as Merkle root of member hashes
+    # Compute aggregate root as Merkle root of member hashes (hypercube-padded).
     if member_hashes:
-        leaves = [bytes.fromhex(h) if len(h) == 64 else hashlib.sha256(h.encode()).digest()
-                  for h in member_hashes]
-        # Pad to power of 2
-        while len(leaves) & (len(leaves) - 1):
-            leaves.append(b'\x00' * 32)
-        # Build Merkle tree
-        layer = leaves[:]
-        while len(layer) > 1:
-            next_layer = []
-            for i in range(0, len(layer), 2):
-                next_layer.append(hashlib.sha256(layer[i] + layer[i + 1]).digest())
-            layer = next_layer
-        aggregate_root = layer[0].hex()
+        leaves = [bytes.fromhex(h) for h in member_hashes]
     else:
-        aggregate_root = '0' * 64
+        leaves = []
+    padded_len = max(1, len(leaves))
+    while padded_len & (padded_len - 1):
+        padded_len += 1
+    padded_leaves = leaves + [b'\x00' * 32] * (padded_len - len(leaves))
+    levels = [padded_leaves]
+    while len(levels[-1]) > 1:
+        prev = levels[-1]
+        nxt = []
+        for i in range(0, len(prev), 2):
+            nxt.append(hashlib.sha256(prev[i] + prev[i + 1]).digest())
+        levels.append(nxt)
+    aggregate_root = levels[-1][0].hex() if levels and levels[-1] else ('0' * 64)
     # Compute integrity hash: H(tag || bundle_id || aggregate_root || member_hashes...)
     tag = b'HYPERCUBE_INTEGRITY_v1\x00'
     h = hashlib.sha256()
@@ -408,15 +413,45 @@ def _build_aggregate_section(proof_items):
     h.update(bundle_id.encode())
     h.update(bytes.fromhex(aggregate_root))
     for mh in member_hashes:
-        if len(mh) == 64:
-            h.update(bytes.fromhex(mh))
-        else:
-            h.update(hashlib.sha256(mh.encode()).digest())
+        h.update(bytes.fromhex(mh))
     integrity_hash = h.hexdigest()
+
+    inclusion_proofs = []
+    sample_verified = []
+    for idx, receipt in enumerate(member_hashes):
+        sibling_path = []
+        position = idx
+        for level in levels[:-1]:
+            sibling_idx = position ^ 1
+            sibling_path.append(level[sibling_idx].hex())
+            position //= 2
+        inclusion_proofs.append({
+            'receipt_hash': receipt,
+            'index': idx,
+            'sibling_path': sibling_path,
+        })
+
+        # Verify sample inclusion in-place to avoid metadata-only payload.
+        current = bytes.fromhex(receipt)
+        position = idx
+        for sibling_hex in sibling_path:
+            sibling = bytes.fromhex(sibling_hex)
+            if position % 2 == 0:
+                current = hashlib.sha256(current + sibling).digest()
+            else:
+                current = hashlib.sha256(sibling + current).digest()
+            position //= 2
+        sample_verified.append(current.hex() == aggregate_root)
+
+    dimension = int(math.log2(padded_len)) if padded_len > 0 else 0
     return {
         'topology': 'hypercube',
         'bundle_id': bundle_id,
+        'dimension': dimension,
         'member_count': member_count,
+        'member_receipts': member_hashes,
+        'inclusion_proofs': inclusion_proofs,
+        'inclusion_verified': all(sample_verified) if sample_verified else True,
         'integrity_hash': integrity_hash,
         'aggregate_root': aggregate_root,
     }

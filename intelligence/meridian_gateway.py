@@ -62,7 +62,18 @@ from team_topology import SPECIALIST_KEYS, load_team_topology, sync_loom_team_pr
 from telegram_history import imported_history_context
 import brain_router
 
-KERNEL_DIR = Path("/opt/meridian-kernel/kernel")
+def _resolve_kernel_dir() -> Path:
+    explicit_root = str(os.environ.get("MERIDIAN_KERNEL_ROOT") or "").strip()
+    if explicit_root:
+        return Path(explicit_root) / "kernel"
+    for root in ("/opt/meridian-kernel", "/home/ubuntu/meridian/kernel"):
+        candidate = Path(root) / "kernel"
+        if candidate.exists():
+            return candidate
+    return Path("/opt/meridian-kernel/kernel")
+
+
+KERNEL_DIR = _resolve_kernel_dir()
 _KERNEL_IMPORT_CONFLICTS = (
     "agent_registry",
     "capsule",
@@ -11436,6 +11447,10 @@ class WebAPIAdapter(ChannelAdapter):
                 origin = str(self.headers.get("Origin") or "").strip()
                 if origin == adapter.allowed_origin:
                     return True
+                if not origin:
+                    client_ip = str(getattr(self, "client_address", ("",))[0] or "").strip()
+                    if client_ip in {"127.0.0.1", "::1", "::ffff:127.0.0.1"}:
+                        return True
                 if not origin and self._public_read_allowed(request_path):
                     return True
                 return False
@@ -11463,6 +11478,12 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/institution/template",
                     "/api/treasury",
                     "/api/payouts",
+                    "/api/court/rules",
+                    "/api/court/proposals",
+                    "/api/marketplace",
+                    "/api/marketplace/bids",
+                    "/api/marketplace/settlements",
+                    "/api/marketplace/disputes",
                 }
 
             def _send_cors_headers(self) -> None:
@@ -11645,6 +11666,8 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/commitments",
                     "/api/cases",
                     "/api/court",
+                    "/api/court/rules",
+                    "/api/court/proposals",
                     "/api/admission",
                     "/api/federation",
                     "/api/federation/peers",
@@ -11667,6 +11690,10 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/treasury/accounts",
                     "/api/treasury/funding-sources",
                     "/api/treasury/settlement-adapters",
+                    "/api/marketplace",
+                    "/api/marketplace/bids",
+                    "/api/marketplace/settlements",
+                    "/api/marketplace/disputes",
                 }:
                     proxied = _workspace_api_get_json(proxied_path)
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
@@ -11808,12 +11835,14 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/court/tally",
                     "/api/court/activate",
                     "/api/court/proposals",
+                    "/api/court/proposals/activate",
                     "/api/court/rules",
                     "/api/marketplace/bid",
+                    "/api/marketplace/bids",
                     "/api/marketplace/assign",
                     "/api/marketplace/settle",
+                    "/api/marketplace/dispute",
                     "/api/marketplace/cancel",
-                    "/api/marketplace/bids",
                     "/api/marketplace/settlements",
                     "/api/memory/append",
                     "/api/memory/verify",

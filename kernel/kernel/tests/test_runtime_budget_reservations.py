@@ -117,6 +117,26 @@ class RuntimeBudgetReservationTests(unittest.TestCase):
         self.assertIn("runtime_budget", snapshot)
         self.assertEqual(snapshot["runtime_budget"]["expired_reservation_count"], 1)
 
+    def test_refund_moves_committed_amount_back_to_released_pool(self):
+        reserved = self._reserve(4.0)
+        reservation_id = reserved["reservation"]["reservation_id"]
+        treasury.commit_runtime_budget(
+            reservation_id,
+            3.5,
+            org_id=self.org_id,
+            note="settled_then_disputed",
+        )
+        refunded = treasury.refund_runtime_budget(
+            reservation_id,
+            org_id=self.org_id,
+            reason="court_refund",
+        )
+        self.assertEqual(refunded["status"], "refunded")
+        summary = treasury.budget_reservation_summary(self.org_id)
+        self.assertEqual(summary["refunded_reservation_count"], 1)
+        self.assertAlmostEqual(summary["refunded_usd"], 3.5, places=2)
+        self.assertAlmostEqual(summary["committed_usd"], 0.0, places=2)
+
 
 if __name__ == "__main__":
     unittest.main()

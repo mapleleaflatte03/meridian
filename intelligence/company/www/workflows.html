@@ -68,6 +68,33 @@
 </div>
 
 <div class="container">
+  <section class="reveal compact-status-shell">
+    <h2>Institution Status Bar</h2>
+    <div class="institution-status-grid compact" data-institution-status>
+      <article class="status-chip">
+        <span class="status-label">Treasury</span>
+        <strong data-inst-treasury-balance>--</strong>
+        <p data-inst-treasury-note>Awaiting live treasury snapshot.</p>
+      </article>
+      <article class="status-chip">
+        <span class="status-label">Court</span>
+        <strong data-inst-court-health>--</strong>
+        <p data-inst-court-note>Awaiting dynamic court status.</p>
+      </article>
+      <article class="status-chip">
+        <span class="status-label">Agents</span>
+        <strong data-inst-agent-count>--</strong>
+        <p data-inst-agent-note>Awaiting runtime proof state.</p>
+      </article>
+      <article class="status-chip">
+        <span class="status-label">Last sanction</span>
+        <strong data-inst-last-sanction>--</strong>
+        <p data-inst-sanction-note>Awaiting sanction feed.</p>
+      </article>
+    </div>
+    <p class="note" data-inst-updated-at>Institution status refreshes every 20 seconds.</p>
+  </section>
+
   <h2 class="reveal">Current workflow lanes</h2>
   <div class="feature-grid reveal">
     <article class="feature-card">

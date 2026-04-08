@@ -1387,3 +1387,244 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
   window.setInterval(refreshUsdSurface, 20000);
   window.setInterval(refreshWorkflowAndUsdSurface, 20000);
 })();
+
+(function () {
+  'use strict';
+  var hasInstitutionStatus = document.querySelector('[data-institution-status]');
+  var hasCourtTable = document.querySelector('[data-court-rules-body]') || document.querySelector('[data-court-proposals-body]');
+  var hasProofExplorer = document.querySelector('[data-proof-explorer]');
+  var hasMarketplacePanel = document.querySelector('[data-marketplace-panel]');
+  if (!hasInstitutionStatus && !hasCourtTable && !hasProofExplorer && !hasMarketplacePanel) {
+    return;
+  }
+
+  function safeNumber(value) {
+    var parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function formatUsd(value) {
+    return '$' + safeNumber(value).toFixed(2);
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function setAll(selector, value) {
+    document.querySelectorAll(selector).forEach(function (node) {
+      node.textContent = value;
+    });
+  }
+
+  function toArray(value) {
+    return Array.isArray(value) ? value : [];
+  }
+
+  function firstNonEmpty(values, fallback) {
+    for (var i = 0; i < values.length; i += 1) {
+      var candidate = values[i];
+      if (candidate != null && String(candidate).trim() !== '') {
+        return String(candidate);
+      }
+    }
+    return fallback;
+  }
+
+  async function fetchJson(url) {
+    if (typeof window.__meridianFetchJsonWithTimeout === 'function') {
+      return window.__meridianFetchJsonWithTimeout(url, 7000);
+    }
+    var response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(url + ' returned HTTP ' + response.status);
+    }
+    return response.json();
+  }
+
+  function renderInstitutionStatus(statusPayload, runtimeProofPayload) {
+    var treasury = statusPayload && statusPayload.treasury ? statusPayload.treasury : {};
+    var dynamic = statusPayload && statusPayload.court && statusPayload.court.dynamic ? statusPayload.court.dynamic : {};
+    var proofHealth = runtimeProofPayload && runtimeProofPayload.health ? runtimeProofPayload.health : {};
+    var objectives = toArray(statusPayload && statusPayload.slo && statusPayload.slo.objectives);
+    var sanctionObjective = objectives.find(function (item) {
+      return item && item.name === 'governance_sanction_clean';
+    }) || {};
+    var activeSanctions = safeNumber(sanctionObjective.active_sanctions);
+
+    setAll('[data-inst-treasury-balance]', formatUsd(treasury.balance_usd));
+    setAll(
+      '[data-inst-treasury-note]',
+      'reserve floor ' + formatUsd(treasury.reserve_floor_usd)
+    );
+    setAll(
+      '[data-inst-court-health]',
+      firstNonEmpty([statusPayload && statusPayload.slo && statusPayload.slo.status], 'unknown')
+    );
+    setAll(
+      '[data-inst-court-note]',
+      'rules v' + firstNonEmpty([dynamic.ruleset_version], '0') +
+        ' · proposals ' + firstNonEmpty([dynamic.proposal_count], '0')
+    );
+    setAll(
+      '[data-inst-agent-count]',
+      String(safeNumber(proofHealth.agent_count))
+    );
+    setAll(
+      '[data-inst-agent-note]',
+      firstNonEmpty([proofHealth.status], 'unknown') + ' runtime state'
+    );
+    setAll('[data-inst-last-sanction]', activeSanctions > 0 ? (activeSanctions + ' active') : 'none active');
+    setAll(
+      '[data-inst-sanction-note]',
+      activeSanctions > 0
+        ? 'Court sanctions are active and require remediation.'
+        : 'No active sanctions in the latest governance evaluation.'
+    );
+    setAll('[data-inst-updated-at]', 'Institution status updated ' + new Date().toLocaleString() + '.');
+  }
+
+  function renderCourtRules(rulesPayload) {
+    var body = document.querySelector('[data-court-rules-body]');
+    if (!body) {
+      return;
+    }
+    var rules = toArray(rulesPayload && rulesPayload.rules);
+    if (!rules.length) {
+      body.innerHTML = '<tr><td colspan="3">No active rules returned.</td></tr>';
+      return;
+    }
+    body.innerHTML = rules.map(function (rule) {
+      return '<tr>' +
+        '<td>' + escapeHtml(firstNonEmpty([rule.rule_id, rule.id], 'unknown')) + '</td>' +
+        '<td>' + escapeHtml(firstNonEmpty([rule.version], 'n/a')) + '</td>' +
+        '<td>' + escapeHtml(firstNonEmpty([rule.status], 'active')) + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderCourtProposals(proposalPayload) {
+    var body = document.querySelector('[data-court-proposals-body]');
+    if (!body) {
+      return;
+    }
+    var proposals = toArray(proposalPayload && proposalPayload.proposals);
+    if (!proposals.length) {
+      body.innerHTML = '<tr><td colspan="3">No proposals currently open.</td></tr>';
+      return;
+    }
+    body.innerHTML = proposals.map(function (proposal) {
+      var votes = proposal && proposal.votes ? proposal.votes : {};
+      var yes = safeNumber(votes.approve || votes.yes);
+      var no = safeNumber(votes.reject || votes.no);
+      return '<tr>' +
+        '<td>' + escapeHtml(firstNonEmpty([proposal.title, proposal.proposal_id], 'Untitled proposal')) + '</td>' +
+        '<td>' + escapeHtml(firstNonEmpty([proposal.status], 'draft')) + '</td>' +
+        '<td>' + escapeHtml('yes ' + yes + ' / no ' + no) + '</td>' +
+      '</tr>';
+    }).join('');
+  }
+
+  function renderProofExplorer(statusPayload, kernelBundle) {
+    if (!hasProofExplorer) {
+      return;
+    }
+    var recursive = statusPayload && statusPayload.proof && statusPayload.proof.recursive ? statusPayload.proof.recursive : {};
+    var aggregate = statusPayload && statusPayload.proof && statusPayload.proof.aggregate ? statusPayload.proof.aggregate : {};
+    var bundleAggregate = kernelBundle && kernelBundle.aggregate ? kernelBundle.aggregate : {};
+    var recursiveRoot = firstNonEmpty([recursive.root], 'not-yet-materialized');
+    var inclusionVerified = bundleAggregate.inclusion_verified;
+    var inclusionStatus = inclusionVerified === true ? 'verified' : (inclusionVerified === false ? 'failed' : 'unknown');
+    var inclusionProofs = toArray(bundleAggregate.inclusion_proofs);
+
+    setAll('[data-proof-recursive-root]', recursiveRoot);
+    setAll('[data-proof-recursive-depth]', String(safeNumber(recursive.depth)));
+    setAll('[data-proof-recursive-enabled]', String(Boolean(recursive.enabled)));
+    setAll('[data-proof-bundle-id]', firstNonEmpty([aggregate.bundle_id, bundleAggregate.bundle_id], 'unknown'));
+    setAll('[data-proof-member-count]', String(safeNumber(aggregate.member_count || bundleAggregate.member_count)));
+    setAll('[data-proof-integrity-prefix]', firstNonEmpty([aggregate.integrity_hash, bundleAggregate.integrity_hash], '--').slice(0, 16) + '…');
+    setAll('[data-proof-inclusion-status]', inclusionStatus);
+    setAll(
+      '[data-proof-inclusion-note]',
+      inclusionProofs.length
+        ? ('sample path count ' + inclusionProofs.length + ' from kernel proof bundle')
+        : 'No inclusion paths returned by kernel proof bundle.'
+    );
+  }
+
+  function renderMarketplacePanel(statusPayload, marketplacePayload) {
+    if (!hasMarketplacePanel) {
+      return;
+    }
+    var fromStatus = statusPayload && statusPayload.marketplace ? statusPayload.marketplace : {};
+    var marketState = marketplacePayload && marketplacePayload.status ? marketplacePayload.status : fromStatus;
+    var bids = toArray(marketplacePayload && marketplacePayload.bids);
+    var settlements = toArray(marketplacePayload && marketplacePayload.settlements);
+    var disputes = toArray(marketplacePayload && marketplacePayload.disputes);
+    var latest = (settlements[settlements.length - 1] || disputes[disputes.length - 1] || bids[bids.length - 1] || null);
+    var latestText = latest
+      ? ('Latest ID ' + firstNonEmpty([latest.id], 'unknown') + ' · status ' + firstNonEmpty([latest.status], 'n/a'))
+      : 'No marketplace records yet.';
+
+    setAll('[data-market-open-bids]', String(safeNumber(marketState.open_bids)));
+    setAll('[data-market-active-assignments]', String(safeNumber(marketState.active_assignments)));
+    setAll('[data-market-settled]', String(safeNumber(marketState.settled_count)));
+    setAll('[data-market-open-disputes]', String(safeNumber(marketState.open_disputes)));
+    setAll('[data-marketplace-latest-event]', latestText);
+  }
+
+  async function refreshLivingInstitutionSurface() {
+    var statusPayload = {};
+    var runtimePayload = {};
+    var rulesPayload = {};
+    var proposalsPayload = {};
+    var kernelBundle = {};
+    var marketplacePayload = {};
+    try {
+      statusPayload = await fetchJson('/api/status');
+    } catch (error) {
+      setAll('[data-inst-updated-at]', 'Institution status unavailable: ' + String(error && error.message || 'unknown_error'));
+      return;
+    }
+    try {
+      runtimePayload = await fetchJson('/api/runtime-proof');
+    } catch (_error) {
+      runtimePayload = {};
+    }
+    try {
+      rulesPayload = await fetchJson('/api/court/rules');
+    } catch (_error) {
+      rulesPayload = {};
+    }
+    try {
+      proposalsPayload = await fetchJson('/api/court/proposals');
+    } catch (_error) {
+      proposalsPayload = {};
+    }
+    try {
+      kernelBundle = await fetchJson('/api/kernel-proof-bundle');
+    } catch (_error) {
+      kernelBundle = {};
+    }
+    try {
+      marketplacePayload = await fetchJson('/api/marketplace');
+    } catch (_error) {
+      marketplacePayload = {};
+    }
+
+    renderInstitutionStatus(statusPayload, runtimePayload);
+    renderCourtRules(rulesPayload);
+    renderCourtProposals(proposalsPayload);
+    renderProofExplorer(statusPayload, kernelBundle);
+    renderMarketplacePanel(statusPayload, marketplacePayload);
+    setAll('[data-court-updated-at]', 'Court voting chamber updated ' + new Date().toLocaleString() + '.');
+  }
+
+  refreshLivingInstitutionSurface();
+  window.setInterval(refreshLivingInstitutionSurface, 20000);
+})();

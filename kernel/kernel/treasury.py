@@ -281,6 +281,7 @@ def budget_reservation_summary(org_id=None, *, agent_id=None):
     released_usd = 0.0
     expired_usd = 0.0
     denied_usd = 0.0
+    refunded_usd = 0.0
     for row in rows:
         status = row.get('status', 'unknown')
         status_counts[status] = status_counts.get(status, 0) + 1
@@ -295,6 +296,8 @@ def budget_reservation_summary(org_id=None, *, agent_id=None):
             expired_usd += amount
         elif status == 'denied':
             denied_usd += amount
+        elif status == 'refunded':
+            refunded_usd += float(row.get('actual_cost_usd', amount) or amount)
     runway = get_runway(org_id)
     available = max(0.0, runway - active_reserved_usd)
     return {
@@ -307,11 +310,13 @@ def budget_reservation_summary(org_id=None, *, agent_id=None):
         'released_reservation_count': status_counts.get('released', 0),
         'expired_reservation_count': status_counts.get('expired', 0),
         'denied_reservation_count': status_counts.get('denied', 0),
+        'refunded_reservation_count': status_counts.get('refunded', 0),
         'active_reserved_usd': round(active_reserved_usd, 4),
         'committed_usd': round(committed_usd, 4),
         'released_usd': round(released_usd, 4),
         'expired_usd': round(expired_usd, 4),
         'denied_usd': round(denied_usd, 4),
+        'refunded_usd': round(refunded_usd, 4),
         'runway_usd': round(runway, 4),
         'available_for_reservation_usd': round(available, 4),
         'ledger_runtime_budget_reserved_usd': round(float(treasury.get('runtime_budget_reserved_usd', 0.0) or 0.0), 4),
@@ -935,6 +940,54 @@ def release_runtime_budget(reservation_id, *, org_id=None, reason=''):
         'allowed': True,
         'reservation': reservation,
         'status': 'released',
+        'budget': budget_reservation_summary(effective_org_id, agent_id=reservation.get('agent_id')),
+    }
+
+
+def refund_runtime_budget(reservation_id, *, org_id=None, reason=''):
+    """Refund a committed runtime budget reservation after settlement reversal."""
+    reservation_id = (reservation_id or '').strip()
+    if not reservation_id:
+        raise ValueError('reservation_id is required')
+    store = _load_budget_reservation_store(org_id)
+    reservation = store.get('reservations', {}).get(reservation_id)
+    if not reservation:
+        raise LookupError(f'Budget reservation not found: {reservation_id}')
+    if reservation.get('status') not in ('committed',):
+        raise ValueError(f"Reservation {reservation_id} is not committed (status={reservation.get('status')})")
+
+    effective_org_id = org_id or reservation.get('org_id')
+    amount = float(
+        reservation.get('actual_cost_usd')
+        if reservation.get('actual_cost_usd') is not None
+        else reservation.get('estimated_cost_usd', 0.0)
+    )
+    amount = round(max(0.0, amount), 4)
+
+    reservation['status'] = 'refunded'
+    reservation['released_at'] = _now()
+    reservation['release_reason'] = reason or 'refunded'
+    store['reservations'][reservation_id] = reservation
+    _save_budget_reservation_store(store, effective_org_id)
+
+    _update_runtime_budget_ledger(
+        effective_org_id,
+        committed_delta=-amount,
+        released_delta=amount,
+        active_delta=0,
+    )
+    _append_runtime_budget_audit_event(
+        effective_org_id,
+        reservation.get('agent_id'),
+        'runtime_budget_refunded',
+        reservation,
+        outcome='success',
+        reason=reason or 'refunded',
+    )
+    return {
+        'allowed': True,
+        'reservation': reservation,
+        'status': 'refunded',
         'budget': budget_reservation_summary(effective_org_id, agent_id=reservation.get('agent_id')),
     }
 

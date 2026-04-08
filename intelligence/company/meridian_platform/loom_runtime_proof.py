@@ -9,6 +9,7 @@ into a structured proof object for the current single-host deployment.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import os
 import re
@@ -45,10 +46,19 @@ _HEALTH_TELEGRAM_RE = re.compile(
     r'(?:\s+\((?P<detail2>[^)]+)\))?$'
 )
 RUNTIME_PROOF_CONTRACT_VERSION = "runtime_proof_contract_v1"
+RECURSIVE_CHAIN_TAG = b"POGE_RECURSIVE_v1\x00"
+RECURSIVE_FALLBACK_TAG = b"POGE_SINGLE_FALLBACK_v1\x00"
 
 
 def _now() -> str:
     return _dt.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _sha256(*parts: bytes) -> bytes:
+    hasher = hashlib.sha256()
+    for part in parts:
+        hasher.update(part)
+    return hasher.digest()
 
 
 def _slugify_handle(value: str) -> str:
@@ -141,6 +151,82 @@ def map_governed_agents_to_loom_handles(
             'handle_source': handle_source,
         })
     return mapped
+
+
+def _recursive_proof_enabled() -> bool:
+    raw = str(os.environ.get("MERIDIAN_RECURSIVE_POGE_ENABLED", "true")).strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def _build_recursive_proof(mapped_agents: Iterable[Mapping[str, Any]]) -> Dict[str, Any]:
+    agents = sorted(
+        (dict(agent) for agent in mapped_agents),
+        key=lambda row: (
+            str(row.get("org_id") or ""),
+            str(row.get("agent_id") or ""),
+            str(row.get("loom_handle") or ""),
+        ),
+    )
+    if not agents:
+        return {
+            "enabled": _recursive_proof_enabled(),
+            "depth": 0,
+            "root": None,
+            "fallback_mode": not _recursive_proof_enabled(),
+        }
+
+    enabled = _recursive_proof_enabled()
+    if not enabled:
+        first = agents[0]
+        fallback_root = _sha256(
+            RECURSIVE_FALLBACK_TAG,
+            str(first.get("agent_id") or "").encode("utf-8"),
+            str(first.get("loom_handle") or "").encode("utf-8"),
+            str(first.get("org_id") or "").encode("utf-8"),
+        )
+        return {
+            "enabled": False,
+            "depth": 1,
+            "root": fallback_root.hex(),
+            "fallback_mode": True,
+        }
+
+    prev_hash: Optional[bytes] = None
+    for idx, entry in enumerate(agents):
+        agent_id = str(entry.get("agent_id") or "")
+        org_id = str(entry.get("org_id") or "")
+        handle = str(entry.get("loom_handle") or "")
+        role = str(entry.get("role") or "")
+        action_id = f"agent_binding:{agent_id or handle}"
+        receipt_hash = _sha256(
+            b"RECEIPT_v1\x00",
+            agent_id.encode("utf-8"),
+            handle.encode("utf-8"),
+            role.encode("utf-8"),
+        )
+        warrant_hash = _sha256(
+            b"WARRANT_v1\x00",
+            org_id.encode("utf-8"),
+        )
+        parts = [RECURSIVE_CHAIN_TAG]
+        if prev_hash is not None:
+            parts.append(prev_hash)
+        parts.extend(
+            [
+                receipt_hash,
+                warrant_hash,
+                action_id.encode("utf-8"),
+                int(idx).to_bytes(4, "big"),
+            ]
+        )
+        prev_hash = _sha256(*parts)
+
+    return {
+        "enabled": True,
+        "depth": len(agents),
+        "root": prev_hash.hex() if prev_hash is not None else None,
+        "fallback_mode": False,
+    }
 
 
 def _split_csv_agents(raw: str) -> List[Dict[str, Any]]:
@@ -484,12 +570,7 @@ def collect_loom_runtime_proof(
             'proof_level': 'read_only',
             'generic_runtime_claim': False,
         },
-        'recursive_proof': {
-            'enabled': True,
-            'depth': len(mapped_agents),
-            'root': None,
-            'fallback_mode': False,
-        },
+        'recursive_proof': _build_recursive_proof(mapped_agents),
     }
 
 
