@@ -1,20 +1,41 @@
 # Meridian Roadmap (Public)
 
-## Near-Term
+## Phase A — Foundation Lock
 
-- Harden one-command onboarding and governance smoke checks
-- Keep public surfaces synchronized with runtime/API truth
-- Expand contributor docs and issue triage flow
+- Monorepo as canonical source; archived mirrors stay read-only.
+- Redirect policy enforced for issue/PR/discussion routing.
+- Public wording locked to open-source + research-first boundary.
 
-## Research Track
+## Phase B — Onboarding Contract
 
-- PoGE protocol refinement and RFC process
-- Governance benchmarks (latency, fallback reliability, sanction-path observability)
-- Memory/runtime optimization for long-lived local agents
+- `install-full.sh` + `bootstrap_full.sh` produce ready-to-run local state.
+- Required routes after bootstrap:
+  - `/api/status`
+  - `/api/institution/template`
+  - `/api/treasury`
+  - `/api/runtime-proof`
+  - `/api/kernel-proof-bundle`
+- Gate: `scripts/acceptance_onboarding_ready_lane.sh`
 
-## Advanced Track
+## Phase C — Contributor Experience
 
-- Recursive proof exploration for multi-action settlement
-- Marketplace and institutional governance extensions (open RFC only)
+- Contribution guide, project governance doc, security policy, and templates stay in sync.
+- Acceptance evidence required for merge on governance/runtime/public-surface changes.
+- Community routing remains GitHub-first with explicit escalation paths.
+
+## Phase D — Research Moat
+
+- Publish reproducible RFC/benchmark/case-study artifacts under `docs/research/`.
+- Keep PoGE and governance claims grounded in command evidence and payload traces.
+- Prioritize benchmarked hardening of:
+  - proof settle latency,
+  - fallback success rate,
+  - sanction/remediation observability.
+
+## Phase E — Advanced Research (RFC-Driven)
+
+- Recursive PoGE aggregation experiments.
+- Runtime/memory optimization for long-lived local agents.
+- Institutional/federation extensions only via open RFC path.
 
 Roadmap updates happen in issues/discussions before implementation.

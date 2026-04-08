@@ -7,6 +7,7 @@
 - GitHub Sponsors: https://github.com/sponsors/mapleleaflatte03
 - Telegram (maintainer contact): https://t.me/Enhanhsj
 - Discord: not yet public as canonical support channel (GitHub-first while moderation automation is hardened)
+- Security policy: https://github.com/mapleleaflatte03/meridian/security/policy
 
 ## Channel Intent
 
@@ -21,6 +22,7 @@
 2. Architecture or research proposal -> open Discussion
 3. Ready implementation -> open PR linked to issue/discussion
 4. Security-sensitive report -> private disclosure path (security policy)
+5. Governance/process question -> `docs/PROJECT_GOVERNANCE.md`
 
 ## SLA Baseline
 
@@ -33,3 +35,4 @@
 - Governance-impacting claims must include evidence.
 - Security-sensitive details must use private disclosure flow.
 - Archived mirrors are non-canonical and read-only.
+- Commercial lock-in requests are out of scope for public OSS surfaces.

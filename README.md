@@ -43,6 +43,14 @@ Legacy repositories are archived mirrors:
 - `meridian-intelligence` -> `meridian/intelligence`
 
 Migration details: [`docs/REPO_MIGRATION_MAP.md`](docs/REPO_MIGRATION_MAP.md)
+Mirror archive status: [`docs/MIRROR_ARCHIVE_STATUS.md`](docs/MIRROR_ARCHIVE_STATUS.md)
+Mirror policy check: `./scripts/check_mirror_archive_policy.sh`
+
+## Non-Goals (Locked)
+
+- no paywall gate for core runtime/governance usage
+- no mandatory commercial checkout path in onboarding
+- no closed-source governance module hidden from community review
 
 ## Install Full Stack (One Command)
 
@@ -62,6 +70,10 @@ By default bootstrap initializes institution state, treasury baseline, and court
 - `/api/institution/template`
 - `/api/treasury`
 - `/api/status` + runtime proof readiness
+
+Ready-to-run definition and gate:
+- [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
+- `./scripts/acceptance_onboarding_ready_lane.sh`
 
 ## Quick Visuals
 
@@ -113,8 +125,10 @@ See:
 - Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
 - Community map: [`docs/COMMUNITY_MAP.md`](docs/COMMUNITY_MAP.md)
 - Roadmap: [`ROADMAP.md`](ROADMAP.md)
+- Research artifacts: [`docs/research/README.md`](docs/research/README.md)
 
 Optional support:
 
 - GitHub Sponsors: https://github.com/sponsors/mapleleaflatte03
 - Patreon: https://www.patreon.com/
+- Sustainability policy: [`docs/SUSTAINABILITY.md`](docs/SUSTAINABILITY.md)

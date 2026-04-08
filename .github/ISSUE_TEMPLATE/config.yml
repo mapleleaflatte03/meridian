@@ -3,6 +3,12 @@ contact_links:
   - name: Meridian Discussions
     url: https://github.com/mapleleaflatte03/meridian/discussions
     about: Use discussions for architecture and research proposals.
+  - name: Contribution Guide
+    url: https://github.com/mapleleaflatte03/meridian/blob/main/CONTRIBUTING.md
+    about: Read contribution gates, test policy, and PR expectations.
+  - name: Project Governance
+    url: https://github.com/mapleleaflatte03/meridian/blob/main/docs/PROJECT_GOVERNANCE.md
+    about: Review merge governance and decision model.
   - name: Security Policy
     url: https://github.com/mapleleaflatte03/meridian/security/policy
     about: Report vulnerabilities privately.

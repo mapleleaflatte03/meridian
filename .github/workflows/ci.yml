@@ -12,6 +12,7 @@ jobs:
       loom: ${{ steps.filter.outputs.loom }}
       kernel: ${{ steps.filter.outputs.kernel }}
       intelligence: ${{ steps.filter.outputs.intelligence }}
+      bootstrap: ${{ steps.filter.outputs.bootstrap }}
     steps:
       - uses: actions/checkout@v4
       - id: filter
@@ -24,6 +25,10 @@ jobs:
               - 'kernel/**'
             intelligence:
               - 'intelligence/**'
+            bootstrap:
+              - 'scripts/**'
+              - 'README.md'
+              - 'docs/**'
 
   loom-rust:
     runs-on: ubuntu-latest
@@ -63,5 +68,20 @@ jobs:
         run: |
           cd intelligence
           python3 -m unittest -v test_gateway_brain_router.py
+          ./scripts/acceptance_publish_live_lane.sh
           cd company/meridian_platform
           python3 -m unittest -v test_subscription_service.py
+
+  onboarding-ready-lane:
+    runs-on: ubuntu-latest
+    needs: changes
+    if: needs.changes.outputs.kernel == 'true' || needs.changes.outputs.intelligence == 'true' || needs.changes.outputs.bootstrap == 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Onboarding ready-to-run lane
+        run: |
+          ./scripts/acceptance_onboarding_ready_lane.sh

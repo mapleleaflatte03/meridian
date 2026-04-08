@@ -23,10 +23,11 @@
     "header": [
       "<header class=\"site-header\">",
       "/assets/meridian_mark_flat.svg",
-      "/assets/meridian_wordmark.svg"
+      "/assets/meridian_wordmark.svg",
+      "class=\"nav-cta\""
     ],
     "footer": [
-      "<div class=\"footer\">",
+      "<footer class=\"footer premium-footer\">",
       "/assets/meridian_lockup.svg"
     ],
     "intro": [

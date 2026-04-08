@@ -10,6 +10,10 @@ This page collects canonical research artifacts for governance and verifiable lo
 - Kernel + Loom boundary notes: `kernel/docs/LOOM_SPEC.md`
 - Public roadmap: `ROADMAP.md`
 - Community routing for RFCs: `docs/COMMUNITY_MAP.md`
+- Research artifacts index: `docs/research/README.md`
+- Recursive PoGE RFC draft: `docs/research/RFC-0001-recursive-poge-aggregation.md`
+- Governance runtime baseline benchmark: `docs/research/BENCHMARK-0001-governance-runtime-baseline.md`
+- Sanction/remediation case study: `docs/research/CASE-STUDY-0001-sanction-remediation-loop.md`
 
 ## PoGE + Governance RFC Track
 
@@ -63,5 +67,6 @@ Expected evidence:
 - benchmark notes (`loom/docs/BENCHMARKS.md`)
 - proof-route audits (`/api/runtime-proof`, `/api/kernel-proof-bundle`)
 - governance case studies (incident -> sanction -> remediation traces)
+- RFC history under `docs/research/`
 
 Keep outputs reproducible: include exact commands, payload snippets, and module/commit context.

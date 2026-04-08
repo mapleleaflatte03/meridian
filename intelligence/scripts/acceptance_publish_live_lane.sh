@@ -235,6 +235,7 @@ for path, mode in checks:
             "site-nav",
             "hero",
             "trust-bar",
+            "non-goals",
             "why-meridian",
             "governance-model",
             "research-hub",
@@ -258,6 +259,7 @@ for path, mode in checks:
             assert token in body, f"Missing homepage component token '{token}'"
         # Open-source positioning present
         assert "open-source" in body.lower() or "open source" in body.lower(), "Missing open-source positioning on homepage"
+        assert "No paywall gate" in body, "Missing non-goal copy: No paywall gate"
         assert "Get Started" in body, "Missing 'Get Started' CTA on homepage"
         assert "Local-first" in body, "Missing trust bar copy on homepage"
         assert "Contribute" in body, "Missing contribution link on homepage"
@@ -321,5 +323,8 @@ for path, mode in checks:
         for nav_label in ("Product", "Governance", "Community", "Support", "Docs"):
             assert nav_label in body, f"Missing nav label '{nav_label}' on {path}"
 PY
+
+python3 "${WORKSPACE_DIR}/company/www/scripts/verify_brand_contract.py" --output human >/tmp/meridian_brand_contract_check.txt
+cat /tmp/meridian_brand_contract_check.txt | rg -q "status:         pass"
 
 echo "acceptance_publish_live_lane: PASS"

@@ -20,7 +20,6 @@ require_cmd() {
 }
 
 require_cmd python3
-require_cmd cargo
 require_cmd curl
 
 resolve_kernel_org_id() {
@@ -221,6 +220,7 @@ echo "[bootstrap] Kernel org id: $MERIDIAN_ORG_ID"
 if [ "${MERIDIAN_SKIP_LOOM_BUILD:-0}" = "1" ]; then
   echo "[bootstrap] Skipping Loom build (MERIDIAN_SKIP_LOOM_BUILD=1)"
 else
+  require_cmd cargo
   echo "[bootstrap] Building Loom CLI..."
   (
     cd "$MERIDIAN_LOOM_ROOT"

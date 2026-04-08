@@ -49,6 +49,7 @@ python3 -m unittest -v test_gateway_brain_router.py
 3. Include command evidence (tests/routes/screenshots when relevant).
 4. Keep governance semantics intact: Institution, Agent, Authority, Treasury, Court, PoGE.
 5. No over-claiming in docs/web copy.
+6. Include rollback note for non-trivial behavior changes.
 
 ## Research Contribution Rules
 
@@ -63,4 +64,6 @@ python3 -m unittest -v test_gateway_brain_router.py
 - Roadmap: [`ROADMAP.md`](ROADMAP.md)
 - Research hub: [`docs/RESEARCH_HUB.md`](docs/RESEARCH_HUB.md)
 - Community map: [`docs/COMMUNITY_MAP.md`](docs/COMMUNITY_MAP.md)
+- Project governance: [`docs/PROJECT_GOVERNANCE.md`](docs/PROJECT_GOVERNANCE.md)
+- Security policy: [`SECURITY.md`](SECURITY.md)
 - Sponsors: https://github.com/sponsors/mapleleaflatte03
