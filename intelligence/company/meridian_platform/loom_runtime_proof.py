@@ -172,6 +172,9 @@ def _build_recursive_proof(mapped_agents: Iterable[Mapping[str, Any]]) -> Dict[s
             "enabled": _recursive_proof_enabled(),
             "depth": 0,
             "root": None,
+            "bundle_id": None,
+            "max_depth": 0,
+            "leaf_count": 0,
             "fallback_mode": not _recursive_proof_enabled(),
         }
 
@@ -188,6 +191,9 @@ def _build_recursive_proof(mapped_agents: Iterable[Mapping[str, Any]]) -> Dict[s
             "enabled": False,
             "depth": 1,
             "root": fallback_root.hex(),
+            "bundle_id": f"rp_{fallback_root.hex()[:12]}_d1",
+            "max_depth": 1,
+            "leaf_count": 1,
             "fallback_mode": True,
         }
 
@@ -221,12 +227,49 @@ def _build_recursive_proof(mapped_agents: Iterable[Mapping[str, Any]]) -> Dict[s
         )
         prev_hash = _sha256(*parts)
 
+    root_hex = prev_hash.hex() if prev_hash is not None else None
+    depth = len(agents)
     return {
         "enabled": True,
-        "depth": len(agents),
-        "root": prev_hash.hex() if prev_hash is not None else None,
+        "depth": depth,
+        "root": root_hex,
+        "bundle_id": f"rp_{(root_hex or '0' * 12)[:12]}_d{depth}",
+        "max_depth": depth,
+        "leaf_count": depth,
         "fallback_mode": False,
     }
+
+
+def _fallback_governed_agents_from_health(
+    health_agents: Iterable[Mapping[str, Any]],
+    *,
+    bound_org_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    fallback: List[Dict[str, Any]] = []
+    for entry in health_agents:
+        handle = str(entry.get("handle") or "").strip()
+        if not handle:
+            continue
+        name = str(entry.get("name") or handle).strip()
+        role = str(entry.get("role") or "runtime_agent").strip()
+        fallback.append({
+            "agent_id": f"runtime_{handle}",
+            "agent_name": name,
+            "org_id": bound_org_id,
+            "role": role,
+            "loom_handle": handle,
+            "economy_key": handle,
+            "handle_candidates": [handle],
+            "runtime_binding": {
+                "runtime_id": "loom_native",
+                "runtime_registered": True,
+                "registration_status": "registered",
+                "bound_org_id": bound_org_id,
+            },
+            "has_loom_handle": True,
+            "handle_source": "runtime_health_fallback",
+        })
+    return fallback
 
 
 def _split_csv_agents(raw: str) -> List[Dict[str, Any]]:
@@ -461,6 +504,7 @@ def collect_loom_runtime_proof(
     health_output: Optional[str] = None,
     health_command: Optional[List[str]] = None,
     agents: Optional[Iterable[Mapping[str, Any]]] = None,
+    bound_org_id: Optional[str] = None,
     include_service_probe: bool = False,
     service_probe_command: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
@@ -475,6 +519,11 @@ def collect_loom_runtime_proof(
     health = parse_loom_health(health_output)
     health_handles = {agent.get('handle') for agent in health.get('agents', []) if agent.get('handle')}
     mapped_agents = map_governed_agents_to_loom_handles(agents=agents, runtime_handles=health_handles)
+    if not mapped_agents and health_handles:
+        mapped_agents = _fallback_governed_agents_from_health(
+            health.get("agents", []),
+            bound_org_id=bound_org_id,
+        )
     mapped_handles = {
         entry['loom_handle']
         for entry in mapped_agents
@@ -688,6 +737,9 @@ def public_loom_runtime_receipt(
             'enabled': False,
             'depth': 0,
             'root': None,
+            'bundle_id': None,
+            'max_depth': 0,
+            'leaf_count': 0,
             'fallback_mode': True,
         }),
     }

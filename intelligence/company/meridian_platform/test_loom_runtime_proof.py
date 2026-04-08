@@ -108,7 +108,11 @@ class LoomRuntimeProofTests(unittest.TestCase):
         self.assertTrue(first['enabled'])
         self.assertFalse(first['fallback_mode'])
         self.assertEqual(first['depth'], 2)
+        self.assertEqual(first['leaf_count'], 2)
+        self.assertEqual(first['max_depth'], 2)
+        self.assertTrue(first['bundle_id'].startswith('rp_'))
         self.assertEqual(first['root'], second['root'])
+        self.assertEqual(first['bundle_id'], second['bundle_id'])
 
     def test_recursive_proof_fallback_mode_when_disabled(self):
         mapped = [
@@ -125,7 +129,33 @@ class LoomRuntimeProofTests(unittest.TestCase):
         self.assertFalse(payload['enabled'])
         self.assertTrue(payload['fallback_mode'])
         self.assertEqual(payload['depth'], 1)
+        self.assertEqual(payload['leaf_count'], 1)
+        self.assertEqual(payload['max_depth'], 1)
+        self.assertTrue(payload['bundle_id'].startswith('rp_'))
         self.assertRegex(payload['root'], r'^[0-9a-f]{64}$')
+
+    def test_collect_runtime_proof_falls_back_to_runtime_health_agents(self):
+        with mock.patch.object(proof, 'load_registry', return_value={'agents': {}}):
+            result = proof.collect_loom_runtime_proof(
+                health_output=json.dumps({
+                    'status': 'healthy',
+                    'checks': [
+                        {'level': 'OK', 'label': 'agent_runtime', 'detail': 'profiles=7 agents=leviathann,atlas memory_ready=7/7 session_ready=7/7'},
+                    ],
+                }),
+                agents=[],
+                include_service_probe=False,
+                bound_org_id='org_fallback',
+            )
+
+        self.assertEqual(len(result['governed_agents']), 2)
+        self.assertEqual(result['governed_agents'][0]['handle_source'], 'runtime_health_fallback')
+        self.assertEqual(result['governed_agents'][0]['org_id'], 'org_fallback')
+        self.assertEqual(result['recursive_proof']['depth'], 2)
+        self.assertEqual(result['recursive_proof']['leaf_count'], 2)
+        self.assertEqual(result['recursive_proof']['max_depth'], 2)
+        self.assertTrue(result['recursive_proof']['bundle_id'].startswith('rp_'))
+        self.assertRegex(result['recursive_proof']['root'], r'^[0-9a-f]{64}$')
 
     def test_collect_loom_runtime_proof_combines_health_and_registry_truth(self):
         service_status = json.dumps({

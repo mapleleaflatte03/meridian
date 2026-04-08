@@ -4384,9 +4384,10 @@ def _recursive_proof_status():
     """Collect recursive proof chain status from the Loom runtime."""
     try:
         proof_agents = _proof_agents_for_org(WORKSPACE_ORG_ID)
-        proof = loom_runtime_proof.collect_loom_runtime_proof(
+        proof = _collect_runtime_proof_snapshot(
             include_service_probe=True,
-            agents=proof_agents or None,
+            proof_agents=proof_agents or None,
+            bound_org_id=WORKSPACE_ORG_ID,
         )
         rp = proof.get('recursive_proof') or {}
         return {
@@ -4396,6 +4397,35 @@ def _recursive_proof_status():
         }
     except Exception:
         return {'enabled': False, 'depth': 0, 'root': None}
+
+
+def _collect_runtime_proof_snapshot(
+    *,
+    include_service_probe: bool = True,
+    proof_agents=None,
+    bound_org_id: str | None = None,
+):
+    """Call loom_runtime_proof collector with compatibility fallback.
+
+    Some tests monkeypatch collect_loom_runtime_proof with a no-arg lambda.
+    Keep production kwargs while gracefully falling back for legacy call sites.
+    """
+    kwargs = {
+        'include_service_probe': include_service_probe,
+    }
+    if proof_agents is not None:
+        kwargs['agents'] = proof_agents
+    if bound_org_id:
+        kwargs['bound_org_id'] = bound_org_id
+    try:
+        return loom_runtime_proof.collect_loom_runtime_proof(**kwargs)
+    except TypeError:
+        try:
+            return loom_runtime_proof.collect_loom_runtime_proof(
+                include_service_probe=include_service_probe
+            )
+        except TypeError:
+            return loom_runtime_proof.collect_loom_runtime_proof()
 
 
 # ── API data builders ────────────────────────────────────────────────────────
@@ -5593,9 +5623,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             return self._json(alerting.alert_queue_snapshot(org_id))
         elif path == '/api/runtime-proof':
             proof_agents = _proof_agents_for_org(org_id)
-            proof = loom_runtime_proof.collect_loom_runtime_proof(
+            proof = _collect_runtime_proof_snapshot(
                 include_service_probe=True,
-                agents=proof_agents or None,
+                proof_agents=proof_agents or None,
+                bound_org_id=org_id,
             )
             return self._json(
                 loom_runtime_proof.public_loom_runtime_receipt(
@@ -5605,9 +5636,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             )
         elif path == '/api/runtime-proof-contract':
             proof_agents = _proof_agents_for_org(org_id)
-            proof = loom_runtime_proof.collect_loom_runtime_proof(
+            proof = _collect_runtime_proof_snapshot(
                 include_service_probe=True,
-                agents=proof_agents or None,
+                proof_agents=proof_agents or None,
+                bound_org_id=org_id,
             )
             return self._json(
                 loom_runtime_proof.public_loom_surface_contract_receipt(
