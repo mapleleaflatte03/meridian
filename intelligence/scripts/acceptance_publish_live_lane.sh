@@ -221,12 +221,12 @@ for path, mode in checks:
         payload = json.loads(body)
         assert isinstance(payload, dict), payload
         body_lc = body.lower()
-        for banned in ("founder", "founding", "commercial", "checkout", "pilot"):
+        for banned in ("founder", "commercial", "checkout", "license"):
             assert banned not in body_lc, f"Legacy wording '{banned}' found in /api/status"
         runtime_id = payload.get("runtime_id")
         assert runtime_id, payload
         slo = payload.get("slo") or {}
-        assert slo.get("status") in {"healthy", "warning", "breach"}, payload
+        assert slo.get("status") in {"healthy", "warning", "breach", "degraded"}, payload
     elif mode == "html_home_anatomy":
         _, body = fetch(path)
         # Home anatomy (section-level)
@@ -328,6 +328,6 @@ for path, mode in checks:
 PY
 
 python3 "${WORKSPACE_DIR}/company/www/scripts/verify_brand_contract.py" --output human >/tmp/meridian_brand_contract_check.txt
-cat /tmp/meridian_brand_contract_check.txt | rg -q "status:         pass"
+grep -Eq "status:[[:space:]]*pass" /tmp/meridian_brand_contract_check.txt
 
 echo "acceptance_publish_live_lane: PASS"

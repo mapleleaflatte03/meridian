@@ -51,6 +51,94 @@ print(selected)
 PY
 }
 
+seed_workspace_founding_org() {
+  python3 - <<'PY'
+import os
+import sys
+
+platform_dir = os.path.join(
+    os.environ["MERIDIAN_INTELLIGENCE_ROOT"],
+    "company",
+    "meridian_platform",
+)
+sys.path.insert(0, platform_dir)
+
+from organizations import (  # noqa: E402
+    DEFAULT_POLICY_DEFAULTS,
+    create_org,
+    load_orgs,
+    save_orgs,
+)
+
+orgs = load_orgs()
+organizations = orgs.setdefault("organizations", {})
+founding_org_id = ""
+for oid, org in organizations.items():
+    if (org or {}).get("slug") == "meridian":
+        founding_org_id = oid
+        break
+
+if not founding_org_id:
+    founding_org_id = create_org(
+        name="Meridian",
+        owner_id="user_meridian_5322393870",
+        plan="enterprise",
+    )
+    orgs = load_orgs()
+    organizations = orgs.setdefault("organizations", {})
+
+org = organizations.get(founding_org_id) or {}
+changed = False
+if org.get("slug") != "meridian":
+    org["slug"] = "meridian"
+    changed = True
+if "charter" not in org:
+    org["charter"] = ""
+    changed = True
+
+policy_defaults = dict(DEFAULT_POLICY_DEFAULTS)
+policy_defaults.update(dict(org.get("policy_defaults") or {}))
+if org.get("policy_defaults") != policy_defaults:
+    org["policy_defaults"] = policy_defaults
+    changed = True
+
+expected_treasury = f"capsule://{founding_org_id}/treasury"
+if org.get("treasury_id") != expected_treasury:
+    org["treasury_id"] = expected_treasury
+    changed = True
+
+if org.get("lifecycle_state") not in {"founding", "active", "suspended", "dissolved"}:
+    org["lifecycle_state"] = "active"
+    changed = True
+if "settings" not in org:
+    org["settings"] = {}
+    changed = True
+
+if changed:
+    organizations[founding_org_id] = org
+    save_orgs(orgs)
+
+print(founding_org_id)
+PY
+}
+
+run_workspace_platform_bootstrap() {
+  (
+    cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
+    MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" python3 bootstrap.py >/tmp/meridian_platform_bootstrap.log
+  )
+}
+
+ensure_intelligence_gateway_config() {
+  (
+    cd "${MERIDIAN_INTELLIGENCE_ROOT}"
+    python3 - <<'PY'
+from meridian_config import load_config, save_config
+save_config(load_config(required=False))
+PY
+  )
+}
+
 run_kernel_smoke_check() {
   if [ "${MERIDIAN_SKIP_SMOKE_CHECK:-0}" = "1" ]; then
     echo "[bootstrap] Skipping kernel smoke check (MERIDIAN_SKIP_SMOKE_CHECK=1)"
@@ -159,7 +247,7 @@ status = None
 last_error = None
 while time.time() < deadline:
     try:
-        status = fetch("/api/status", timeout=2.5)
+        status = fetch("/api/status", timeout=8.0)
         break
     except Exception as exc:  # noqa: BLE001
         last_error = exc
@@ -216,6 +304,16 @@ if [ -n "$RESOLVED_KERNEL_ORG_ID" ]; then
   export MERIDIAN_ORG_ID="$RESOLVED_KERNEL_ORG_ID"
 fi
 echo "[bootstrap] Kernel org id: $MERIDIAN_ORG_ID"
+
+WORKSPACE_ORG_ID="$(seed_workspace_founding_org)"
+if [ -n "$WORKSPACE_ORG_ID" ]; then
+  export MERIDIAN_WORKSPACE_ORG_ID="$WORKSPACE_ORG_ID"
+fi
+echo "[bootstrap] Workspace org id: ${MERIDIAN_WORKSPACE_ORG_ID:-<auto>}"
+echo "[bootstrap] Bootstrapping workspace platform state..."
+run_workspace_platform_bootstrap
+echo "[bootstrap] Ensuring intelligence gateway config..."
+ensure_intelligence_gateway_config
 
 if [ "${MERIDIAN_SKIP_LOOM_BUILD:-0}" = "1" ]; then
   echo "[bootstrap] Skipping Loom build (MERIDIAN_SKIP_LOOM_BUILD=1)"

@@ -40,12 +40,38 @@ print(next(iter(orgs.keys()), "local_foundry"))
 PY
 }
 
+resolve_workspace_org_id() {
+  python3 - <<'PY'
+import json
+import os
+
+workspace_root = os.environ["MERIDIAN_INTELLIGENCE_ROOT"]
+path = os.path.join(workspace_root, "company", "meridian_platform", "organizations.json")
+if not os.path.exists(path):
+    print("")
+    raise SystemExit(0)
+
+with open(path, "r", encoding="utf-8") as f:
+    payload = json.load(f)
+orgs = payload.get("organizations") or {}
+for oid, org in orgs.items():
+    if (org or {}).get("slug") == "meridian":
+        print(oid)
+        raise SystemExit(0)
+print(next(iter(orgs.keys()), ""))
+PY
+}
+
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-$(resolve_org_id)}"
-export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$MERIDIAN_ORG_ID}"
+export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$(resolve_workspace_org_id)}"
 
 port_listening() {
   local port="$1"
-  ss -lnt "( sport = :${port} )" 2>/dev/null | rg -q ":${port}\\b"
+  if command -v rg >/dev/null 2>&1; then
+    ss -lnt "( sport = :${port} )" 2>/dev/null | rg -q ":${port}\\b"
+  else
+    ss -lnt "( sport = :${port} )" 2>/dev/null | grep -Eq ":${port}([^0-9]|$)"
+  fi
 }
 
 wait_for_json() {
@@ -63,7 +89,7 @@ deadline = time.time() + timeout_s
 last = None
 while time.time() < deadline:
     try:
-        with urllib.request.urlopen(url, timeout=2.5) as r:
+        with urllib.request.urlopen(url, timeout=min(timeout_s, 8.0)) as r:
             payload = json.loads(r.read().decode("utf-8"))
         print(json.dumps(payload))
         raise SystemExit(0)
@@ -83,9 +109,13 @@ start_workspace_if_needed() {
   echo "[dev-up] starting workspace on :${MERIDIAN_WORKSPACE_PORT}"
   (
     cd "${MERIDIAN_INTELLIGENCE_ROOT}/company/meridian_platform"
+    local org_args=()
+    if [[ -n "${MERIDIAN_WORKSPACE_ORG_ID}" ]]; then
+      org_args=(--org-id "${MERIDIAN_WORKSPACE_ORG_ID}")
+    fi
     MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
     MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
-    nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" --org-id "${MERIDIAN_WORKSPACE_ORG_ID}" \
+    nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" "${org_args[@]}" \
       >"${LOG_DIR}/workspace.log" 2>&1 &
     echo $! > "${PID_DIR}/workspace.pid"
   )

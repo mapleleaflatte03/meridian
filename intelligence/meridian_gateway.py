@@ -36,7 +36,7 @@ from typing import Any
 from meridian_config import load_config
 
 HOST = "127.0.0.1"
-PORT = 8266
+PORT = int(os.environ.get("MERIDIAN_GATEWAY_PORT", "8266") or "8266")
 WORKSPACE_DIR = Path(__file__).resolve().parent
 COMPANY_DIR = WORKSPACE_DIR / "company"
 PLATFORM_DIR = COMPANY_DIR / "meridian_platform"
