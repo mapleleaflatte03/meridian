@@ -103,6 +103,59 @@ class MarketplaceContractTests(unittest.TestCase):
         self.assertEqual(snapshot['status']['open_disputes'], 0)
         self.assertEqual(snapshot['bids'][0]['status'], 'settled')
 
+    def test_dispute_can_refund_after_intermediate_stay(self):
+        bid_id, _receipt = post_bid(
+            agent_id='agent_forge',
+            task_description='verify dispute ladder',
+            amount_usd=3.25,
+            org_id='org_test',
+        )
+        assign_bid(bid_id, assigned_by='owner', org_id='org_test')
+        settle_bid(
+            bid_id=bid_id,
+            proof_receipt='proof_hash_xyz',
+            settled_by='owner',
+            org_id='org_test',
+            royalty_share=0.10,
+        )
+        dispute_id = open_dispute(
+            bid_id=bid_id,
+            opened_by='owner',
+            reason='manual quality hold',
+            org_id='org_test',
+            action_ids=['act_2'],
+        )
+
+        stayed = resolve_dispute(
+            dispute_id=dispute_id,
+            decision='stay',
+            resolved_by='court',
+            org_id='org_test',
+            court_decision_ref='court_decision_hold',
+            note='pending additional review',
+        )
+        self.assertEqual(stayed['status'], 'open')
+        self.assertEqual(stayed['decision'], 'stay')
+
+        refunded = resolve_dispute(
+            dispute_id=dispute_id,
+            decision='refund',
+            resolved_by='court',
+            org_id='org_test',
+            court_decision_ref='court_decision_refund',
+            note='refund approved',
+        )
+        self.assertEqual(refunded['status'], 'resolved')
+        self.assertEqual(refunded['decision'], 'refund')
+
+        snapshot = marketplace_snapshot(org_id='org_test')
+        self.assertEqual(snapshot['status']['open_disputes'], 0)
+        bids = {row['id']: row for row in snapshot['bids']}
+        settlements = [row for row in snapshot['settlements'] if row['bid_id'] == bid_id]
+        self.assertEqual(bids[bid_id]['status'], 'cancelled')
+        self.assertTrue(settlements)
+        self.assertEqual(settlements[-1]['status'], 'refunded')
+
 
 if __name__ == '__main__':
     unittest.main()
