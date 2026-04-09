@@ -275,11 +275,17 @@ _PROTOCOL_DEFAULTS = {
 }
 
 
+_CACHED_DEFAULT_ORG_ID = None
+
 def _default_org_id():
+    global _CACHED_DEFAULT_ORG_ID
+    if _CACHED_DEFAULT_ORG_ID is not None:
+        return _CACHED_DEFAULT_ORG_ID
     try:
         from organizations import load_orgs
         for oid, org in load_orgs().get('organizations', {}).items():
             if org.get('slug') == 'meridian':
+                _CACHED_DEFAULT_ORG_ID = oid
                 return oid
     except Exception:
         pass
@@ -1903,11 +1909,7 @@ def main():
         org_id = args.org_id
         if not org_id:
             try:
-                from organizations import load_orgs
-                for oid, org in load_orgs().get('organizations', {}).items():
-                    if org.get('slug') == 'meridian':
-                        org_id = oid
-                        break
+                org_id = _default_org_id()
             except Exception:
                 pass
         if org_id:
