@@ -106,7 +106,6 @@ except ImportError:
 
 from loom_runtime_discovery import preferred_loom_bin as _shared_preferred_loom_bin
 from loom_runtime_discovery import preferred_loom_root as _shared_preferred_loom_root
-from loom_runtime_discovery import runtime_value as _shared_runtime_value
 from loom_runtime_client import LoomRuntimeContext
 from loom_runtime_client import capability_preflight as _shared_loom_capability_preflight
 from loom_runtime_client import run_capability as _shared_run_loom_capability
