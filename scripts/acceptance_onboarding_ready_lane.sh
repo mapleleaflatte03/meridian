@@ -182,6 +182,38 @@ def post_json(path: str, payload: dict, *, allow_forbidden: bool = False):
         time.sleep(min(1.0, 0.2 + (0.05 * attempt)))
     raise RuntimeError(f"POST probe failed for {path}: {last_error}")
 
+def ensure_treasury_headroom(required_usd: float, *, note: str):
+    def metric(payload: dict, key: str, default: float = 0.0) -> float:
+        value = payload.get(key)
+        if value is None:
+            value = (payload.get("runtime_budget") or {}).get(key)
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return float(default)
+
+    snapshot = get_json("/api/treasury")
+    shortfall = metric(snapshot, "shortfall_usd", 0.0)
+    available = metric(snapshot, "available_for_reservation_usd", 0.0)
+    if shortfall <= 1e-6 and available + 1e-9 >= required_usd:
+        return snapshot
+    topup = round(max(shortfall, required_usd - available, 0.0) + 5.0, 2)
+    contribute = post_json(
+        "/api/treasury/contribute",
+        {
+            "amount": topup,
+            "note": note,
+        },
+    )
+    refreshed = contribute.get("snapshot") if isinstance(contribute, dict) else None
+    if not isinstance(refreshed, dict):
+        refreshed = get_json("/api/treasury")
+    refreshed_available = metric(refreshed, "available_for_reservation_usd", 0.0)
+    refreshed_shortfall = metric(refreshed, "shortfall_usd", 0.0)
+    assert refreshed_shortfall <= 1e-6, refreshed
+    assert refreshed_available + 1e-9 >= required_usd, refreshed
+    return refreshed
+
 status = get_json("/api/status")
 template = get_json("/api/institution/template")
 treasury = get_json("/api/treasury")
@@ -235,6 +267,10 @@ agent_id = str(agents[0].get("id") or "").strip()
 assert agent_id, agents[0]
 
 # Marketplace full-stack smoke: bid -> assign -> settle -> dispute(stay/refund)
+ensure_treasury_headroom(
+    required_usd=0.25,
+    note="acceptance_onboarding_marketplace_headroom",
+)
 stamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
 bid = post_json(
     "/api/marketplace/bids",
