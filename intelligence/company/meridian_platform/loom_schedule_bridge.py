@@ -177,6 +177,8 @@ def _recent_telegram_delivery_duplicate(recipient: str, text: str) -> dict | Non
         cutoff_ms = now_ms - TELEGRAM_OUTBOUND_DEDUP_WINDOW_SECONDS * 1000
     matches = sorted(DELIVERY_DIR.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
     for path in matches:
+        if cutoff_ms > 0 and (path.stat().st_mtime * 1000) < cutoff_ms:
+            break
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
