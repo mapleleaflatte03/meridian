@@ -190,7 +190,7 @@ WORKSPACE_API_GET_TIMEOUT_SECONDS = float(
     os.environ.get("MERIDIAN_WORKSPACE_API_GET_TIMEOUT_SECONDS", "20")
 )
 WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS = float(
-    os.environ.get("MERIDIAN_WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS", "65")
+    os.environ.get("MERIDIAN_WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS", "120")
 )
 WORKSPACE_API_BASE = os.environ.get("MERIDIAN_WORKSPACE_API_BASE", "http://127.0.0.1:18901").rstrip("/")
 WORKSPACE_CREDENTIALS_FILE = Path(
@@ -10400,6 +10400,7 @@ def _workspace_post_timeout_seconds(path: str) -> float:
     heavy_routes = {
         "/api/marketplace/assign",
         "/api/marketplace/settle",
+        "/api/marketplace/dispute",
         "/api/court/proposals",
         "/api/court/vote",
         "/api/court/tally",
