@@ -199,6 +199,10 @@ WORKSPACE_ORG_ID = (os.environ.get('MERIDIAN_WORKSPACE_ORG_ID') or '').strip() o
 WORKSPACE_AUTH_REQUIRED = os.environ.get('MERIDIAN_WORKSPACE_AUTH_REQUIRED', '').lower() in (
     '1', 'true', 'yes', 'on'
 )
+FEDERATION_HTTP_TIMEOUT_SECONDS = max(
+    5.0,
+    float(os.environ.get('MERIDIAN_FEDERATION_HTTP_TIMEOUT_SECONDS', '90') or '90'),
+)
 
 
 def _resolve_kernel_root():
@@ -660,7 +664,7 @@ def _load_kernel_public_proof_builder():
     return getattr(module, 'build_bundle', None)
 
 
-def _kernel_public_proof_bundle(*, base_url=None):
+def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
     builder = _load_kernel_public_proof_builder()
     if builder is None:
         raise RuntimeError(
@@ -668,6 +672,12 @@ def _kernel_public_proof_bundle(*, base_url=None):
         )
     normalized_base = _normalized_public_base_url(base_url)
     internal_base = _normalized_public_base_url(PUBLIC_PROOF_INTERNAL_BASE_URL)
+    if run_reference_proofs is None:
+        run_reference_proofs = (
+            os.environ.get('MERIDIAN_PUBLIC_PROOF_RUN_REFERENCE_PROOFS', '0').strip().lower()
+            in ('1', 'true', 'yes', 'on')
+        )
+    cache_key = f"{normalized_base}::{'full' if run_reference_proofs else 'fast'}"
     now = time.time()
 
     def _decorate_payload(payload, *, cache_state):
@@ -678,6 +688,7 @@ def _kernel_public_proof_bundle(*, base_url=None):
             'bundle_builder': KERNEL_PUBLIC_PROOF_BUNDLE_FILE,
             'public_base_url': normalized_base,
             'internal_base_url': internal_base,
+            'run_reference_proofs': bool(run_reference_proofs),
         })
         enriched['generated_from'] = generated_from
         enriched['public_routes'] = {
@@ -730,7 +741,7 @@ def _kernel_public_proof_bundle(*, base_url=None):
             raw_payload = builder(
                 live_manifest_url=f'{internal_base}/api/federation/manifest',
                 live_runtime_proof_url=f'{internal_base}/api/runtime-proof',
-                run_reference_proofs=False,
+                run_reference_proofs=bool(run_reference_proofs),
             )
         except TypeError:
             raw_payload = builder(
@@ -743,11 +754,11 @@ def _kernel_public_proof_bundle(*, base_url=None):
             'ttl_seconds': PUBLIC_PROOF_CACHE_TTL_SECONDS,
         })
         with _public_kernel_proof_cache_lock:
-            _public_kernel_proof_cache[normalized_base] = {
+            _public_kernel_proof_cache[cache_key] = {
                 'cached_at_epoch': time.time(),
                 'payload': copy.deepcopy(cached_payload),
             }
-            _public_kernel_proof_last_error.pop(normalized_base, None)
+            _public_kernel_proof_last_error.pop(cache_key, None)
         return cached_payload
 
     def _future_done(base_key, future):
@@ -762,17 +773,17 @@ def _kernel_public_proof_bundle(*, base_url=None):
 
     def _ensure_refresh_in_flight():
         with _public_kernel_proof_cache_lock:
-            existing = _public_kernel_proof_build_futures.get(normalized_base)
+            existing = _public_kernel_proof_build_futures.get(cache_key)
             if existing and not existing.done():
                 return existing
             future = _public_kernel_proof_executor.submit(_build_payload)
-            _public_kernel_proof_build_futures[normalized_base] = future
-            future.add_done_callback(lambda done_future, base_key=normalized_base: _future_done(base_key, done_future))
+            _public_kernel_proof_build_futures[cache_key] = future
+            future.add_done_callback(lambda done_future, base_key=cache_key: _future_done(base_key, done_future))
             return future
 
     with _public_kernel_proof_cache_lock:
-        cache_entry = copy.deepcopy(_public_kernel_proof_cache.get(normalized_base))
-        last_error = _public_kernel_proof_last_error.get(normalized_base)
+        cache_entry = copy.deepcopy(_public_kernel_proof_cache.get(cache_key))
+        last_error = _public_kernel_proof_last_error.get(cache_key)
 
     if cache_entry:
         cache_age = max(0.0, now - float(cache_entry.get('cached_at_epoch', 0.0)))
@@ -808,7 +819,7 @@ def _kernel_public_proof_bundle(*, base_url=None):
         )
     except Exception as exc:
         with _public_kernel_proof_cache_lock:
-            _public_kernel_proof_last_error[normalized_base] = f'{type(exc).__name__}: {exc}'
+            _public_kernel_proof_last_error[cache_key] = f'{type(exc).__name__}: {exc}'
         return _placeholder_payload(
             f'public_bundle_build_failed: {type(exc).__name__}',
             cache_state='error_fallback',
@@ -3627,7 +3638,7 @@ def _archive_delivery_with_witness_peers(bound_org_id, authority, delivery, payl
                 headers={'Content-Type': 'application/json'},
                 method='POST',
             )
-            with urllib_request.urlopen(request, timeout=10) as response:
+            with urllib_request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
                 archive_response = json.loads(response.read().decode('utf-8') or '{}')
             archive_record = archive_response.get('archive') or {}
             if not isinstance(archive_record, dict) or not archive_record.get('archive_id'):
@@ -5689,9 +5700,19 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 )
             )
         elif path == '/api/kernel-proof-bundle':
+            query = parse_qs(parsed.query)
+            mode = (query.get('mode', [''])[-1] or '').strip().lower()
+            full = (query.get('full', ['0'])[-1] or '').strip().lower() in ('1', 'true', 'yes', 'on')
+            if full or mode in ('full', 'reference', 'live'):
+                run_reference_proofs = True
+            elif mode in ('fast', 'cache'):
+                run_reference_proofs = False
+            else:
+                run_reference_proofs = None
             return self._json(_normalize_public_payload_wording(
                 _kernel_public_proof_bundle(
                     base_url=_request_public_base_url(self),
+                    run_reference_proofs=run_reference_proofs,
                 )
             ))
         elif path == '/api/admission':
@@ -8451,6 +8472,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 transport = body.get('transport', 'http').strip()
                 endpoint_url = body.get('endpoint_url', '').strip()
                 label = body.get('label', '').strip()
+                shared_secret = body.get('shared_secret', '').strip()
                 if not peer_host_id or not peer_org_id:
                     return self._json({'error': 'peer_host_id and peer_org_id are required'}, 400)
                 result = _commonwealth.link_federation_peer(
@@ -8460,6 +8482,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     transport=transport,
                     endpoint_url=endpoint_url,
                     label=label,
+                    shared_secret=shared_secret,
                 )
                 log_event(org_id, by, 'commonwealth_federation_link', resource=peer_host_id,
                           outcome='success', details=result, session_id=_sid)
@@ -8469,11 +8492,36 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 peer_org_id = body.get('peer_org_id', '').strip()
                 agent_id = body.get('agent_id', '').strip()
                 task_desc = body.get('task_description', '').strip()
-                amount = float(body.get('amount_usd', 0))
-                royalty = float(body.get('royalty_rate', 0.10))
+                try:
+                    amount = float(body.get('amount_usd', 0))
+                    royalty = float(body.get('royalty_rate', 0.10))
+                except (TypeError, ValueError):
+                    return self._json({'error': 'amount_usd and royalty_rate must be numeric'}, 400)
                 action_ids = body.get('action_ids') or []
+                reservation_note = body.get('reservation_note', '').strip()
                 if not peer_org_id or not agent_id:
                     return self._json({'error': 'peer_org_id and agent_id are required'}, 400)
+                if amount <= 0:
+                    return self._json({'error': 'amount_usd must be positive'}, 400)
+                reserve = kernel_reserve_runtime_budget(
+                    agent_id=agent_id,
+                    estimated_cost_usd=amount,
+                    org_id=org_id,
+                    action='commonwealth_settlement_prepare',
+                    resource=f'cw_prepare:{peer_org_id}:{agent_id}',
+                    context={'surface': '/api/commonwealth/settlement/prepare'},
+                )
+                if not bool(reserve.get('allowed')):
+                    return self._json(
+                        {
+                            'error': 'treasury_reserve_denied',
+                            'reason': reserve.get('reason'),
+                            'treasury': reserve.get('budget'),
+                        },
+                        409,
+                    )
+                reservation = reserve.get('reservation') or {}
+                reservation_id = str(reservation.get('reservation_id') or '').strip()
                 result = _commonwealth.prepare_settlement(
                     org_id,
                     peer_org_id=peer_org_id,
@@ -8482,7 +8530,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     amount_usd=amount,
                     royalty_rate=royalty,
                     action_ids=action_ids,
+                    reservation_id=reservation_id,
+                    reservation_note=reservation_note,
                 )
+                result['treasury_reserve'] = reserve
                 log_event(org_id, by, 'commonwealth_settlement_prepare',
                           resource=result.get('settlement_id', ''),
                           outcome='success', details=result, session_id=_sid)
@@ -8494,11 +8545,90 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 warrant_ref = body.get('warrant_ref', '').strip()
                 if not settlement_id:
                     return self._json({'error': 'settlement_id is required'}, 400)
+                live_proof_refs = []
+                try:
+                    recursive = _recursive_proof_status()
+                    if recursive.get('root'):
+                        live_proof_refs.append(recursive.get('root'))
+                except Exception:
+                    pass
+                try:
+                    aggregate = _aggregate_proof_status()
+                    if aggregate.get('integrity_hash'):
+                        live_proof_refs.append(aggregate.get('integrity_hash'))
+                except Exception:
+                    pass
+                try:
+                    fed_bundle = _commonwealth.get_federated_proof_bundle(org_id)
+                    fed_aggregate = fed_bundle.get('aggregate') or {}
+                    if fed_aggregate.get('integrity_hash'):
+                        live_proof_refs.append(fed_aggregate.get('integrity_hash'))
+                except Exception:
+                    pass
                 result = _commonwealth.commit_settlement(
                     org_id, settlement_id,
                     proof_receipt=proof_receipt,
                     warrant_ref=warrant_ref,
+                    proof_receipt_refs=live_proof_refs,
                 )
+                reservation_id = str(result.get('reservation_id') or '').strip()
+                is_idempotent_commit = bool(result.get('idempotent'))
+                treasury_commit = None
+                if reservation_id and not is_idempotent_commit:
+                    try:
+                        treasury_commit = kernel_commit_runtime_budget(
+                            reservation_id=reservation_id,
+                            actual_cost_usd=float((result.get('split') or {}).get('total_usd') or 0.0),
+                            org_id=org_id,
+                            note='commonwealth_settlement_commit',
+                        )
+                    except Exception as exc:
+                        reason = str(exc)
+                        rollback = _commonwealth.refund_settlement(
+                            org_id,
+                            settlement_id,
+                            reason='treasury_commit_failed',
+                            court_decision_ref='system:treasury_commit_failed',
+                        )
+                        treasury_rollback = None
+                        try:
+                            treasury_rollback = kernel_release_runtime_budget(
+                                reservation_id=reservation_id,
+                                org_id=org_id,
+                                reason='commonwealth_commit_rollback',
+                            )
+                        except Exception as release_exc:
+                            release_reason = str(release_exc)
+                            if (
+                                kernel_refund_runtime_budget is not None
+                                and 'already committed' in release_reason.lower()
+                            ):
+                                try:
+                                    treasury_rollback = kernel_refund_runtime_budget(
+                                        reservation_id=reservation_id,
+                                        org_id=org_id,
+                                        reason='commonwealth_commit_rollback_refund',
+                                    )
+                                except Exception as refund_exc:
+                                    treasury_rollback = {'status': 'error', 'reason': str(refund_exc)}
+                            else:
+                                treasury_rollback = {'status': 'error', 'reason': release_reason}
+                        return self._json(
+                            {
+                                'error': 'treasury_commit_failed',
+                                'reason': reason,
+                                'rollback': rollback,
+                                'treasury_rollback': treasury_rollback,
+                            },
+                            409,
+                        )
+                elif reservation_id and is_idempotent_commit:
+                    treasury_commit = {
+                        'status': 'already_committed',
+                        'reservation_id': reservation_id,
+                        'idempotent': True,
+                    }
+                result['treasury_commit'] = treasury_commit
                 log_event(org_id, by, 'commonwealth_settlement_commit',
                           resource=settlement_id, outcome='success',
                           details=result, session_id=_sid)
@@ -8515,6 +8645,32 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     reason=reason,
                     court_decision_ref=court_decision_ref,
                 )
+                reservation_id = str(result.get('reservation_id') or '').strip()
+                treasury_release = None
+                if reservation_id:
+                    try:
+                        treasury_release = kernel_release_runtime_budget(
+                            reservation_id=reservation_id,
+                            org_id=org_id,
+                            reason='commonwealth_settlement_refund',
+                        )
+                    except Exception as exc:
+                        release_reason = str(exc)
+                        if (
+                            kernel_refund_runtime_budget is not None
+                            and 'already committed' in release_reason.lower()
+                        ):
+                            try:
+                                treasury_release = kernel_refund_runtime_budget(
+                                    reservation_id=reservation_id,
+                                    org_id=org_id,
+                                    reason='commonwealth_settlement_refund_committed',
+                                )
+                            except Exception as refund_exc:
+                                treasury_release = {'status': 'error', 'reason': str(refund_exc)}
+                        else:
+                            treasury_release = {'status': 'error', 'reason': release_reason}
+                result['treasury_release'] = treasury_release
                 log_event(org_id, by, 'commonwealth_settlement_refund',
                           resource=settlement_id, outcome='success',
                           details=result, session_id=_sid)
@@ -8522,6 +8678,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
 
             elif path == '/api/commonwealth/court/propagate':
                 peer_host_id = body.get('peer_host_id', '').strip()
+                peer_org_id = body.get('peer_org_id', '').strip()
                 rule_id = body.get('rule_id', '').strip()
                 rule_text = body.get('rule_text', '').strip()
                 ruleset_version = body.get('ruleset_version', '').strip()
@@ -8530,6 +8687,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 result = _commonwealth.propagate_court_rule(
                     org_id,
                     peer_host_id=peer_host_id,
+                    peer_org_id=peer_org_id,
                     rule_id=rule_id,
                     rule_text=rule_text,
                     ruleset_version=ruleset_version,

@@ -169,6 +169,10 @@ WORKSPACE_ORG_ID = (os.environ.get('MERIDIAN_WORKSPACE_ORG_ID') or '').strip() o
 WORKSPACE_AUTH_REQUIRED = os.environ.get('MERIDIAN_WORKSPACE_AUTH_REQUIRED', '').lower() in (
     '1', 'true', 'yes', 'on'
 )
+FEDERATION_HTTP_TIMEOUT_SECONDS = max(
+    5.0,
+    float(os.environ.get('MERIDIAN_FEDERATION_HTTP_TIMEOUT_SECONDS', '90') or '90'),
+)
 sys.path.insert(0, PLATFORM_DIR)
 if os.path.isdir(EXAMPLES_INTELLIGENCE_DIR):
     sys.path.insert(0, EXAMPLES_INTELLIGENCE_DIR)
@@ -2782,7 +2786,7 @@ def _deliver_execution_job_court_notice(bound_org_id, job, warrant, decision, *,
         raise FederationDeliveryError(f"Invalid URL scheme for manifest in peer '{target_host_id}'")
     try:
         request = urllib_request.Request(peer.manifest_url, method='GET')
-        with urllib_request.urlopen(request, timeout=10) as response:
+        with urllib_request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
             manifest = json.loads(response.read().decode('utf-8') or '{}')
     except urllib_error.HTTPError as exc:
         body = exc.read().decode('utf-8')
@@ -2837,7 +2841,7 @@ def _deliver_execution_job_court_notice(bound_org_id, job, warrant, decision, *,
             headers={'Content-Type': 'application/json'},
             method='POST',
         )
-        with urllib_request.urlopen(request, timeout=10) as response:
+        with urllib_request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
             delivery_response = json.loads(response.read().decode('utf-8') or '{}')
     except urllib_error.HTTPError as exc:
         body = exc.read().decode('utf-8')
@@ -3646,7 +3650,7 @@ def _archive_delivery_with_witness_peers(bound_org_id, authority, delivery, payl
                 headers=headers,
                 method='POST',
             )
-            with urllib_request.urlopen(request, timeout=10) as response:
+            with urllib_request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
                 archive_response = json.loads(response.read().decode('utf-8') or '{}')
             archive_record = archive_response.get('archive') or {}
             if not isinstance(archive_record, dict) or not archive_record.get('archive_id'):
@@ -5103,7 +5107,7 @@ def _deliver_case_notice(bound_org_id, case_record, decision, *, actor_id, sessi
         raise FederationDeliveryError(f"Invalid URL scheme for manifest in peer '{target_host_id}'")
     try:
         request = urllib_request.Request(peer.manifest_url, method='GET')
-        with urllib_request.urlopen(request, timeout=10) as response:
+        with urllib_request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
             manifest = json.loads(response.read().decode('utf-8') or '{}')
     except urllib_error.HTTPError as exc:
         body = exc.read().decode('utf-8')
@@ -5156,7 +5160,7 @@ def _deliver_case_notice(bound_org_id, case_record, decision, *, actor_id, sessi
             headers={'Content-Type': 'application/json'},
             method='POST',
         )
-        with urllib_request.urlopen(request, timeout=10) as response:
+        with urllib_request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
             delivery_response = json.loads(response.read().decode('utf-8') or '{}')
     except urllib_error.HTTPError as exc:
         body = exc.read().decode('utf-8')

@@ -35,6 +35,10 @@ TRUST_STATES = (
 
 DEFAULT_TTL_SECONDS = 300
 MAX_TTL_SECONDS = 3600
+FEDERATION_HTTP_TIMEOUT_SECONDS = max(
+    5.0,
+    float(os.environ.get('MERIDIAN_FEDERATION_HTTP_TIMEOUT_SECONDS', '90') or '90'),
+)
 
 
 def _now():
@@ -1068,7 +1072,7 @@ def _default_http_post_json(url, data):
         method='POST',
     )
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
             body = response.read().decode('utf-8')
             if not body:
                 return {}
@@ -1086,7 +1090,7 @@ def _default_http_get_json(url):
         raise FederationDeliveryError(f'Invalid URL scheme in {url!r}')
     request = urllib.request.Request(url, method='GET')
     try:
-        with urllib.request.urlopen(request, timeout=10) as response:
+        with urllib.request.urlopen(request, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as response:
             body = response.read().decode('utf-8')
             if not body:
                 return {}

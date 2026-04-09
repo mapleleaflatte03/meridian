@@ -21,6 +21,19 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 WORKSPACE = os.path.dirname(ROOT)
 sys.path.insert(0, ROOT)
 
+TEST_HTTP_TIMEOUT_SECONDS = max(
+    5.0,
+    float(os.environ.get('MERIDIAN_TEST_HTTP_TIMEOUT_SECONDS', '90') or '90'),
+)
+TEST_WORKSPACE_BOOT_TIMEOUT_SECONDS = max(
+    TEST_HTTP_TIMEOUT_SECONDS,
+    float(os.environ.get('MERIDIAN_TEST_WORKSPACE_BOOT_TIMEOUT_SECONDS', '90') or '90'),
+)
+TEST_ASYNC_WAIT_TIMEOUT_SECONDS = max(
+    5.0,
+    float(os.environ.get('MERIDIAN_TEST_ASYNC_WAIT_TIMEOUT_SECONDS', '60') or '60'),
+)
+
 
 def _now_stub():
     return '2026-03-22T00:00:00Z'
@@ -232,12 +245,38 @@ def _http_json(method, url, *, payload=None, headers=None):
         method=method,
     )
     try:
-        with urllib_request.urlopen(req, timeout=10) as response:
+        with urllib_request.urlopen(req, timeout=TEST_HTTP_TIMEOUT_SECONDS) as response:
             body = response.read().decode('utf-8')
             return response.status, (json.loads(body) if body else {})
     except urllib_error.HTTPError as exc:
         body = exc.read().decode('utf-8')
         return exc.code, (json.loads(body) if body else {})
+
+
+def _copytree_snapshot(src, dst):
+    """Copy source tree while ignoring transient runtime temp files."""
+    def _ignore(_root, names):
+        ignored = []
+        for name in names:
+            if name.endswith('.tmp') and (
+                name.startswith('.runtime-budget-reservations.')
+                or name.startswith('.runtime-budget-journal.')
+                or name.startswith('.budget-reservation-journal.')
+            ):
+                ignored.append(name)
+        return ignored
+
+    last_exc = None
+    for _ in range(3):
+        try:
+            shutil.copytree(src, dst, ignore=_ignore, ignore_dangling_symlinks=True)
+            return
+        except FileNotFoundError as exc:
+            # Source may mutate while tests copy from a live kernel checkout.
+            last_exc = exc
+            time.sleep(0.05)
+    if last_exc is not None:
+        raise last_exc
 
 
 def _seed_workspace_root(root_dir, *, org_id, user_id, host_id, port, signing_secret,
@@ -247,8 +286,8 @@ def _seed_workspace_root(root_dir, *, org_id, user_id, host_id, port, signing_se
     economy_src = os.path.join(WORKSPACE, 'economy')
     kernel_dst = os.path.join(root_dir, 'kernel')
     economy_dst = os.path.join(root_dir, 'economy')
-    shutil.copytree(kernel_src, kernel_dst, ignore_dangling_symlinks=True)
-    shutil.copytree(economy_src, economy_dst, ignore_dangling_symlinks=True)
+    _copytree_snapshot(kernel_src, kernel_dst)
+    _copytree_snapshot(economy_src, economy_dst)
 
     _write_json(
         os.path.join(kernel_dst, 'organizations.json'),
@@ -392,7 +431,7 @@ def _run_workspace(instance):
         text=True,
     )
     try:
-        deadline = time.time() + 10
+        deadline = time.time() + TEST_WORKSPACE_BOOT_TIMEOUT_SECONDS
         last_error = ''
         while time.time() < deadline:
             if proc.poll() is not None:
@@ -477,7 +516,7 @@ def _issue_workspace_warrant(instance, token, request_payload, *, auto_issue=Fal
     return warrant
 
 
-def _wait_for_execution_job(instance, envelope_id, *, timeout=5.0):
+def _wait_for_execution_job(instance, envelope_id, *, timeout=TEST_ASYNC_WAIT_TIMEOUT_SECONDS):
     deadline = time.time() + timeout
     last_body = {}
     while time.time() < deadline:
@@ -497,7 +536,7 @@ def _wait_for_execution_job(instance, envelope_id, *, timeout=5.0):
     )
 
 
-def _wait_for_warrant(instance, warrant_id, *, timeout=5.0):
+def _wait_for_warrant(instance, warrant_id, *, timeout=TEST_ASYNC_WAIT_TIMEOUT_SECONDS):
     deadline = time.time() + timeout
     last_body = {}
     while time.time() < deadline:

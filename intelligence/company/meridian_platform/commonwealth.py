@@ -18,9 +18,22 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import uuid
 
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
+RUNTIME_HOST_IDENTITY_FILE = os.environ.get(
+    'MERIDIAN_RUNTIME_HOST_IDENTITY_FILE',
+    os.path.join(PLATFORM_DIR, 'host_identity.json'),
+)
+RUNTIME_ADMISSION_FILE = os.environ.get(
+    'MERIDIAN_RUNTIME_ADMISSION_FILE',
+    os.path.join(PLATFORM_DIR, 'institution_admissions.json'),
+)
+FEDERATION_PEERS_FILE = os.environ.get(
+    'MERIDIAN_FEDERATION_PEERS_FILE',
+    os.path.join(PLATFORM_DIR, 'federation_peers.json'),
+)
 
 try:
     from capsule import capsule_path
@@ -40,6 +53,16 @@ def _short_id(prefix: str = 'cw') -> str:
 def _sha256_hex(*parts: str) -> str:
     payload = b'\x00'.join(p.encode() for p in parts)
     return hashlib.sha256(payload).hexdigest()
+
+
+_HEX64_RE = re.compile(r'^[0-9a-f]{64}$', re.IGNORECASE)
+
+
+def _normalize_digest(value: str) -> str:
+    raw = (str(value or '')).strip().lower()
+    if not raw:
+        return ''
+    return raw if _HEX64_RE.match(raw) else ''
 
 
 def _load_store(org_id, filename: str) -> dict:
@@ -81,6 +104,23 @@ def _save_cw_marketplace(data: dict, org_id) -> None:
     _save_store(data, org_id, 'commonwealth_marketplace.json')
 
 
+def _runtime_host_state(org_id: str):
+    from runtime_host import load_host_identity, load_admission_registry, ensure_org_admitted
+    host_identity = load_host_identity(
+        RUNTIME_HOST_IDENTITY_FILE,
+        supported_boundaries=['workspace', 'federation_gateway'],
+        fallback_label='Meridian Live Host',
+        fallback_federation=False,
+    )
+    admission_registry = load_admission_registry(
+        RUNTIME_ADMISSION_FILE,
+        bound_org_id=org_id,
+        host_identity=host_identity,
+    )
+    ensure_org_admitted(org_id, admission_registry)
+    return host_identity, admission_registry
+
+
 # ---------------------------------------------------------------------------
 # L1: Federation Layer
 # ---------------------------------------------------------------------------
@@ -90,19 +130,29 @@ def get_federation_state(org_id: str) -> dict:
     peers = []
     try:
         from federation import load_peer_registry
-        from loom_runtime_proof import _runtime_host_state
         host_identity, _ = _runtime_host_state(org_id)
-        peer_file = capsule_path(org_id, 'federation_peers.json')
-        registry = load_peer_registry(peer_file, host_identity=host_identity)
-        peers = [
-            {
+        registry = load_peer_registry(FEDERATION_PEERS_FILE, host_identity=host_identity)
+        registry_peers = {}
+        if isinstance(registry, dict):
+            registry_peers = registry.get('peers', {}) or {}
+        elif hasattr(registry, 'peers'):
+            registry_peers = getattr(registry, 'peers') or {}
+        peers = []
+        for peer_id, peer in registry_peers.items():
+            if isinstance(peer, dict):
+                trust_state = peer.get('trust_state', 'unknown')
+                transport = peer.get('transport', 'https')
+                admitted = peer.get('admitted_org_ids', [])
+            else:
+                trust_state = getattr(peer, 'trust_state', 'unknown')
+                transport = getattr(peer, 'transport', 'https')
+                admitted = list(getattr(peer, 'admitted_org_ids', []) or [])
+            peers.append({
                 'peer_host_id': peer_id,
-                'trust_state': peer.get('trust_state', 'unknown'),
-                'transport': peer.get('transport', 'https'),
-                'admitted_org_ids': peer.get('admitted_org_ids', []),
-            }
-            for peer_id, peer in (registry.peers.items() if hasattr(registry, 'peers') else {}.items())
-        ]
+                'trust_state': trust_state,
+                'transport': transport,
+                'admitted_org_ids': admitted,
+            })
     except Exception:
         pass
 
@@ -138,28 +188,30 @@ def link_federation_peer(
     transport: str = 'https',
     endpoint_url: str = '',
     label: str = '',
+    shared_secret: str = '',
 ) -> dict:
     """Link (upsert) a federation peer for cross-institution connectivity."""
     if not peer_host_id:
         raise ValueError('peer_host_id is required')
     try:
         from federation import upsert_peer_registry_entry
-        from loom_runtime_proof import _runtime_host_state
         host_identity, _ = _runtime_host_state(org_id)
-        peer_file = capsule_path(org_id, 'federation_peers.json')
+        secret = (shared_secret or os.environ.get('MERIDIAN_FEDERATION_SIGNING_SECRET') or '').strip()
         upsert_peer_registry_entry(
-            peer_file,
+            FEDERATION_PEERS_FILE,
             peer_host_id,
             host_identity=host_identity,
             transport=transport,
             endpoint_url=endpoint_url,
             label=label or f'peer_{peer_host_id[:8]}',
             admitted_org_ids=[peer_org_id] if peer_org_id else [],
-            trust_state='admitted',
+            trust_state='trusted',
+            shared_secret=secret,
         )
         link_id = _short_id('link')
         return {
             'status': 'linked',
+            'mode': 'federation_registry',
             'link_id': link_id,
             'peer_host_id': peer_host_id,
             'peer_org_id': peer_org_id,
@@ -185,6 +237,7 @@ def link_federation_peer(
         _save_store(store, org_id, 'commonwealth_federation_links.json')
         return {
             'status': 'linked',
+            'mode': 'local_registry',
             'link_id': link_id,
             'peer_host_id': peer_host_id,
             'peer_org_id': peer_org_id,
@@ -205,6 +258,8 @@ def prepare_settlement(
     amount_usd: float,
     royalty_rate: float = 0.10,
     action_ids: list | None = None,
+    reservation_id: str = '',
+    reservation_note: str = '',
 ) -> dict:
     """Prepare a cross-institution settlement reservation."""
     if not peer_org_id:
@@ -239,6 +294,8 @@ def prepare_settlement(
         'receipt_hash': receipt_hash,
         'action_ids': action_ids or [],
         'status': 'prepared',
+        'reservation_id': (reservation_id or '').strip() or None,
+        'reservation_note': (reservation_note or '').strip(),
         'proof_receipt': None,
         'committed_at': None,
         'refunded_at': None,
@@ -250,6 +307,7 @@ def prepare_settlement(
         'receipt_hash': receipt_hash,
         'status': 'prepared',
         'split': data['settlements'][settlement_id]['split'],
+        'reservation_id': data['settlements'][settlement_id].get('reservation_id'),
     }
 
 
@@ -259,6 +317,7 @@ def commit_settlement(
     *,
     proof_receipt: str,
     warrant_ref: str = '',
+    proof_receipt_refs: list | None = None,
 ) -> dict:
     """Commit a prepared settlement with proof verification."""
     if not settlement_id:
@@ -270,8 +329,6 @@ def commit_settlement(
     settlement = data['settlements'].get(settlement_id)
     if not settlement:
         raise ValueError(f'Settlement not found: {settlement_id}')
-    if settlement['status'] not in ('prepared',):
-        raise ValueError(f'Settlement {settlement_id} is not in prepared state (status={settlement["status"]})')
 
     # Verify proof receipt integrity
     expected_receipt = _sha256_hex(
@@ -281,21 +338,60 @@ def commit_settlement(
         settlement['agent_id'],
         str(settlement['amount_usd']),
     )
-    proof_valid = bool(proof_receipt)
+    normalized_proof_receipt = _normalize_digest(proof_receipt)
+    if not normalized_proof_receipt:
+        raise ValueError('proof_receipt must be a 64-character hex digest')
+
+    acceptable_receipts = {expected_receipt}
+    for candidate in proof_receipt_refs or []:
+        normalized = _normalize_digest(str(candidate or ''))
+        if normalized:
+            acceptable_receipts.add(normalized)
+    proof_valid = normalized_proof_receipt in acceptable_receipts
+    if not proof_valid:
+        raise ValueError(
+            'proof_receipt does not match settlement receipt hash or any live proof anchor'
+        )
+
+    status = str(settlement.get('status') or '').strip().lower()
+    if status == 'committed':
+        existing_receipt = _normalize_digest(str(settlement.get('proof_receipt') or ''))
+        if existing_receipt and existing_receipt != normalized_proof_receipt:
+            raise ValueError(
+                f'Settlement {settlement_id} is already committed with a different proof_receipt'
+            )
+        return {
+            'settlement_id': settlement_id,
+            'status': 'committed',
+            'idempotent': True,
+            'proof_receipt': existing_receipt or normalized_proof_receipt,
+            'proof_receipt_valid': True,
+            'receipt_integrity_hash': expected_receipt,
+            'accepted_proof_ref_count': len(acceptable_receipts),
+            'reservation_id': settlement.get('reservation_id'),
+            'split': settlement['split'],
+            'committed_at': settlement.get('committed_at'),
+        }
+    if status != 'prepared':
+        raise ValueError(f'Settlement {settlement_id} is not in prepared state (status={settlement["status"]})')
 
     settlement['status'] = 'committed'
-    settlement['proof_receipt'] = proof_receipt
+    settlement['proof_receipt'] = normalized_proof_receipt
     settlement['warrant_ref'] = warrant_ref
     settlement['proof_receipt_valid'] = proof_valid
     settlement['receipt_integrity_hash'] = expected_receipt
+    settlement['accepted_proof_refs'] = sorted(acceptable_receipts)
     settlement['committed_at'] = _now()
     _save_settlements(data, org_id)
 
     return {
         'settlement_id': settlement_id,
         'status': 'committed',
-        'proof_receipt': proof_receipt,
+        'proof_receipt': normalized_proof_receipt,
         'proof_receipt_valid': proof_valid,
+        'receipt_integrity_hash': expected_receipt,
+        'accepted_proof_ref_count': len(acceptable_receipts),
+        'reservation_id': settlement.get('reservation_id'),
         'split': settlement['split'],
         'committed_at': settlement['committed_at'],
     }
@@ -330,9 +426,23 @@ def refund_settlement(
         'status': 'refunded',
         'refund_reason': reason,
         'court_decision_ref': court_decision_ref,
-        'treasury_release': {'status': 'refunded', 'amount_usd': settlement['amount_usd']},
+        'reservation_id': settlement.get('reservation_id'),
+        'treasury_release': {
+            'status': 'refunded',
+            'amount_usd': settlement['amount_usd'],
+            'reservation_id': settlement.get('reservation_id'),
+        },
         'refunded_at': settlement['refunded_at'],
     }
+
+
+def get_settlement(org_id: str, settlement_id: str) -> dict | None:
+    """Return a single settlement record by id."""
+    if not settlement_id:
+        return None
+    data = _load_settlements(org_id)
+    record = data['settlements'].get(settlement_id)
+    return dict(record) if isinstance(record, dict) else None
 
 
 def get_settlements(org_id: str) -> list:
@@ -349,6 +459,7 @@ def propagate_court_rule(
     org_id: str,
     *,
     peer_host_id: str,
+    peer_org_id: str = '',
     rule_id: str,
     rule_text: str,
     ruleset_version: int,
@@ -369,29 +480,41 @@ def propagate_court_rule(
         'propagation_id': propagation_id,
     }
 
-    delivery_status = 'queued'
+    delivery_status = 'delivery_pending'
     delivery_note = ''
+    target_org_id = (peer_org_id or '').strip() or org_id
+    delivery_ref = {}
 
     try:
-        from federation import FederationAuthority
-        from loom_runtime_proof import _runtime_host_state
+        from federation import FederationAuthority, load_peer_registry
+
         host_identity, _ = _runtime_host_state(org_id)
-        peer_file = capsule_path(org_id, 'federation_peers.json')
+        peer_registry = load_peer_registry(FEDERATION_PEERS_FILE, host_identity=host_identity)
+        signing_secret = (os.environ.get('MERIDIAN_FEDERATION_SIGNING_SECRET') or '').strip() or None
         fa = FederationAuthority(
             host_identity,
-            peer_registry_file=peer_file,
+            signing_secret=signing_secret,
+            peer_registry=peer_registry,
         )
-        envelope = fa.issue(
+        delivery = fa.deliver(
+            peer_host_id=peer_host_id,
             source_institution_id=org_id,
-            target_host_id=peer_host_id,
-            target_institution_id=peer_host_id,
+            target_institution_id=target_org_id,
+            message_type='court_rule_propagation',
             payload=rule_payload,
-            action_kind='court_rule_propagation',
+            actor_type='host_service',
+            actor_id=f'commonwealth:{org_id}',
+            session_id=f'cwprop:{propagation_id}',
         )
-        delivery_status = 'envelope_issued'
+        delivery_ref = {
+            'envelope': delivery.get('envelope'),
+            'receipt': delivery.get('receipt'),
+            'claims': delivery.get('claims'),
+        }
+        delivery_status = 'envelope_delivered'
     except Exception as exc:
-        delivery_note = str(exc)[:120]
-        delivery_status = 'queued_local'
+        delivery_note = str(exc)[:240]
+        delivery_status = 'delivery_failed'
 
     # Record propagation
     store = _load_store(org_id, 'commonwealth_propagations.json')
@@ -399,20 +522,29 @@ def propagate_court_rule(
     store['propagations'][propagation_id] = {
         'propagation_id': propagation_id,
         'peer_host_id': peer_host_id,
+        'peer_org_id': target_org_id,
         'rule_id': rule_id,
         'ruleset_version': ruleset_version,
         'delivery_status': delivery_status,
         'delivery_note': delivery_note,
+        'delivery_ref': delivery_ref,
         'created_at': _now(),
     }
     _save_store(store, org_id, 'commonwealth_propagations.json')
 
+    if delivery_status != 'envelope_delivered':
+        raise RuntimeError(
+            f'court rule propagation failed for peer {peer_host_id}: {delivery_note or "delivery_failed"}'
+        )
+
     return {
         'propagation_id': propagation_id,
         'peer_host_id': peer_host_id,
+        'peer_org_id': target_org_id,
         'rule_id': rule_id,
         'ruleset_version': ruleset_version,
         'delivery_status': delivery_status,
+        'delivery_ref': delivery_ref,
         'propagated_at': _now(),
     }
 

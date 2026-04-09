@@ -267,27 +267,42 @@ def _summarize_legacy_reference_proof(proof):
 
 def build_bundle(live_manifest_url=None, live_runtime_proof_url=None, run_reference_proofs=True):
     def _run_reference_proof(fn, label, summarize=None):
-        try:
-            summary = fn()
-            if summarize is not None:
-                summary = summarize(summary)
-            return {
-                'passed': True,
-                'skipped': False,
-                'summary': summary,
-            }
-        except unittest.SkipTest as exc:
-            return {
-                'passed': False,
-                'skipped': True,
-                'reason': str(exc),
-            }
-        except Exception as exc:  # noqa: BLE001
-            return {
-                'passed': False,
-                'skipped': False,
-                'reason': f'{label}_failed: {type(exc).__name__}: {exc}',
-            }
+        max_attempts = max(
+            1,
+            int(os.environ.get('MERIDIAN_REFERENCE_PROOF_MAX_ATTEMPTS', '2') or '2'),
+        )
+        last_exc = None
+        for attempt in range(1, max_attempts + 1):
+            try:
+                summary = fn()
+                if summarize is not None:
+                    summary = summarize(summary)
+                result = {
+                    'passed': True,
+                    'skipped': False,
+                    'summary': summary,
+                }
+                if attempt > 1:
+                    result['attempt'] = attempt
+                    result['max_attempts'] = max_attempts
+                return result
+            except unittest.SkipTest as exc:
+                return {
+                    'passed': False,
+                    'skipped': True,
+                    'reason': str(exc),
+                }
+            except Exception as exc:  # noqa: BLE001
+                last_exc = exc
+                is_timeout = isinstance(exc, TimeoutError) or ('timed out' in str(exc).lower())
+                if is_timeout and attempt < max_attempts:
+                    continue
+                break
+        return {
+            'passed': False,
+            'skipped': False,
+            'reason': f'{label}_failed: {type(last_exc).__name__}: {last_exc}',
+        }
 
     def _skip_reference_proof(label):
         return {

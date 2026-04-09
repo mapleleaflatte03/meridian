@@ -28,6 +28,10 @@ TRUST_STATES = (
 
 DEFAULT_TTL_SECONDS = 300
 MAX_TTL_SECONDS = 3600
+FEDERATION_HTTP_TIMEOUT_SECONDS = max(
+    5.0,
+    float(os.environ.get('MERIDIAN_FEDERATION_HTTP_TIMEOUT_SECONDS', '90') or '90'),
+)
 
 
 def _now():
@@ -982,7 +986,7 @@ def _default_http_post_json(url, data):
         method='POST',
     )
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as resp:
             payload = resp.read().decode('utf-8')
             return json.loads(payload) if payload else {}
     except urllib.error.HTTPError as exc:
@@ -995,7 +999,7 @@ def _default_http_post_json(url, data):
 def _default_http_get_json(url):
     req = urllib.request.Request(url, method='GET')
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=FEDERATION_HTTP_TIMEOUT_SECONDS) as resp:
             payload = resp.read().decode('utf-8')
             return json.loads(payload) if payload else {}
     except urllib.error.HTTPError as exc:
