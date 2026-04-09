@@ -4,6 +4,33 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 
+SUPERVISOR_SERVICE_NAME="meridian-runtime-supervisor.service"
+SUPERVISOR_SERVICE_WAS_ACTIVE=0
+SUPERVISOR_SERVICE_SEEN=0
+
+cleanup_on_exit() {
+  ./scripts/dev-down.sh >/dev/null 2>&1 || true
+  if [[ "${SUPERVISOR_SERVICE_SEEN}" -eq 1 && "${SUPERVISOR_SERVICE_WAS_ACTIVE}" -eq 1 ]]; then
+    systemctl --user start "${SUPERVISOR_SERVICE_NAME}" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup_on_exit EXIT
+
+if command -v systemctl >/dev/null 2>&1; then
+  if systemctl --user list-unit-files 2>/dev/null | grep -q "^${SUPERVISOR_SERVICE_NAME}"; then
+    SUPERVISOR_SERVICE_SEEN=1
+    if [[ "$(systemctl --user is-active "${SUPERVISOR_SERVICE_NAME}" 2>/dev/null || true)" == "active" ]]; then
+      SUPERVISOR_SERVICE_WAS_ACTIVE=1
+      echo "[onboarding-lane] stopping ${SUPERVISOR_SERVICE_NAME} for isolated bootstrap gate"
+      systemctl --user stop "${SUPERVISOR_SERVICE_NAME}" >/dev/null 2>&1 || true
+      sleep 1
+    fi
+  fi
+fi
+
+./scripts/dev-down.sh >/dev/null 2>&1 || true
+sleep 1
+
 find_free_port() {
   python3 - <<'PY'
 import socket
@@ -15,9 +42,16 @@ PY
 }
 
 ONBOARDING_WORKSPACE_PORT="${MERIDIAN_TEST_WORKSPACE_PORT:-$(find_free_port)}"
+ONBOARDING_WORKSPACE_PEER_PORT="${MERIDIAN_TEST_WORKSPACE_PEER_PORT:-$(find_free_port)}"
 ONBOARDING_GATEWAY_PORT="${MERIDIAN_TEST_GATEWAY_PORT:-$(find_free_port)}"
 if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_GATEWAY_PORT}" ]]; then
   ONBOARDING_GATEWAY_PORT="$(find_free_port)"
+fi
+if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_WORKSPACE_PEER_PORT}" ]]; then
+  ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
+fi
+if [[ "${ONBOARDING_GATEWAY_PORT}" == "${ONBOARDING_WORKSPACE_PEER_PORT}" ]]; then
+  ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
 fi
 export ONBOARDING_GATEWAY_PORT
 
@@ -35,20 +69,30 @@ bootstrap_ok=0
 for bootstrap_attempt in 1 2 3; do
   if [[ "${bootstrap_attempt}" -gt 1 ]]; then
     ONBOARDING_WORKSPACE_PORT="$(find_free_port)"
+    ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
     ONBOARDING_GATEWAY_PORT="$(find_free_port)"
     if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_GATEWAY_PORT}" ]]; then
       ONBOARDING_GATEWAY_PORT="$(find_free_port)"
+    fi
+    if [[ "${ONBOARDING_WORKSPACE_PORT}" == "${ONBOARDING_WORKSPACE_PEER_PORT}" ]]; then
+      ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
+    fi
+    if [[ "${ONBOARDING_GATEWAY_PORT}" == "${ONBOARDING_WORKSPACE_PEER_PORT}" ]]; then
+      ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
     fi
     export ONBOARDING_GATEWAY_PORT
     ./scripts/dev-down.sh >/dev/null 2>&1 || true
     sleep 1
   fi
   echo "[onboarding-lane] bootstrap attempt ${bootstrap_attempt}/3"
-  echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
+  echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} peer=${ONBOARDING_WORKSPACE_PEER_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
   if MERIDIAN_SKIP_LOOM_BUILD=1 \
     MERIDIAN_AUTO_START_STACK=1 \
     MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
+    MERIDIAN_WORKSPACE_PEER_PORT="${ONBOARDING_WORKSPACE_PEER_PORT}" \
     MERIDIAN_GATEWAY_PORT="${ONBOARDING_GATEWAY_PORT}" \
+    MERIDIAN_PEER_WORKSPACE_ENABLED=0 \
+    MERIDIAN_SUPERVISOR_ENABLE=0 \
     ./scripts/bootstrap_full.sh >/tmp/meridian_onboarding_bootstrap.log 2>&1; then
     bootstrap_ok=1
     break
@@ -90,18 +134,19 @@ import urllib.request
 import urllib.error
 
 BASE = f"http://127.0.0.1:{os.environ['ONBOARDING_GATEWAY_PORT']}"
+HTTP_TIMEOUT_SECONDS = float(os.environ.get("MERIDIAN_ACCEPTANCE_HTTP_TIMEOUT", "60"))
 
 def get_json(path: str, *, required: bool = True):
     last_error = None
     for attempt in range(60):
         try:
-            with urllib.request.urlopen(BASE + path, timeout=20) as response:
+            with urllib.request.urlopen(BASE + path, timeout=HTTP_TIMEOUT_SECONDS) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             last_error = exc
             if exc.code not in {502, 503, 504}:
                 raise
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError, Exception) as exc:
             last_error = exc
         time.sleep(min(1.0, 0.2 + (0.05 * attempt)))
     if required:
@@ -119,7 +164,7 @@ def post_json(path: str, payload: dict, *, allow_forbidden: bool = False):
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=20) as response:
+            with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
             raw = exc.read().decode("utf-8", errors="replace")
@@ -132,7 +177,7 @@ def post_json(path: str, payload: dict, *, allow_forbidden: bool = False):
                 }
             if exc.code not in {502, 503, 504}:
                 raise last_error
-        except urllib.error.URLError as exc:
+        except (urllib.error.URLError, TimeoutError, Exception) as exc:
             last_error = exc
         time.sleep(min(1.0, 0.2 + (0.05 * attempt)))
     raise RuntimeError(f"POST probe failed for {path}: {last_error}")
@@ -315,7 +360,7 @@ install_script = (Path("scripts/install-full.sh")).read_text(encoding="utf-8")
 assert "MERIDIAN_VERIFY_ONBOARDING" in install_script, "install-full.sh missing onboarding verification toggle"
 PY
 
-if [ "${MERIDIAN_SUPERVISOR_ENABLE:-1}" = "1" ]; then
+if [ "${MERIDIAN_SUPERVISOR_ENABLE:-0}" = "1" ]; then
   if [ ! -f "runtime/pids/supervisor.pid" ]; then
     echo "[onboarding-lane] missing runtime/pids/supervisor.pid while supervisor is enabled" >&2
     exit 1

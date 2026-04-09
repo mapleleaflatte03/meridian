@@ -8,6 +8,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT_DIR}"
 FAIL=0
+ALLOW_API_SKIP="${MERIDIAN_ALLOW_API_SKIP:-0}"
 
 echo "[publish-live-lane] Checking public surface readiness..."
 
@@ -101,7 +102,16 @@ echo ""
 echo "=== API status coherence ==="
 
 BASE_URL="${MERIDIAN_BASE_URL:-http://127.0.0.1:8266}"
-if curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null 2>&1; then
+api_ready=0
+for _ in $(seq 1 20); do
+    if curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null 2>&1; then
+        api_ready=1
+        break
+    fi
+    sleep 1
+done
+
+if [[ "$api_ready" -eq 1 ]]; then
     STATUS=$(curl -fsS --max-time 10 "$BASE_URL/api/status" 2>/dev/null || echo "{}")
     if echo "$STATUS" | python3 -c "
 import json,sys
@@ -126,7 +136,12 @@ print('all V5 contract blocks present')
         FAIL=1
     fi
 else
-    echo "[SKIP] API server not reachable at $BASE_URL — skipping API check"
+    if [[ "$ALLOW_API_SKIP" == "1" ]]; then
+        echo "[SKIP] API server not reachable at $BASE_URL — skipping API check (MERIDIAN_ALLOW_API_SKIP=1)"
+    else
+        echo "[FAIL] API server not reachable at $BASE_URL"
+        FAIL=1
+    fi
 fi
 
 # ---------------------------------------------------------------------------

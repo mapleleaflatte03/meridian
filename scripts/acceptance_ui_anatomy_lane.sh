@@ -9,6 +9,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${MERIDIAN_BASE_URL:-http://127.0.0.1:8266}"
 WWW_DIR="$ROOT_DIR/intelligence/company/www"
 FAIL=0
+ALLOW_API_SKIP="${MERIDIAN_ALLOW_API_SKIP:-0}"
 SCREENSHOTS_DIR="/tmp/meridian_ui_anatomy_screenshots"
 STATIC_PID_FILE="/tmp/meridian_ui_anatomy_static_server.pid"
 STATIC_PORT=18099
@@ -124,7 +125,16 @@ fi
 echo ""
 echo "=== API status check ==="
 
-if curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null 2>&1; then
+api_ready=0
+for _ in $(seq 1 20); do
+    if curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null 2>&1; then
+        api_ready=1
+        break
+    fi
+    sleep 1
+done
+
+if [[ "$api_ready" -eq 1 ]]; then
     STATUS_CODE=$(curl -o /dev/null -fsS --max-time 10 -w "%{http_code}" "$BASE_URL/api/status" 2>/dev/null || echo "000")
     if [[ "$STATUS_CODE" == "200" ]]; then
         echo "[OK]   GET /api/status → $STATUS_CODE"
@@ -142,7 +152,12 @@ if curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null 2>&1; then
         echo "[OK]   /api/status: no banned commercial wording"
     fi
 else
-    echo "[SKIP] API server not reachable at $BASE_URL — skipping API checks"
+    if [[ "$ALLOW_API_SKIP" == "1" ]]; then
+        echo "[SKIP] API server not reachable at $BASE_URL — skipping API checks (MERIDIAN_ALLOW_API_SKIP=1)"
+    else
+        echo "[FAIL] API server not reachable at $BASE_URL"
+        FAIL=1
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -152,11 +167,16 @@ echo ""
 echo "=== Playwright screenshot check ==="
 
 PLAYWRIGHT_AVAILABLE=0
+PLAYWRIGHT_MODE="none"
 if command -v node >/dev/null 2>&1; then
     # Check if playwright module is actually installed (not just runnable via npx download)
     if node -e "require('playwright')" >/dev/null 2>&1 || \
        node -e "require('@playwright/test')" >/dev/null 2>&1; then
         PLAYWRIGHT_AVAILABLE=1
+        PLAYWRIGHT_MODE="module"
+    elif command -v npx >/dev/null 2>&1 && npx playwright --version >/dev/null 2>&1; then
+        PLAYWRIGHT_AVAILABLE=1
+        PLAYWRIGHT_MODE="npx"
     fi
 fi
 
@@ -184,7 +204,8 @@ server.serve_forever()
     STATIC_BASE="http://127.0.0.1:$STATIC_PORT"
 
     if curl -fsS --max-time 5 "$STATIC_BASE/index.html" >/dev/null 2>&1; then
-        node - "$STATIC_BASE" "$SCREENSHOTS_DIR" <<'PLAYWRIGHT_EOF'
+        if [[ "$PLAYWRIGHT_MODE" == "module" ]]; then
+            node - "$STATIC_BASE" "$SCREENSHOTS_DIR" <<'PLAYWRIGHT_EOF'
 const { chromium } = require('playwright');
 const path = require('path');
 
@@ -227,14 +248,29 @@ const path = require('path');
   process.stdout.write('Playwright anatomy checks passed.\n');
 })().catch(e => { process.stderr.write(String(e) + '\n'); process.exit(1); });
 PLAYWRIGHT_EOF
-        echo "[OK]   Playwright screenshots: $SCREENSHOTS_DIR"
+        else
+            pages=("index.html:home" "proofs.html:proofs" "workflows.html:workflows")
+            for page in "${pages[@]}"; do
+                src="${page%%:*}"
+                name="${page##*:}"
+                if ! npx playwright screenshot --wait-for-timeout 1000 "$STATIC_BASE/$src" "$SCREENSHOTS_DIR/${name}-desktop.png" >/dev/null 2>&1; then
+                    echo "[FAIL] Playwright npx desktop screenshot failed: $src"
+                    FAIL=1
+                fi
+                if ! npx playwright screenshot --viewport-size=390,844 --wait-for-timeout 1000 "$STATIC_BASE/$src" "$SCREENSHOTS_DIR/${name}-mobile.png" >/dev/null 2>&1; then
+                    echo "[FAIL] Playwright npx mobile screenshot failed: $src"
+                    FAIL=1
+                fi
+            done
+        fi
+        echo "[OK]   Playwright screenshots: $SCREENSHOTS_DIR (mode=$PLAYWRIGHT_MODE)"
     else
         echo "[SKIP] Static server not ready — skipping Playwright screenshots"
     fi
 
     cleanup
 else
-    echo "[SKIP] Playwright not installed — screenshot checks skipped (static + CSS checks cover anatomy)"
+    echo "[SKIP] Playwright not available — screenshot checks skipped (static + CSS checks cover anatomy)"
 fi
 
 # ---------------------------------------------------------------------------
