@@ -12,6 +12,40 @@ import witness_archive
 
 
 class WitnessArchiveTests(unittest.TestCase):
+    def test_load_witness_archive(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            archive_path = os.path.join(tmp, 'nonexistent.json')
+
+            # Test non-existent file
+            data = witness_archive.load_witness_archive(archive_path, host_id='host_1')
+            self.assertEqual(data.get('host_id'), 'host_1')
+            self.assertEqual(data.get('records'), {})
+            self.assertIn('updated_at', data)
+
+            # Test existing file
+            with open(archive_path, 'w') as f:
+                json.dump({'host_id': 'host_1', 'custom_data': 123}, f)
+
+            data = witness_archive.load_witness_archive(archive_path, host_id='host_1')
+            self.assertEqual(data.get('host_id'), 'host_1')
+            self.assertEqual(data.get('custom_data'), 123)
+            self.assertEqual(data.get('records'), {})
+            self.assertIn('updated_at', data)
+
+            # Test host_id mismatch
+            with self.assertRaises(RuntimeError) as ctx:
+                witness_archive.load_witness_archive(archive_path, host_id='host_2')
+            self.assertIn("Witness archive host_id 'host_1' does not match runtime host 'host_2'", str(ctx.exception))
+
+            # Test existing file with no host_id but host_id is provided
+            with open(archive_path, 'w') as f:
+                json.dump({'custom_data': 456}, f)
+
+            data = witness_archive.load_witness_archive(archive_path, host_id='host_3')
+            self.assertEqual(data.get('host_id'), 'host_3')
+            self.assertEqual(data.get('custom_data'), 456)
+
+
     def test_archive_observation_is_idempotent(self):
         with tempfile.TemporaryDirectory() as tmp:
             archive_path = os.path.join(tmp, 'witness_archive.json')
