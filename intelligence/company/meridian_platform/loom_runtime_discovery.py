@@ -14,7 +14,6 @@ import json
 import os
 import shutil
 import subprocess
-from pathlib import Path
 from typing import Any, Optional
 
 _DEFAULT_LOOM_BINS = [
