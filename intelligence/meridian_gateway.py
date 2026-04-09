@@ -180,6 +180,12 @@ WORKFLOW_SHOWCASE_CACHE_TTL_SECONDS = int(os.environ.get("MERIDIAN_WORKFLOW_SHOW
 WORKSPACE_STATUS_UPSTREAM_TIMEOUT_SECONDS = float(
     os.environ.get("MERIDIAN_WORKSPACE_STATUS_UPSTREAM_TIMEOUT_SECONDS", "12")
 )
+WORKSPACE_API_POST_TIMEOUT_SECONDS = float(
+    os.environ.get("MERIDIAN_WORKSPACE_API_POST_TIMEOUT_SECONDS", "25")
+)
+WORKSPACE_API_POST_HEAVY_TIMEOUT_SECONDS = float(
+    os.environ.get("MERIDIAN_WORKSPACE_API_POST_HEAVY_TIMEOUT_SECONDS", "60")
+)
 WORKSPACE_API_BASE = os.environ.get("MERIDIAN_WORKSPACE_API_BASE", "http://127.0.0.1:18901").rstrip("/")
 WORKSPACE_CREDENTIALS_FILE = Path(
     os.environ.get("MERIDIAN_WORKSPACE_CREDENTIALS_FILE", "/home/ubuntu/.meridian/.workspace_credentials")
@@ -10348,8 +10354,12 @@ def _workspace_api_post_json(path: str, payload: dict[str, Any]) -> dict[str, An
         headers["Authorization"] = f"Basic {token}"
     body = json.dumps(payload or {}).encode("utf-8")
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
+    timeout_seconds = _workspace_post_timeout_seconds(path)
     try:
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=max(0.1, float(timeout_seconds)),
+        ) as response:
             raw = response.read().decode("utf-8", "replace")
             parsed = _extract_json(raw)
             return {
@@ -10377,6 +10387,20 @@ def _workspace_api_post_json(path: str, payload: dict[str, Any]) -> dict[str, An
             "status_code": 502,
             "payload": {"status": "error", "output": f"{exc.__class__.__name__}: {exc}"},
         }
+
+
+def _workspace_post_timeout_seconds(path: str) -> float:
+    normalized = path if path.startswith("/") else f"/{path}"
+    heavy_routes = {
+        "/api/marketplace/assign",
+        "/api/marketplace/settle",
+        "/api/commonwealth/settlement/commit",
+        "/api/commonwealth/settlement/refund",
+        "/api/commonwealth/marketplace/acquire",
+    }
+    if normalized in heavy_routes:
+        return WORKSPACE_API_POST_HEAVY_TIMEOUT_SECONDS
+    return WORKSPACE_API_POST_TIMEOUT_SECONDS
 
 
 def _workspace_api_get_json_with_timeout(path: str, timeout_seconds: float) -> dict[str, Any]:
