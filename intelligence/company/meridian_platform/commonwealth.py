@@ -412,7 +412,26 @@ def refund_settlement(
     settlement = data['settlements'].get(settlement_id)
     if not settlement:
         raise ValueError(f'Settlement not found: {settlement_id}')
-    if settlement['status'] not in ('prepared', 'committed'):
+    status = str(settlement.get('status') or '').strip().lower()
+    if status == 'refunded':
+        # Idempotent replay: keep original settlement state immutable and
+        # acknowledge previously completed refund.
+        return {
+            'settlement_id': settlement_id,
+            'status': 'refunded',
+            'idempotent': True,
+            'refund_reason': settlement.get('refund_reason') or reason,
+            'court_decision_ref': settlement.get('court_decision_ref') or court_decision_ref,
+            'reservation_id': settlement.get('reservation_id'),
+            'treasury_release': {
+                'status': 'already_refunded',
+                'amount_usd': settlement['amount_usd'],
+                'reservation_id': settlement.get('reservation_id'),
+                'idempotent': True,
+            },
+            'refunded_at': settlement.get('refunded_at'),
+        }
+    if status not in ('prepared', 'committed'):
         raise ValueError(f'Settlement {settlement_id} cannot be refunded (status={settlement["status"]})')
 
     settlement['status'] = 'refunded'
@@ -424,6 +443,7 @@ def refund_settlement(
     return {
         'settlement_id': settlement_id,
         'status': 'refunded',
+        'idempotent': False,
         'refund_reason': reason,
         'court_decision_ref': court_decision_ref,
         'reservation_id': settlement.get('reservation_id'),

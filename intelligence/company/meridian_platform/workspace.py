@@ -5282,6 +5282,7 @@ setInterval(refresh, 15000);
 
 class WorkspaceHandler(BaseHTTPRequestHandler):
     _HEAD_JSON_PATHS = {
+        '/api/healthz',
         '/api/status',
         '/api/context',
         '/api/institution',
@@ -5449,6 +5450,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
     def do_HEAD(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == '/api/healthz':
+            return self._headers_only(200, 'application/json')
         is_api = path.startswith('/api/')
         protected = is_workspace_protected_path(path)
         if protected and not self._is_authorized():
@@ -5488,6 +5491,12 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
+        if path == '/api/healthz':
+            return self._json({
+                'status': 'ok',
+                'service': 'workspace',
+                'checked_at': _now(),
+            })
         if not self._require_auth(path):
             return
         try:
@@ -6619,10 +6628,21 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                             )
                         except Exception as exc:
                             reason = str(exc)
+                            reason_lc = reason.lower()
                             if (
+                                'not found' in reason_lc
+                                or 'already released' in reason_lc
+                                or 'not reserved' in reason_lc
+                            ):
+                                treasury_release = {
+                                    'status': 'already_released',
+                                    'reservation_id': reservation_id,
+                                    'idempotent': True,
+                                }
+                            elif (
                                 decision == 'refund'
                                 and kernel_refund_runtime_budget is not None
-                                and 'already committed' in reason.lower()
+                                and 'already committed' in reason_lc
                             ):
                                 try:
                                     treasury_release = kernel_refund_runtime_budget(
@@ -8692,8 +8712,9 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     court_decision_ref=court_decision_ref,
                 )
                 reservation_id = str(result.get('reservation_id') or '').strip()
+                is_idempotent_refund = bool(result.get('idempotent'))
                 treasury_release = None
-                if reservation_id:
+                if reservation_id and not is_idempotent_refund:
                     try:
                         treasury_release = kernel_release_runtime_budget(
                             reservation_id=reservation_id,
@@ -8714,8 +8735,14 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                                 )
                             except Exception as refund_exc:
                                 treasury_release = {'status': 'error', 'reason': str(refund_exc)}
-                        else:
-                            treasury_release = {'status': 'error', 'reason': release_reason}
+                            else:
+                                treasury_release = {'status': 'error', 'reason': release_reason}
+                elif reservation_id and is_idempotent_refund:
+                    treasury_release = {
+                        'status': 'already_refunded',
+                        'reservation_id': reservation_id,
+                        'idempotent': True,
+                    }
                 result['treasury_release'] = treasury_release
                 log_event(org_id, by, 'commonwealth_settlement_refund',
                           resource=settlement_id, outcome='success',

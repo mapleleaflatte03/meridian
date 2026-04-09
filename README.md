@@ -105,6 +105,11 @@ Live surfaces:
 ./scripts/dev-supervisor.sh status
 MERIDIAN_SUPERVISOR_ENABLE=0 ./scripts/dev-up.sh
 
+# Optional persistent user service (survives shell exit)
+./scripts/install-supervisor-service.sh
+systemctl --user status meridian-runtime-supervisor.service --no-pager
+./scripts/uninstall-supervisor-service.sh
+
 # Bootstrap only (without auto-start)
 MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
 

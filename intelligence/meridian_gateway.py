@@ -170,7 +170,13 @@ MERIDIAN_CODEX_BIN = os.environ.get(
 )
 MAX_STEPS = int(os.environ.get("MERIDIAN_GATEWAY_MAX_STEPS", "6"))
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("MERIDIAN_GATEWAY_TIMEOUT_SECONDS", "90"))
-HEARTBEAT_INTERVAL_SECONDS = 60
+HEARTBEAT_INTERVAL_SECONDS = int(os.environ.get("MERIDIAN_HEARTBEAT_INTERVAL_SECONDS", "60"))
+HEARTBEAT_ENABLED = str(os.environ.get("MERIDIAN_HEARTBEAT_ENABLED", "1")).strip().lower() not in {
+    "0",
+    "false",
+    "no",
+    "off",
+}
 ROUTE_SCORE_TEAM_MARGIN_SHORT = int(os.environ.get("MERIDIAN_ROUTE_TEAM_MARGIN_SHORT", "9"))
 ROUTE_SCORE_TEAM_MARGIN_DEFAULT = int(os.environ.get("MERIDIAN_ROUTE_TEAM_MARGIN_DEFAULT", "4"))
 ROUTE_SCORE_DIRECT_GUARD_CONFIDENCE = int(os.environ.get("MERIDIAN_ROUTE_DIRECT_GUARD_CONFIDENCE", "55"))
@@ -10405,8 +10411,11 @@ def _workspace_post_timeout_seconds(path: str) -> float:
         "/api/court/vote",
         "/api/court/tally",
         "/api/court/proposals/activate",
+        "/api/commonwealth/settlement/prepare",
         "/api/commonwealth/settlement/commit",
         "/api/commonwealth/settlement/refund",
+        "/api/commonwealth/court/propagate",
+        "/api/commonwealth/marketplace/publish",
         "/api/commonwealth/marketplace/acquire",
     }
     if normalized in heavy_routes:
@@ -11510,6 +11519,7 @@ class WebAPIAdapter(ChannelAdapter):
                 return str(request_path or "").strip() in {
                     "/api/events",
                     "/api/events/stream",
+                    "/api/healthz",
                     "/api/workflows/showcase",
                     "/api/status",
                     "/api/runtime-proof",
@@ -11598,6 +11608,12 @@ class WebAPIAdapter(ChannelAdapter):
                         except queue.Empty:
                             break
                     self._send_json(200, {"status": "success", "events": events})
+                    return
+                if request_path == "/api/healthz":
+                    proxied = _workspace_api_get_json("/api/healthz", timeout_seconds=6.0)
+                    payload = dict(proxied.get("payload") or {})
+                    payload["gateway"] = "ok"
+                    self._send_json(int(proxied.get("status_code") or 200), payload)
                     return
                 if request_path == "/api/events/stream":
                     adapter._stream_events(self)
@@ -12116,7 +12132,7 @@ def main() -> int:
     telegram_adapter = TelegramAdapter(runtime, str(config.get("telegram_bot_token") or ""))
     web_adapter = WebAPIAdapter(runtime, str(config.get("allowed_origin") or ""))
     adapters: list[ChannelAdapter] = [telegram_adapter, web_adapter]
-    heartbeat = HeartbeatEngine(runtime, adapters)
+    heartbeat = HeartbeatEngine(runtime, adapters) if HEARTBEAT_ENABLED else None
 
     _log("Meridian Gateway starting", color=ANSI_GREEN)
     _log(f"SOUL loaded: {SOUL_PATH}")
@@ -12125,8 +12141,11 @@ def main() -> int:
 
     web_adapter.start()
     telegram_adapter.start()
-    heartbeat.start()
-    _log(f"heartbeat started: interval={HEARTBEAT_INTERVAL_SECONDS}s", color=ANSI_GREEN)
+    if heartbeat is not None:
+        heartbeat.start()
+        _log(f"heartbeat started: interval={HEARTBEAT_INTERVAL_SECONDS}s", color=ANSI_GREEN)
+    else:
+        _log("heartbeat disabled (MERIDIAN_HEARTBEAT_ENABLED=0)", color=ANSI_YELLOW)
 
     try:
         while True:
@@ -12134,7 +12153,8 @@ def main() -> int:
     except KeyboardInterrupt:
         _log("Meridian Gateway shutting down", color=ANSI_YELLOW)
     finally:
-        heartbeat.stop()
+        if heartbeat is not None:
+            heartbeat.stop()
         for adapter in adapters:
             adapter.stop()
     return 0

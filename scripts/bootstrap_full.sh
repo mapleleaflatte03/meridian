@@ -8,8 +8,10 @@ export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
 export LOOM_RUNTIME_ROOT="${LOOM_RUNTIME_ROOT:-$MERIDIAN_ROOT/runtime/default}"
+export MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE:-$MERIDIAN_ROOT/runtime/workspace_credentials}"
 export MERIDIAN_AUTO_START_STACK="${MERIDIAN_AUTO_START_STACK:-1}"
 export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
+export MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED:-0}"
 
 require_cmd() {
   local cmd="$1"
@@ -21,6 +23,66 @@ require_cmd() {
 
 require_cmd python3
 require_cmd curl
+
+ensure_workspace_credentials() {
+  MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT}" \
+  MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE}" \
+  MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-}" \
+  MERIDIAN_WORKSPACE_PASSWORD="${MERIDIAN_WORKSPACE_PASSWORD:-meridian_local_operator}" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+org_file = Path(os.environ["MERIDIAN_INTELLIGENCE_ROOT"]) / "company" / "meridian_platform" / "organizations.json"
+cred_file = Path(os.environ["MERIDIAN_WORKSPACE_CREDENTIALS_FILE"])
+target_org = (os.environ.get("MERIDIAN_WORKSPACE_ORG_ID") or "").strip()
+password = (os.environ.get("MERIDIAN_WORKSPACE_PASSWORD") or "").strip() or "meridian_local_operator"
+
+org_id = target_org
+owner_id = ""
+
+if org_file.exists():
+    payload = json.loads(org_file.read_text(encoding="utf-8"))
+    orgs = payload.get("organizations") or {}
+    if not org_id:
+        for oid, org in orgs.items():
+            if (org or {}).get("slug") == "meridian":
+                org_id = oid
+                break
+    if not org_id and orgs:
+        org_id = next(iter(orgs.keys()))
+    org = orgs.get(org_id) or {}
+    owner_id = (org.get("owner_id") or "").strip()
+    if not owner_id:
+        for member in org.get("members") or []:
+            candidate = (member.get("user_id") or "").strip()
+            if candidate:
+                owner_id = candidate
+                break
+
+if not org_id:
+    org_id = "local_foundry"
+if not owner_id:
+    owner_id = "user_meridian_5322393870"
+
+cred_file.parent.mkdir(parents=True, exist_ok=True)
+cred_file.write_text(
+    "\n".join(
+        [
+            "user: owner",
+            f"pass: {password}",
+            f"org_id: {org_id}",
+            f"user_id: {owner_id}",
+        ]
+    )
+    + "\n",
+    encoding="utf-8",
+)
+os.chmod(cred_file, 0o600)
+print(str(cred_file))
+PY
+}
 
 resolve_kernel_org_id() {
   python3 - <<'PY'
@@ -333,6 +395,7 @@ WORKSPACE_ORG_ID="$(seed_workspace_founding_org)"
 if [ -n "$WORKSPACE_ORG_ID" ]; then
   export MERIDIAN_WORKSPACE_ORG_ID="$WORKSPACE_ORG_ID"
 fi
+ensure_workspace_credentials >/dev/null
 echo "[bootstrap] Workspace org id: ${MERIDIAN_WORKSPACE_ORG_ID:-<auto>}"
 echo "[bootstrap] Bootstrapping workspace platform state..."
 run_workspace_platform_bootstrap

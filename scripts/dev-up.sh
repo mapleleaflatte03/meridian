@@ -8,6 +8,7 @@ export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/
 export MERIDIAN_WORKSPACE_PORT="${MERIDIAN_WORKSPACE_PORT:-18901}"
 export MERIDIAN_WORKSPACE_PEER_PORT="${MERIDIAN_WORKSPACE_PEER_PORT:-19001}"
 export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
+export MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED:-0}"
 export MERIDIAN_WORKSPACE_READY_TIMEOUT="${MERIDIAN_WORKSPACE_READY_TIMEOUT:-45}"
 export MERIDIAN_GATEWAY_READY_TIMEOUT="${MERIDIAN_GATEWAY_READY_TIMEOUT:-90}"
 export MERIDIAN_PEER_WORKSPACE_ENABLED="${MERIDIAN_PEER_WORKSPACE_ENABLED:-1}"
@@ -32,6 +33,7 @@ done
 RUNTIME_DIR="${MERIDIAN_ROOT}/runtime"
 PID_DIR="${RUNTIME_DIR}/pids"
 LOG_DIR="${RUNTIME_DIR}/logs"
+WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE:-${RUNTIME_DIR}/workspace_credentials}"
 mkdir -p "${PID_DIR}" "${LOG_DIR}"
 
 resolve_org_id() {
@@ -78,8 +80,70 @@ print(next(iter(orgs.keys()), ""))
 PY
 }
 
+ensure_workspace_credentials() {
+  MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT}" \
+  WORKSPACE_CREDENTIALS_FILE="${WORKSPACE_CREDENTIALS_FILE}" \
+  MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+  MERIDIAN_WORKSPACE_PASSWORD="${MERIDIAN_WORKSPACE_PASSWORD:-meridian_local_operator}" \
+  python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+org_file = Path(os.environ["MERIDIAN_INTELLIGENCE_ROOT"]) / "company" / "meridian_platform" / "organizations.json"
+cred_file = Path(os.environ["WORKSPACE_CREDENTIALS_FILE"])
+target_org = (os.environ.get("MERIDIAN_WORKSPACE_ORG_ID") or "").strip()
+password = (os.environ.get("MERIDIAN_WORKSPACE_PASSWORD") or "").strip() or "meridian_local_operator"
+
+org_id = target_org
+owner_id = ""
+
+if org_file.exists():
+    payload = json.loads(org_file.read_text(encoding="utf-8"))
+    orgs = payload.get("organizations") or {}
+    if not org_id:
+        for oid, org in orgs.items():
+            if (org or {}).get("slug") == "meridian":
+                org_id = oid
+                break
+    if not org_id and orgs:
+        org_id = next(iter(orgs.keys()))
+    org = orgs.get(org_id) or {}
+    owner_id = (org.get("owner_id") or "").strip()
+    if not owner_id:
+        for member in org.get("members") or []:
+            candidate = (member.get("user_id") or "").strip()
+            if candidate:
+                owner_id = candidate
+                break
+
+if not org_id:
+    org_id = "local_foundry"
+if not owner_id:
+    owner_id = "user_meridian_5322393870"
+
+cred_file.parent.mkdir(parents=True, exist_ok=True)
+cred_file.write_text(
+    "\n".join(
+        [
+            "user: owner",
+            f"pass: {password}",
+            f"org_id: {org_id}",
+            f"user_id: {owner_id}",
+        ]
+    )
+    + "\n",
+    encoding="utf-8",
+)
+os.chmod(cred_file, 0o600)
+print(str(cred_file))
+PY
+}
+
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-$(resolve_org_id)}"
 export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$(resolve_workspace_org_id)}"
+export MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${WORKSPACE_CREDENTIALS_FILE}"
+ensure_workspace_credentials >/dev/null
 
 port_listening() {
   local port="$1"
@@ -88,6 +152,42 @@ port_listening() {
   else
     ss -lnt "( sport = :${port} )" 2>/dev/null | grep -Eq ":${port}([^0-9]|$)"
   fi
+}
+
+pid_for_port() {
+  local port="$1"
+  ss -ltnp "( sport = :${port} )" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1
+}
+
+process_cmdline() {
+  local pid="$1"
+  if [[ -z "${pid}" || ! -r "/proc/${pid}/cmdline" ]]; then
+    return 1
+  fi
+  tr '\0' ' ' <"/proc/${pid}/cmdline"
+}
+
+is_legacy_workspace_process() {
+  local pid="$1"
+  local cmdline=""
+  cmdline="$(process_cmdline "${pid}" 2>/dev/null || true)"
+  [[ "${cmdline}" == *"/home/ubuntu/.meridian/workspace/"* ]]
+}
+
+kill_port_process() {
+  local port="$1"
+  local pids
+  pids="$(ss -ltnp "( sport = :${port} )" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | sort -u | tr '\n' ' ')"
+  if [[ -z "${pids// }" ]]; then
+    return
+  fi
+  for pid in ${pids}; do
+    if kill -0 "${pid}" >/dev/null 2>&1; then
+      kill "${pid}" >/dev/null 2>&1 || true
+      sleep 0.2
+      kill -9 "${pid}" >/dev/null 2>&1 || true
+    fi
+  done
 }
 
 kill_pid_file_process() {
@@ -104,6 +204,22 @@ kill_pid_file_process() {
     kill -9 "${pid}" >/dev/null 2>&1 || true
   fi
   rm -f "${pid_file}"
+}
+
+disable_legacy_gateway_unit_if_needed() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return
+  fi
+  if ! systemctl --user list-unit-files 2>/dev/null | grep -q '^meridian-gateway.service'; then
+    return
+  fi
+  local unit_body
+  unit_body="$(systemctl --user cat meridian-gateway.service 2>/dev/null || true)"
+  if [[ "${unit_body}" != *"/home/ubuntu/.meridian/workspace/meridian_gateway.py"* ]]; then
+    return
+  fi
+  echo "[dev-up] disabling legacy user unit meridian-gateway.service (points to ~/.meridian/workspace)"
+  systemctl --user disable --now meridian-gateway.service >/dev/null 2>&1 || true
 }
 
 print_startup_failure() {
@@ -140,6 +256,26 @@ while time.time() < deadline:
         last = exc
         time.sleep(0.5)
 raise SystemExit(f"timeout waiting for {url}: {last}")
+PY
+}
+
+service_healthy() {
+  local url="$1"
+  local timeout_s="${2:-5}"
+  python3 - "$url" "$timeout_s" <<'PY'
+import json
+import sys
+import urllib.request
+
+url = sys.argv[1]
+timeout_s = float(sys.argv[2])
+try:
+    with urllib.request.urlopen(url, timeout=timeout_s) as r:
+        payload = json.loads(r.read().decode("utf-8"))
+    if isinstance(payload, dict):
+        raise SystemExit(0)
+except Exception:
+    raise SystemExit(1)
 PY
 }
 
@@ -241,11 +377,20 @@ write_json(os.path.join(peer_root, "witness_archive.json"), witness_archive)
 open(os.path.join(peer_root, ".federation_replay"), "a", encoding="utf-8").close()
 PY
 }
-
 start_workspace_if_needed() {
   if port_listening "$MERIDIAN_WORKSPACE_PORT"; then
-    echo "[dev-up] workspace already listening on :${MERIDIAN_WORKSPACE_PORT}"
-    return
+    local existing_pid=""
+    existing_pid="$(pid_for_port "${MERIDIAN_WORKSPACE_PORT}")"
+    if [[ -n "${existing_pid}" ]] && is_legacy_workspace_process "${existing_pid}"; then
+      echo "[dev-up] workspace port ${MERIDIAN_WORKSPACE_PORT} owned by legacy runtime (pid=${existing_pid}); restarting"
+      kill_port_process "${MERIDIAN_WORKSPACE_PORT}"
+    elif service_healthy "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/healthz" 8; then
+      echo "[dev-up] workspace already listening on :${MERIDIAN_WORKSPACE_PORT}"
+      return
+    else
+      echo "[dev-up] workspace port ${MERIDIAN_WORKSPACE_PORT} is stale; restarting"
+      kill_port_process "${MERIDIAN_WORKSPACE_PORT}"
+    fi
   fi
 
   local attempts=3
@@ -261,6 +406,8 @@ start_workspace_if_needed() {
       fi
       MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
       MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE}" \
+      MERIDIAN_FEDERATION_SIGNING_SECRET="${MERIDIAN_FEDERATION_SIGNING_SECRET}" \
       nohup python3 workspace.py --port "${MERIDIAN_WORKSPACE_PORT}" "${org_args[@]}" \
         >"${LOG_DIR}/workspace.log" 2>&1 &
       echo $! > "${PID_DIR}/workspace.pid"
@@ -289,8 +436,18 @@ start_workspace_peer_if_needed() {
   fi
 
   if port_listening "$MERIDIAN_WORKSPACE_PEER_PORT"; then
-    echo "[dev-up] workspace peer already listening on :${MERIDIAN_WORKSPACE_PEER_PORT}"
-    return
+    local existing_pid=""
+    existing_pid="$(pid_for_port "${MERIDIAN_WORKSPACE_PEER_PORT}")"
+    if [[ -n "${existing_pid}" ]] && is_legacy_workspace_process "${existing_pid}"; then
+      echo "[dev-up] workspace peer port ${MERIDIAN_WORKSPACE_PEER_PORT} owned by legacy runtime (pid=${existing_pid}); restarting"
+      kill_port_process "${MERIDIAN_WORKSPACE_PEER_PORT}"
+    elif wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}/api/healthz" 8 >/dev/null 2>&1; then
+      echo "[dev-up] workspace peer already listening on :${MERIDIAN_WORKSPACE_PEER_PORT}"
+      return
+    else
+      echo "[dev-up] workspace peer port ${MERIDIAN_WORKSPACE_PEER_PORT} is stale; restarting"
+      kill_port_process "${MERIDIAN_WORKSPACE_PEER_PORT}"
+    fi
   fi
 
   local primary_host_id
@@ -311,6 +468,7 @@ start_workspace_peer_if_needed() {
       fi
       MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
       MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE}" \
       MERIDIAN_RUNTIME_HOST_IDENTITY_FILE="${peer_root}/host_identity.json" \
       MERIDIAN_RUNTIME_ADMISSION_FILE="${peer_root}/institution_admissions.json" \
       MERIDIAN_FEDERATION_PEERS_FILE="${peer_root}/federation_peers.json" \
@@ -325,7 +483,7 @@ start_workspace_peer_if_needed() {
     peer_pid="$(cat "${PID_DIR}/workspace-peer.pid" 2>/dev/null || true)"
     for _ in $(seq 1 30); do
       if port_listening "${MERIDIAN_WORKSPACE_PEER_PORT}"; then
-        if wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}/api/federation/manifest" 5 >/dev/null 2>&1; then
+        if wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}/api/healthz" 8 >/dev/null 2>&1; then
           return
         fi
       fi
@@ -343,8 +501,18 @@ start_workspace_peer_if_needed() {
 
 start_gateway_if_needed() {
   if port_listening "$MERIDIAN_GATEWAY_PORT"; then
-    echo "[dev-up] gateway already listening on :${MERIDIAN_GATEWAY_PORT}"
-    return
+    local existing_pid=""
+    existing_pid="$(pid_for_port "${MERIDIAN_GATEWAY_PORT}")"
+    if [[ -n "${existing_pid}" ]] && is_legacy_workspace_process "${existing_pid}"; then
+      echo "[dev-up] gateway port ${MERIDIAN_GATEWAY_PORT} owned by legacy runtime (pid=${existing_pid}); restarting"
+      kill_port_process "${MERIDIAN_GATEWAY_PORT}"
+    elif service_healthy "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/healthz" 8; then
+      echo "[dev-up] gateway already listening on :${MERIDIAN_GATEWAY_PORT}"
+      return
+    else
+      echo "[dev-up] gateway port ${MERIDIAN_GATEWAY_PORT} is stale; restarting"
+      kill_port_process "${MERIDIAN_GATEWAY_PORT}"
+    fi
   fi
 
   local attempts=3
@@ -356,8 +524,10 @@ start_gateway_if_needed() {
       cd "${MERIDIAN_INTELLIGENCE_ROOT}"
       MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT}" \
       MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+      MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE}" \
       MERIDIAN_WORKSPACE_API_BASE="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" \
       MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT}" \
+      MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED}" \
       nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
       echo $! > "${PID_DIR}/gateway.pid"
     )
@@ -405,6 +575,8 @@ start_supervisor_if_needed() {
     MERIDIAN_WORKSPACE_PEER_PORT="${MERIDIAN_WORKSPACE_PEER_PORT}" \
     MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT}" \
     MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID}" \
+    MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE}" \
+    MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED}" \
     MERIDIAN_PEER_WORKSPACE_ENABLED="${MERIDIAN_PEER_WORKSPACE_ENABLED}" \
     MERIDIAN_SUPERVISOR_INTERVAL_SECONDS="${MERIDIAN_SUPERVISOR_INTERVAL_SECONDS}" \
     MERIDIAN_FEDERATION_PEER_HOST_ID="${MERIDIAN_FEDERATION_PEER_HOST_ID}" \
@@ -414,8 +586,9 @@ start_supervisor_if_needed() {
   )
 }
 
+disable_legacy_gateway_unit_if_needed
 start_workspace_if_needed
-wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/status" "${MERIDIAN_WORKSPACE_READY_TIMEOUT}" >/dev/null
+wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/healthz" "${MERIDIAN_WORKSPACE_READY_TIMEOUT}" >/dev/null
 start_workspace_peer_if_needed
 
 start_gateway_if_needed
