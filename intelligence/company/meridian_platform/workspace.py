@@ -232,6 +232,13 @@ PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS = max(
     0.5,
     float(os.environ.get('MERIDIAN_PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS', '4') or '4'),
 )
+PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_FULL_SECONDS = max(
+    PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS,
+    float(
+        os.environ.get('MERIDIAN_PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_FULL_SECONDS', '60')
+        or '60'
+    ),
+)
 PUBLIC_PROOF_FALLBACK_MAX_AGE_SECONDS = max(
     PUBLIC_PROOF_CACHE_TTL_SECONDS,
     int(os.environ.get('MERIDIAN_PUBLIC_PROOF_FALLBACK_MAX_AGE_SECONDS', '3600') or '3600'),
@@ -810,8 +817,13 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
             return payload
 
     refresh_future = _ensure_refresh_in_flight()
+    sync_timeout_seconds = (
+        PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_FULL_SECONDS
+        if run_reference_proofs
+        else PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS
+    )
     try:
-        return refresh_future.result(timeout=PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS)
+        return refresh_future.result(timeout=sync_timeout_seconds)
     except concurrent.futures.TimeoutError:
         return _placeholder_payload(
             'public_bundle_build_in_progress',
@@ -6697,7 +6709,20 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 if body.get('tag'):
                     nodes = [node for node in nodes if body.get('tag') in (node.get('tags') or [])]
                 proof = dict(payload.get('proof') or {})
+                # Keep proof payload aligned with filtered query results so
+                # round-trip verification on /api/memory/verify remains valid.
+                if body.get('key') or body.get('tag'):
+                    proof['proof_nodes'] = [
+                        {
+                            'hash': node.get('hash'),
+                            'prev_hash': node.get('prev_hash'),
+                            'depth': node.get('depth'),
+                            'timestamp': node.get('timestamp'),
+                        }
+                        for node in nodes
+                    ]
                 proof['selected_count'] = len(nodes)
+                proof['matched_count'] = len(nodes)
                 return self._json({'nodes': nodes, 'count': len(nodes), 'proof': proof})
 
             elif path == '/api/memory/head':

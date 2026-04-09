@@ -186,6 +186,12 @@ WORKSPACE_API_POST_TIMEOUT_SECONDS = float(
 WORKSPACE_API_POST_HEAVY_TIMEOUT_SECONDS = float(
     os.environ.get("MERIDIAN_WORKSPACE_API_POST_HEAVY_TIMEOUT_SECONDS", "60")
 )
+WORKSPACE_API_GET_TIMEOUT_SECONDS = float(
+    os.environ.get("MERIDIAN_WORKSPACE_API_GET_TIMEOUT_SECONDS", "20")
+)
+WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS = float(
+    os.environ.get("MERIDIAN_WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS", "65")
+)
 WORKSPACE_API_BASE = os.environ.get("MERIDIAN_WORKSPACE_API_BASE", "http://127.0.0.1:18901").rstrip("/")
 WORKSPACE_CREDENTIALS_FILE = Path(
     os.environ.get("MERIDIAN_WORKSPACE_CREDENTIALS_FILE", "/home/ubuntu/.meridian/.workspace_credentials")
@@ -10394,6 +10400,10 @@ def _workspace_post_timeout_seconds(path: str) -> float:
     heavy_routes = {
         "/api/marketplace/assign",
         "/api/marketplace/settle",
+        "/api/court/proposals",
+        "/api/court/vote",
+        "/api/court/tally",
+        "/api/court/proposals/activate",
         "/api/commonwealth/settlement/commit",
         "/api/commonwealth/settlement/refund",
         "/api/commonwealth/marketplace/acquire",
@@ -11642,7 +11652,23 @@ class WebAPIAdapter(ChannelAdapter):
                     self._send_json(int(proxied.get("status_code") or 200), payload)
                     return
                 if request_path == "/api/kernel-proof-bundle":
-                    proxied = _workspace_api_get_json(proxied_path)
+                    query = parse_qs(parsed.query or "")
+                    mode = str((query.get("mode") or [""])[-1] or "").strip().lower()
+                    full = str((query.get("full") or ["0"])[-1] or "").strip().lower() in {
+                        "1",
+                        "true",
+                        "yes",
+                        "on",
+                    }
+                    timeout_seconds = (
+                        WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS
+                        if full or mode in {"full", "reference", "live"}
+                        else WORKSPACE_API_GET_TIMEOUT_SECONDS
+                    )
+                    proxied = _workspace_api_get_json(
+                        proxied_path,
+                        timeout_seconds=timeout_seconds,
+                    )
                     payload = _normalize_status_wording(dict(proxied.get("payload") or {}))
                     self._send_json(int(proxied.get("status_code") or 200), payload)
                     return
