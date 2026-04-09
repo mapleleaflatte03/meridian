@@ -1,6 +1,7 @@
 import os
 import sys
 import unittest
+from unittest.mock import patch
 
 KERNEL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if KERNEL_DIR not in sys.path:
@@ -28,6 +29,26 @@ class AdmissionPolicyTests(unittest.TestCase):
         self.assertFalse(result['admitted'])
         self.assertEqual(result['policy'], 'planned')
         self.assertIn('cannot be admitted', ' '.join(result['violations']))
+
+    @patch('admission_policy.load_runtimes')
+    def test_get_runtime_found(self, mock_load_runtimes):
+        mock_load_runtimes.return_value = {
+            'runtimes': {
+                'test_runtime': {'status': 'active'}
+            }
+        }
+        result = admission_policy.get_runtime('test_runtime')
+        self.assertEqual(result, {'status': 'active'})
+
+    @patch('admission_policy.load_runtimes')
+    def test_get_runtime_not_found(self, mock_load_runtimes):
+        mock_load_runtimes.return_value = {
+            'runtimes': {
+                'test_runtime': {'status': 'active'}
+            }
+        }
+        result = admission_policy.get_runtime('non_existent_runtime')
+        self.assertIsNone(result)
 
 
 if __name__ == '__main__':
