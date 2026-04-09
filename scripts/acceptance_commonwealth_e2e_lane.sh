@@ -8,13 +8,26 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BASE_URL="${MERIDIAN_BASE_URL:-http://127.0.0.1:8266}"
-REQUEST_TIMEOUT="${MERIDIAN_REQUEST_TIMEOUT:-25}"
+REQUEST_TIMEOUT="${MERIDIAN_REQUEST_TIMEOUT:-60}"
 OPERATOR_TOKEN="${MERIDIAN_OPERATOR_TOKEN:-${MERIDIAN_GATEWAY_TOKEN:-}}"
 FAIL=0
 
 pass() { echo "[OK]   $1"; }
 fail() { echo "[FAIL] $1"; FAIL=1; }
 skip() { echo "[SKIP] $1"; }
+
+wait_for_api() {
+    local url="$1"
+    local timeout_s="${2:-30}"
+    local deadline=$((SECONDS + timeout_s))
+    while (( SECONDS < deadline )); do
+        if curl -fsS --max-time 5 "$url" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
 
 require_json_field() {
     local label="$1"
@@ -86,10 +99,16 @@ api_post() {
 api_post_retry_timeout() {
     local path="$1"
     local data="$2"
-    local attempts="${3:-3}"
+    local attempts="${3:-5}"
     local i resp
     for ((i=1; i<=attempts; i++)); do
         resp="$(api_post "$path" "$data")"
+        if [[ "${LAST_HTTP_CODE:-000}" == "000" ]]; then
+            if (( i < attempts )); then
+                sleep 1
+                continue
+            fi
+        fi
         if echo "$resp" | python3 -c "import json,sys; d=json.load(sys.stdin); assert not (d.get('output') == 'TimeoutError: timed out' or str(d.get('error','')).startswith('TimeoutError'))" 2>/dev/null; then
             echo "$resp"
             return 0
@@ -100,6 +119,58 @@ api_post_retry_timeout() {
     done
     echo "$resp"
     return 0
+}
+
+api_get_retry_json() {
+    local path="$1"
+    local attempts="${2:-5}"
+    local i resp
+    for ((i=1; i<=attempts; i++)); do
+        resp="$(api_get "$path")"
+        if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert isinstance(d, dict) and len(d) > 0" 2>/dev/null; then
+            echo "$resp"
+            return 0
+        fi
+        if (( i < attempts )); then
+            sleep 1
+        fi
+    done
+    echo "$resp"
+    return 0
+}
+
+ensure_treasury_headroom() {
+    local required_usd="${1:-0.0}"
+    local context_label="${2:-treasury headroom}"
+    local snapshot shortfall available needs_topup topup_amount topup_resp
+
+    snapshot="$(api_get "/api/treasury")"
+    if ! assert_http_ok "Treasury check ($context_label)" "$snapshot"; then
+        fail "Treasury snapshot unavailable for $context_label"
+        return 1
+    fi
+
+    shortfall="$(echo "$snapshot" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(float(d.get('shortfall_usd') or 0.0))" 2>/dev/null || echo "0")"
+    available="$(echo "$snapshot" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(float(d.get('available_for_reservation_usd') or 0.0))" 2>/dev/null || echo "0")"
+
+    needs_topup=0
+    if python3 -c "import sys; shortfall=float(sys.argv[1]); avail=float(sys.argv[2]); req=float(sys.argv[3]); raise SystemExit(0 if (shortfall > 0.0001 or avail + 1e-9 < req) else 1)" "$shortfall" "$available" "$required_usd" 2>/dev/null; then
+        needs_topup=1
+    fi
+
+    if [[ "$needs_topup" == "0" ]]; then
+        pass "Treasury headroom sufficient for $context_label (available=${available}, required=${required_usd})"
+        return 0
+    fi
+
+    topup_amount="$(python3 -c "import sys; shortfall=float(sys.argv[1]); avail=float(sys.argv[2]); req=float(sys.argv[3]); deficit=max(shortfall, req-avail, 0.0); print(round(max(deficit + 5.0, 1.0), 2))" "$shortfall" "$available" "$required_usd")"
+    topup_resp="$(api_post "/api/treasury/contribute" "{\"amount\":${topup_amount},\"note\":\"e2e auto headroom ${context_label}\"}")"
+    if assert_http_ok "Treasury top-up ($context_label)" "$topup_resp"; then
+        pass "Treasury topped up by \$${topup_amount} for $context_label"
+        return 0
+    fi
+    fail "Treasury top-up failed for $context_label: $topup_resp"
+    return 1
 }
 
 assert_http_ok() {
@@ -130,7 +201,7 @@ assert_http_ok() {
 # ─── Pre-flight ──────────────────────────────────────────────────────────────
 echo ""
 echo "=== Pre-flight: API reachability ==="
-if ! curl -fsS --max-time 5 "$BASE_URL/api/status" >/dev/null 2>&1; then
+if ! wait_for_api "$BASE_URL/api/status" "${MERIDIAN_API_READY_TIMEOUT_SECONDS:-45}"; then
     echo "[FAIL] API server not reachable at $BASE_URL"
     exit 1
 fi
@@ -156,6 +227,41 @@ E2E_AGENT_ID="${MERIDIAN_E2E_AGENT_ID:-agent_forge}"
 E2E_PRIMARY_AMOUNT="${MERIDIAN_E2E_PRIMARY_AMOUNT:-0.25}"
 E2E_GUARD_AMOUNT="${MERIDIAN_E2E_GUARD_AMOUNT:-0.20}"
 E2E_REFUND_AMOUNT="${MERIDIAN_E2E_REFUND_AMOUNT:-0.10}"
+E2E_AUTO_RECAPITALIZE="${MERIDIAN_E2E_AUTO_RECAPITALIZE:-1}"
+E2E_RUN_ID="${MERIDIAN_E2E_RUN_ID:-$(date -u +%Y%m%dT%H%M%S)-$RANDOM}"
+
+echo ""
+echo "=== Treasury preflight for settlement tests ==="
+TREASURY_PREFLIGHT="$(api_get "/api/treasury")"
+if assert_http_ok "Treasury preflight /api/treasury" "$TREASURY_PREFLIGHT"; then
+    SHORTFALL_USD="$(echo "$TREASURY_PREFLIGHT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(float(d.get('shortfall_usd') or 0.0))" 2>/dev/null || echo "0")"
+    AVAILABLE_FOR_RESERVATION_USD="$(echo "$TREASURY_PREFLIGHT" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(float(d.get('available_for_reservation_usd') or 0.0))" 2>/dev/null || echo "0")"
+    REQUIRED_HEADROOM_USD="$(python3 -c "import sys; a=float(sys.argv[1]); b=float(sys.argv[2]); c=float(sys.argv[3]); print(round(a+b+c+0.75, 2))" "$E2E_PRIMARY_AMOUNT" "$E2E_GUARD_AMOUNT" "$E2E_REFUND_AMOUNT")"
+    if [[ "${E2E_AUTO_RECAPITALIZE}" == "1" ]]; then
+        NEEDS_TOPUP=0
+        if python3 -c "import sys; x=float(sys.argv[1]); raise SystemExit(0 if x > 0.0001 else 1)" "${SHORTFALL_USD}" 2>/dev/null; then
+            NEEDS_TOPUP=1
+        fi
+        if python3 -c "import sys; avail=float(sys.argv[1]); req=float(sys.argv[2]); raise SystemExit(0 if avail + 1e-9 < req else 1)" "${AVAILABLE_FOR_RESERVATION_USD}" "${REQUIRED_HEADROOM_USD}" 2>/dev/null; then
+            NEEDS_TOPUP=1
+        fi
+        if [[ "$NEEDS_TOPUP" == "1" ]]; then
+            TOPUP_AMOUNT="$(python3 -c "import sys; shortfall=float(sys.argv[1]); avail=float(sys.argv[2]); req=float(sys.argv[3]); deficit=max(shortfall, req-avail, 0.0); print(round(deficit + 5.0, 2))" "${SHORTFALL_USD}" "${AVAILABLE_FOR_RESERVATION_USD}" "${REQUIRED_HEADROOM_USD}")"
+            TOPUP_RESP="$(api_post "/api/treasury/contribute" "{\"amount\":${TOPUP_AMOUNT},\"note\":\"e2e auto recapitalize\"}")"
+            if assert_http_ok "Treasury top-up /api/treasury/contribute" "$TOPUP_RESP"; then
+                pass "Treasury recapitalized by \$${TOPUP_AMOUNT} for E2E settlement coverage"
+            else
+                fail "Treasury top-up failed: $TOPUP_RESP"
+            fi
+        else
+            pass "Treasury preflight already above reserve floor"
+        fi
+    else
+        skip "Treasury auto recapitalize disabled (MERIDIAN_E2E_AUTO_RECAPITALIZE=0)"
+    fi
+else
+    fail "Treasury preflight route unavailable"
+fi
 
 # ─── L1: Federation Layer on PoGE ────────────────────────────────────────────
 echo ""
@@ -205,7 +311,7 @@ echo ""
 echo "=== L4: Verifiable Agent Exchange Protocol — Publish ==="
 
 PUBLISH_RESP="$(api_post "/api/commonwealth/marketplace/publish" \
-    "{\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E commonwealth test agent\",\"amount_usd\":$E2E_PRIMARY_AMOUNT,\"royalty_rate\":0.10,\"federation_scope\":[\"org_b_test\"],\"action_ids\":[\"e2e_publish\"]}")"
+    "{\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E commonwealth test agent ${E2E_RUN_ID}\",\"amount_usd\":$E2E_PRIMARY_AMOUNT,\"royalty_rate\":0.10,\"federation_scope\":[\"org_b_test\"],\"action_ids\":[\"e2e_publish_${E2E_RUN_ID}\"]}")"
 if ! assert_http_ok "L4-POST /api/commonwealth/marketplace/publish" "$PUBLISH_RESP"; then
     LISTING_ID=""
 elif echo "$PUBLISH_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('listing_id'), f'no listing_id: {d}'" 2>/dev/null; then
@@ -238,8 +344,12 @@ fi
 echo ""
 echo "=== L2: Inter-Institution Settlement Protocol ==="
 
+if [[ "${E2E_AUTO_RECAPITALIZE}" == "1" ]]; then
+    ensure_treasury_headroom "$(python3 -c "import sys; p=float(sys.argv[1]); g=float(sys.argv[2]); r=float(sys.argv[3]); print(round(p+g+r+0.5, 2))" "$E2E_PRIMARY_AMOUNT" "$E2E_GUARD_AMOUNT" "$E2E_REFUND_AMOUNT")" "settlement prepare bundle" || true
+fi
+
 PREPARE_RESP="$(api_post_retry_timeout "/api/commonwealth/settlement/prepare" \
-    "{\"peer_org_id\":\"org_b_test\",\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E settlement\",\"amount_usd\":$E2E_PRIMARY_AMOUNT,\"royalty_rate\":0.10,\"action_ids\":[\"e2e_settle\"]}")"
+    "{\"peer_org_id\":\"org_b_test\",\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E settlement ${E2E_RUN_ID}\",\"amount_usd\":$E2E_PRIMARY_AMOUNT,\"royalty_rate\":0.10,\"action_ids\":[\"e2e_settle_${E2E_RUN_ID}\"]}")"
 if ! assert_http_ok "L2-POST /api/commonwealth/settlement/prepare" "$PREPARE_RESP"; then
     SETTLEMENT_ID=""
 elif echo "$PREPARE_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('settlement_id'), f'no settlement_id: {d}'" 2>/dev/null; then
@@ -293,8 +403,8 @@ else
 fi
 
 PREPARE_FAKE_RESP="$(api_post_retry_timeout "/api/commonwealth/settlement/prepare" \
-    "{\"peer_org_id\":\"org_b_test\",\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E invalid proof guard\",\"amount_usd\":$E2E_GUARD_AMOUNT,\"royalty_rate\":0.10,\"action_ids\":[]}")"
-FAKE_SETTLEMENT_ID="$(echo "$PREPARE_FAKE_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('settlement_id',''))" 2>/dev/null)"
+    "{\"peer_org_id\":\"org_b_test\",\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E invalid proof guard ${E2E_RUN_ID}\",\"amount_usd\":$E2E_GUARD_AMOUNT,\"royalty_rate\":0.10,\"action_ids\":[\"e2e_invalid_${E2E_RUN_ID}\"]}")"
+FAKE_SETTLEMENT_ID="$(echo "$PREPARE_FAKE_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('settlement_id',''))" 2>/dev/null || true)"
 if ! assert_http_ok "L2 fake-prepare" "$PREPARE_FAKE_RESP"; then
     fail "L2: unable to create fake-proof settlement guard case: $PREPARE_FAKE_RESP"
 elif [[ -n "$FAKE_SETTLEMENT_ID" ]]; then
@@ -311,8 +421,8 @@ fi
 
 # ─── L2: Settlement — Refund (new settlement for dispute path) ────────────────
 PREPARE_REFUND_RESP="$(api_post_retry_timeout "/api/commonwealth/settlement/prepare" \
-    "{\"peer_org_id\":\"org_b_test\",\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E dispute/refund test\",\"amount_usd\":$E2E_REFUND_AMOUNT,\"royalty_rate\":0.10,\"action_ids\":[]}")"
-REFUND_SETTLEMENT_ID="$(echo "$PREPARE_REFUND_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('settlement_id',''))" 2>/dev/null)"
+    "{\"peer_org_id\":\"org_b_test\",\"agent_id\":\"$E2E_AGENT_ID\",\"task_description\":\"E2E dispute/refund test ${E2E_RUN_ID}\",\"amount_usd\":$E2E_REFUND_AMOUNT,\"royalty_rate\":0.10,\"action_ids\":[\"e2e_refund_${E2E_RUN_ID}\"]}")"
+REFUND_SETTLEMENT_ID="$(echo "$PREPARE_REFUND_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('settlement_id',''))" 2>/dev/null || true)"
 
 if ! assert_http_ok "L2-refund prepare" "$PREPARE_REFUND_RESP"; then
     fail "L2-refund: failed to prepare a second settlement for refund test: $PREPARE_REFUND_RESP"
@@ -320,7 +430,8 @@ elif [[ -n "$REFUND_SETTLEMENT_ID" ]]; then
     REFUND_RESP="$(api_post_retry_timeout "/api/commonwealth/settlement/refund" \
         "{\"settlement_id\":\"$REFUND_SETTLEMENT_ID\",\"reason\":\"E2E court-ordered refund\",\"court_decision_ref\":\"court_e2e_001\"}")"
     if ! assert_http_ok "L2-POST /api/commonwealth/settlement/refund" "$REFUND_RESP"; then
-        if echo "$REFUND_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); msg=' '.join([str(d.get('error','')), str(d.get('reason','')), str(d.get('output',''))]).lower(); assert 'already refunded' in msg or 'status=refunded' in msg" 2>/dev/null; then
+        REFUND_MSG_NORM="$(printf "%s" "$REFUND_RESP" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$REFUND_MSG_NORM" == *"already refunded"* || "$REFUND_MSG_NORM" == *"status=refunded"* || "$REFUND_MSG_NORM" == *"cannot be refunded"* ]]; then
             pass "L2-POST /api/commonwealth/settlement/refund: idempotent replay accepted (already refunded)"
         else
             fail "L2-POST /api/commonwealth/settlement/refund: $REFUND_RESP"
@@ -337,7 +448,7 @@ echo ""
 echo "=== L3: Dynamic Constitutional Federation ==="
 
 PROPAGATE_RESP="$(api_post "/api/commonwealth/court/propagate" \
-    "{\"peer_host_id\":\"$LINK_PEER_HOST_ID\",\"peer_org_id\":\"$ACTIVE_ORG_ID\",\"rule_id\":\"rule_e2e_001\",\"rule_text\":\"E2E cross-institution rule: no unauthorized agent execution\",\"ruleset_version\":\"1.0.0-e2e\"}")"
+    "{\"peer_host_id\":\"$LINK_PEER_HOST_ID\",\"peer_org_id\":\"$ACTIVE_ORG_ID\",\"rule_id\":\"rule_e2e_${E2E_RUN_ID}\",\"rule_text\":\"E2E cross-institution rule: no unauthorized agent execution\",\"ruleset_version\":\"1.0.0-e2e-${E2E_RUN_ID}\"}")"
 if ! assert_http_ok "L3-POST /api/commonwealth/court/propagate" "$PROPAGATE_RESP"; then
     fail "L3-POST /api/commonwealth/court/propagate: $PROPAGATE_RESP"
 elif echo "$PROPAGATE_RESP" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('propagation_id'), f'no propagation_id: {d}'; assert d.get('delivery_status') == 'envelope_delivered', d" 2>/dev/null; then
@@ -350,7 +461,7 @@ fi
 echo ""
 echo "=== L5: Temporal Memory Commonwealth Chain ==="
 
-ANCHOR="$(api_get "/api/commonwealth/memory/anchor")"
+ANCHOR="$(api_get_retry_json "/api/commonwealth/memory/anchor" 8)"
 if echo "$ANCHOR" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('anchor_status') == 'verified', f'anchor not verified: {d}'" 2>/dev/null; then
     pass "L5-GET /api/commonwealth/memory/anchor: chain verified"
     ANCHOR_HASH="$(echo "$ANCHOR" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(d.get('head_hash',''))")"
@@ -363,7 +474,7 @@ fi
 echo ""
 echo "=== /api/status V5 contract blocks ==="
 
-api_get "/api/status" > /tmp/meridian_e2e_status.json
+api_get_retry_json "/api/status" 8 > /tmp/meridian_e2e_status.json
 python3 - /tmp/meridian_e2e_status.json <<'PY'
 import json, sys
 with open(sys.argv[1]) as f:

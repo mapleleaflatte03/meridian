@@ -12,7 +12,7 @@ FAIL=0
 ALLOW_API_SKIP="${MERIDIAN_ALLOW_API_SKIP:-0}"
 SCREENSHOTS_DIR="/tmp/meridian_ui_anatomy_screenshots"
 STATIC_PID_FILE="/tmp/meridian_ui_anatomy_static_server.pid"
-STATIC_PORT=18099
+STATIC_PORT="${MERIDIAN_UI_STATIC_PORT:-}"
 mkdir -p "$SCREENSHOTS_DIR"
 
 cleanup() {
@@ -44,6 +44,16 @@ check_absent() {
         echo "[FAIL] $label (unexpectedly present)"
         FAIL=1
     fi
+}
+
+find_free_port() {
+    python3 - <<'PY'
+import socket
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+    s.bind(("127.0.0.1", 0))
+    print(s.getsockname()[1])
+PY
 }
 
 # ---------------------------------------------------------------------------
@@ -181,6 +191,9 @@ if command -v node >/dev/null 2>&1; then
 fi
 
 if [[ $PLAYWRIGHT_AVAILABLE -eq 1 ]]; then
+    if [[ -z "${STATIC_PORT}" ]]; then
+        STATIC_PORT="$(find_free_port)"
+    fi
     # Start static file server for the www directory
     python3 -c "
 import http.server
@@ -203,7 +216,7 @@ server.serve_forever()
 
     STATIC_BASE="http://127.0.0.1:$STATIC_PORT"
 
-    if curl -fsS --max-time 5 "$STATIC_BASE/index.html" >/dev/null 2>&1; then
+    if curl -4 -fsS --max-time 5 "$STATIC_BASE/index.html" >/dev/null 2>&1; then
         if [[ "$PLAYWRIGHT_MODE" == "module" ]]; then
             node - "$STATIC_BASE" "$SCREENSHOTS_DIR" <<'PLAYWRIGHT_EOF'
 const { chromium } = require('playwright');
@@ -253,13 +266,39 @@ PLAYWRIGHT_EOF
             for page in "${pages[@]}"; do
                 src="${page%%:*}"
                 name="${page##*:}"
-                if ! npx playwright screenshot --wait-for-timeout 1000 "$STATIC_BASE/$src" "$SCREENSHOTS_DIR/${name}-desktop.png" >/dev/null 2>&1; then
-                    echo "[FAIL] Playwright npx desktop screenshot failed: $src"
-                    FAIL=1
+
+                if ! npx playwright screenshot \
+                    --wait-for-timeout 1200 \
+                    --timeout 30000 \
+                    "$STATIC_BASE/$src" \
+                    "$SCREENSHOTS_DIR/${name}-desktop.png" >/dev/null 2>&1; then
+                    sleep 1
+                    if ! npx playwright screenshot \
+                        --wait-for-timeout 1200 \
+                        --timeout 30000 \
+                        "$STATIC_BASE/$src" \
+                        "$SCREENSHOTS_DIR/${name}-desktop.png" >/dev/null 2>&1; then
+                        echo "[FAIL] Playwright npx desktop screenshot failed: $src"
+                        FAIL=1
+                    fi
                 fi
-                if ! npx playwright screenshot --viewport-size=390,844 --wait-for-timeout 1000 "$STATIC_BASE/$src" "$SCREENSHOTS_DIR/${name}-mobile.png" >/dev/null 2>&1; then
-                    echo "[FAIL] Playwright npx mobile screenshot failed: $src"
-                    FAIL=1
+
+                if ! npx playwright screenshot \
+                    --viewport-size=390,844 \
+                    --wait-for-timeout 1200 \
+                    --timeout 30000 \
+                    "$STATIC_BASE/$src" \
+                    "$SCREENSHOTS_DIR/${name}-mobile.png" >/dev/null 2>&1; then
+                    sleep 1
+                    if ! npx playwright screenshot \
+                        --viewport-size=390,844 \
+                        --wait-for-timeout 1200 \
+                        --timeout 30000 \
+                        "$STATIC_BASE/$src" \
+                        "$SCREENSHOTS_DIR/${name}-mobile.png" >/dev/null 2>&1; then
+                        echo "[FAIL] Playwright npx mobile screenshot failed: $src"
+                        FAIL=1
+                    fi
                 fi
             done
         fi

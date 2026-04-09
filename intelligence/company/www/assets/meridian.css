@@ -122,6 +122,10 @@ li { padding: 0.2rem 0; }
   margin-left: auto;
   margin-right: auto;
 }
+.container > * {
+  margin-left: auto;
+  margin-right: auto;
+}
 .container > h2,
 .container > p.section-intro {
   max-width: var(--copy-max);
@@ -176,7 +180,7 @@ li { padding: 0.2rem 0; }
   border-radius: var(--radius-xs);
   border: 1px solid rgba(135,216,255,0.2);
   background: linear-gradient(180deg, rgba(12,19,30,0.9), rgba(8,13,20,0.88));
-  filter: drop-shadow(0 0 10px rgba(135,216,255,0.17)) brightness(0.96);
+  filter: drop-shadow(0 0 8px rgba(135,216,255,0.14)) brightness(0.88) saturate(0.92);
   opacity: 0.98;
   transition: border-color var(--ease-fast), box-shadow var(--ease-fast), transform var(--ease-fast);
 }
@@ -185,8 +189,8 @@ li { padding: 0.2rem 0; }
   height: 29px;
   width: auto;
   max-width: min(52vw, 252px);
-  opacity: 0.97;
-  filter: drop-shadow(0 0 5px rgba(0,0,0,0.24)) saturate(0.95);
+  opacity: 0.95;
+  filter: drop-shadow(0 0 4px rgba(0,0,0,0.26)) brightness(0.9) saturate(0.9);
 }
 .brand:hover {
   border-color: rgba(255,215,0,0.22);
