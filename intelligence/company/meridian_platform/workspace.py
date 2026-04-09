@@ -577,6 +577,7 @@ from runtime_host import (
     load_admission_registry,
     ensure_org_admitted,
 )
+import commonwealth as _commonwealth
 
 # Process-level session authority (tokens do not survive restarts unless
 # MERIDIAN_SESSION_SECRET is set in the environment).
@@ -5845,6 +5846,21 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         elif path in ('/metrics', '/api/metrics'):
             metrics_text = status_surface.observability_metrics_text(org_id)
             return self._text(metrics_text)
+        # ── Commonwealth API (L1-L5) ──────────────────────────────────────────
+        elif path == '/api/commonwealth/federation':
+            qs = parse_qs(parsed.query)
+            target = (qs.get('org_id') or [org_id])[0]
+            return self._json(_commonwealth.get_federation_state(target))
+        elif path == '/api/commonwealth/memory/anchor':
+            qs = parse_qs(parsed.query)
+            target = (qs.get('org_id') or [org_id])[0]
+            agent_id = (qs.get('agent_id') or [None])[0]
+            return self._json(_commonwealth.get_memory_anchor(target, agent_id=agent_id))
+        elif path == '/api/commonwealth/proof-bundle':
+            qs = parse_qs(parsed.query)
+            target = (qs.get('org_id') or [org_id])[0]
+            return self._json(_commonwealth.get_federated_proof_bundle(target))
+        # ─────────────────────────────────────────────────────────────────────
         else:
             self.send_response(404)
             self.end_headers()
@@ -8444,6 +8460,141 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     ],
                 })
 
+            # ── Commonwealth POST routes (L1-L5) ─────────────────────────────
+            elif path == '/api/commonwealth/federation/link':
+                peer_host_id = body.get('peer_host_id', '').strip()
+                peer_org_id = body.get('peer_org_id', '').strip()
+                transport = body.get('transport', 'http').strip()
+                endpoint_url = body.get('endpoint_url', '').strip()
+                label = body.get('label', '').strip()
+                if not peer_host_id or not peer_org_id:
+                    return self._json({'error': 'peer_host_id and peer_org_id are required'}, 400)
+                result = _commonwealth.link_federation_peer(
+                    org_id,
+                    peer_host_id,
+                    peer_org_id=peer_org_id,
+                    transport=transport,
+                    endpoint_url=endpoint_url,
+                    label=label,
+                )
+                log_event(org_id, by, 'commonwealth_federation_link', resource=peer_host_id,
+                          outcome='success', details=result, session_id=_sid)
+                return self._json(result)
+
+            elif path == '/api/commonwealth/settlement/prepare':
+                peer_org_id = body.get('peer_org_id', '').strip()
+                agent_id = body.get('agent_id', '').strip()
+                task_desc = body.get('task_description', '').strip()
+                amount = float(body.get('amount_usd', 0))
+                royalty = float(body.get('royalty_rate', 0.10))
+                action_ids = body.get('action_ids') or []
+                if not peer_org_id or not agent_id:
+                    return self._json({'error': 'peer_org_id and agent_id are required'}, 400)
+                result = _commonwealth.prepare_settlement(
+                    org_id,
+                    peer_org_id=peer_org_id,
+                    agent_id=agent_id,
+                    task_description=task_desc,
+                    amount_usd=amount,
+                    royalty_rate=royalty,
+                    action_ids=action_ids,
+                )
+                log_event(org_id, by, 'commonwealth_settlement_prepare',
+                          resource=result.get('settlement_id', ''),
+                          outcome='success', details=result, session_id=_sid)
+                return self._json(result)
+
+            elif path == '/api/commonwealth/settlement/commit':
+                settlement_id = body.get('settlement_id', '').strip()
+                proof_receipt = body.get('proof_receipt', '').strip()
+                warrant_ref = body.get('warrant_ref', '').strip()
+                if not settlement_id:
+                    return self._json({'error': 'settlement_id is required'}, 400)
+                result = _commonwealth.commit_settlement(
+                    org_id, settlement_id,
+                    proof_receipt=proof_receipt,
+                    warrant_ref=warrant_ref,
+                )
+                log_event(org_id, by, 'commonwealth_settlement_commit',
+                          resource=settlement_id, outcome='success',
+                          details=result, session_id=_sid)
+                return self._json(result)
+
+            elif path == '/api/commonwealth/settlement/refund':
+                settlement_id = body.get('settlement_id', '').strip()
+                reason = body.get('reason', '').strip()
+                court_decision_ref = body.get('court_decision_ref', '').strip()
+                if not settlement_id:
+                    return self._json({'error': 'settlement_id is required'}, 400)
+                result = _commonwealth.refund_settlement(
+                    org_id, settlement_id,
+                    reason=reason,
+                    court_decision_ref=court_decision_ref,
+                )
+                log_event(org_id, by, 'commonwealth_settlement_refund',
+                          resource=settlement_id, outcome='success',
+                          details=result, session_id=_sid)
+                return self._json(result)
+
+            elif path == '/api/commonwealth/court/propagate':
+                peer_host_id = body.get('peer_host_id', '').strip()
+                rule_id = body.get('rule_id', '').strip()
+                rule_text = body.get('rule_text', '').strip()
+                ruleset_version = body.get('ruleset_version', '').strip()
+                if not peer_host_id or not rule_id or not rule_text:
+                    return self._json({'error': 'peer_host_id, rule_id, rule_text are required'}, 400)
+                result = _commonwealth.propagate_court_rule(
+                    org_id,
+                    peer_host_id=peer_host_id,
+                    rule_id=rule_id,
+                    rule_text=rule_text,
+                    ruleset_version=ruleset_version,
+                )
+                log_event(org_id, by, 'commonwealth_court_propagate',
+                          resource=rule_id, outcome='success',
+                          details=result, session_id=_sid)
+                return self._json(result)
+
+            elif path == '/api/commonwealth/marketplace/publish':
+                agent_id = body.get('agent_id', '').strip()
+                task_desc = body.get('task_description', '').strip()
+                amount = float(body.get('amount_usd', 0))
+                royalty = float(body.get('royalty_rate', 0.10))
+                federation_scope = body.get('federation_scope', [])
+                action_ids = body.get('action_ids') or []
+                if not agent_id:
+                    return self._json({'error': 'agent_id is required'}, 400)
+                result = _commonwealth.publish_to_commonwealth(
+                    org_id,
+                    agent_id=agent_id,
+                    task_description=task_desc,
+                    amount_usd=amount,
+                    royalty_rate=royalty,
+                    federation_scope=federation_scope,
+                    action_ids=action_ids,
+                )
+                log_event(org_id, by, 'commonwealth_marketplace_publish',
+                          resource=result.get('listing_id', ''),
+                          outcome='success', details=result, session_id=_sid)
+                return self._json(result)
+
+            elif path == '/api/commonwealth/marketplace/acquire':
+                listing_id = body.get('listing_id', '').strip()
+                acquirer_org_id = body.get('acquirer_org_id', org_id).strip()
+                reservation_note = body.get('reservation_note', '').strip()
+                if not listing_id:
+                    return self._json({'error': 'listing_id is required'}, 400)
+                result = _commonwealth.acquire_from_commonwealth(
+                    org_id, listing_id,
+                    acquirer_org_id=acquirer_org_id,
+                    reservation_note=reservation_note,
+                )
+                log_event(org_id, by, 'commonwealth_marketplace_acquire',
+                          resource=listing_id, outcome='success',
+                          details=result, session_id=_sid)
+                return self._json(result)
+
+            # ─────────────────────────────────────────────────────────────────
             else:
                 return self._json({'error': 'Not found'}, 404)
 

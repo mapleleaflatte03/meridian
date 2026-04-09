@@ -11700,6 +11700,10 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/marketplace/bids",
                     "/api/marketplace/settlements",
                     "/api/marketplace/disputes",
+                    # Commonwealth L1-L5
+                    "/api/commonwealth/federation",
+                    "/api/commonwealth/memory/anchor",
+                    "/api/commonwealth/proof-bundle",
                 }:
                     proxied = _workspace_api_get_json(proxied_path)
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
@@ -11907,6 +11911,14 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/treasury/contribute",
                     "/api/treasury/reserve-floor",
                     "/api/treasury/settlement-adapters/preflight",
+                    # Commonwealth L1-L5
+                    "/api/commonwealth/federation/link",
+                    "/api/commonwealth/settlement/prepare",
+                    "/api/commonwealth/settlement/commit",
+                    "/api/commonwealth/settlement/refund",
+                    "/api/commonwealth/court/propagate",
+                    "/api/commonwealth/marketplace/publish",
+                    "/api/commonwealth/marketplace/acquire",
                 }:
                     proxied = _workspace_api_post_json(request_path, payload if isinstance(payload, dict) else {})
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
