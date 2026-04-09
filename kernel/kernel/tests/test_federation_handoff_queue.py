@@ -176,6 +176,30 @@ class FederationHandoffQueueTests(unittest.TestCase):
         self.assertEqual(len(snapshot['handoff_previews']), 1)
         self.assertEqual(snapshot['handoff_previews'][0]['handoff_id'], 'fhdp_demo_2')
 
+    def test_list_handoff_previews(self):
+        self.queue.upsert_handoff_preview(self.org_a, self._preview('fhdp_demo_4', state='previewed'))
+        self.queue.upsert_handoff_preview(self.org_a, self._preview('fhdp_demo_5', state='blocked', dispatch_ready=False))
+        self.queue.upsert_handoff_preview(self.org_a, self._preview('fhdp_demo_6', state='previewed'))
+
+        # Without state filter
+        all_previews = self.queue.list_handoff_previews(self.org_a)
+        self.assertEqual(len(all_previews), 3)
+        self.assertEqual(set(p['handoff_id'] for p in all_previews), {'fhdp_demo_4', 'fhdp_demo_5', 'fhdp_demo_6'})
+
+        # Filter by 'previewed' state
+        previewed_previews = self.queue.list_handoff_previews(self.org_a, state='previewed')
+        self.assertEqual(len(previewed_previews), 2)
+        self.assertEqual(set(p['handoff_id'] for p in previewed_previews), {'fhdp_demo_4', 'fhdp_demo_6'})
+
+        # Filter by 'blocked' state
+        blocked_previews = self.queue.list_handoff_previews(self.org_a, state='blocked')
+        self.assertEqual(len(blocked_previews), 1)
+        self.assertEqual(blocked_previews[0]['handoff_id'], 'fhdp_demo_5')
+
+        # Filter by non-existent state
+        empty_previews = self.queue.list_handoff_previews(self.org_a, state='non_existent_state')
+        self.assertEqual(len(empty_previews), 0)
+
 
 if __name__ == '__main__':
     unittest.main()
