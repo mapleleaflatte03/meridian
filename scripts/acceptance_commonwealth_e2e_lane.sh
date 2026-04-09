@@ -85,6 +85,16 @@ fi
 BUNDLE="$(api_get "/api/commonwealth/proof-bundle")"
 require_json_field "L1-GET /api/commonwealth/proof-bundle: protocol" \
     "$BUNDLE" "protocol" || true
+if echo "$BUNDLE" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert not d.get('error'), d.get('error','')" 2>/dev/null; then
+    pass "L1: proof bundle has no error field"
+else
+    fail "L1: proof bundle contains error: $BUNDLE"
+fi
+if echo "$BUNDLE" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); agg=d.get('aggregate') or {}; assert int(agg.get('member_count',0)) >= 1, agg" 2>/dev/null; then
+    pass "L1: proof bundle aggregate member_count >= 1"
+else
+    fail "L1: proof bundle aggregate member_count invalid: $BUNDLE"
+fi
 
 FED_STATE2="$(api_get "/api/commonwealth/federation")"
 if echo "$FED_STATE2" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('peer_count', 0) >= 1 or d.get('peers'), 'no peers after link'" 2>/dev/null; then
@@ -221,6 +231,24 @@ for name, fn in checks:
 sys.exit(1 if fail else 0)
 PY
 if [[ $? -ne 0 ]]; then FAIL=1; fi
+
+# Ensure status reflects linked federation/settlement activity from this run
+if python3 - <<'PY'
+import json
+with open('/tmp/meridian_e2e_status.json') as f:
+    d=json.load(f)
+cw=(d.get('commonwealth') or {})
+fed=(cw.get('federation') or {})
+sett=(cw.get('settlement') or {})
+assert int(fed.get('peer_count',0)) >= 1, fed
+assert bool(sett.get('inter_institution_enabled')) is True, sett
+print('[OK]   /api/status commonwealth reflects active federation/settlement state')
+PY
+then
+    :
+else
+    fail "/api/status commonwealth did not reflect active federation/settlement state"
+fi
 
 # ─── Summary ──────────────────────────────────────────────────────────────────
 echo ""

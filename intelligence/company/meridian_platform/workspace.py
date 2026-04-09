@@ -4326,42 +4326,26 @@ def _marketplace_status(org_id=None):
 
 def _commonwealth_status(org_id=None, host_identity=None):
     """Collect commonwealth federation + settlement status for the /api/status block."""
-    # Federation block — derived from existing federation snapshot
+    # Federation block — aligned with the commonwealth route surface.
     fed_enabled = False
     fed_peer_count = 0
     fed_last_sync_ms = None
     try:
-        if host_identity is None:
-            host_identity, _ = _runtime_host_state(org_id)
-        fed_snapshot = _federation_authority(host_identity).snapshot(bound_org_id=org_id or '')
+        fed_snapshot = _commonwealth.get_federation_state(org_id or '')
         fed_enabled = bool(fed_snapshot.get('enabled', False))
         fed_peer_count = int(fed_snapshot.get('peer_count', 0))
-        # Derive last_sync_ms from the most recently refreshed trusted peer timestamp
-        peers = fed_snapshot.get('peers') or []
-        last_refreshed_ts = None
-        for peer in peers:
-            ts = (peer or {}).get('last_refreshed_at') or ''
-            if ts and (last_refreshed_ts is None or ts > last_refreshed_ts):
-                last_refreshed_ts = ts
-        if last_refreshed_ts:
-            try:
-                import datetime as _dt
-                dt = _dt.datetime.strptime(last_refreshed_ts, '%Y-%m-%dT%H:%M:%SZ')
-                fed_last_sync_ms = int(dt.replace(tzinfo=_dt.timezone.utc).timestamp() * 1000)
-            except Exception:
-                pass
     except Exception:
         pass
 
-    # Settlement block — inter-institution settlement counters (stub for P-1, wired in P-7)
+    # Settlement block — sourced from commonwealth settlement records.
     inter_institution_enabled = False
     settlement_pending = 0
     settlement_settled = 0
     try:
-        mp = _marketplace_status(org_id)
-        # In P-7, settlement.{pending_count,settled_count} will track cross-institution records.
-        # For P-1 we surface the single-institution baseline so the contract block is present.
-        settlement_settled = int(mp.get('settled_count', 0))
+        settlements = _commonwealth.get_settlements(org_id or '')
+        settlement_pending = sum(1 for row in settlements if str((row or {}).get('status', '')).lower() == 'prepared')
+        settlement_settled = sum(1 for row in settlements if str((row or {}).get('status', '')).lower() == 'committed')
+        inter_institution_enabled = bool(settlements) or fed_enabled or fed_peer_count > 0
     except Exception:
         pass
 

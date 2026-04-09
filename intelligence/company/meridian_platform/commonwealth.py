@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import importlib.util
 import json
 import os
 import uuid
@@ -604,8 +605,29 @@ def get_federated_proof_bundle(org_id: str) -> dict:
 
     # Get kernel proof bundle
     try:
-        from loom_runtime_proof import loom_kernel_bundle_snapshot
-        raw_bundle = loom_kernel_bundle_snapshot(org_id)
+        kernel_root = os.environ.get('MERIDIAN_KERNEL_PATH', '/opt/meridian-kernel').strip() or '/opt/meridian-kernel'
+        builder_path = os.path.join(kernel_root, 'examples', 'generate_public_proof_bundle.py')
+        if not os.path.exists(builder_path):
+            raise RuntimeError(f'kernel proof bundle builder missing: {builder_path}')
+        spec = importlib.util.spec_from_file_location('meridian_kernel_public_proof_bundle', builder_path)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f'cannot load kernel proof bundle builder: {builder_path}')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        build_bundle = getattr(module, 'build_bundle', None)
+        if build_bundle is None:
+            raise RuntimeError('build_bundle function unavailable in kernel proof bundle builder')
+        try:
+            raw_bundle = build_bundle(
+                live_manifest_url='http://127.0.0.1:18901/api/federation/manifest',
+                live_runtime_proof_url='http://127.0.0.1:18901/api/runtime-proof',
+                run_reference_proofs=False,
+            )
+        except TypeError:
+            raw_bundle = build_bundle(
+                live_manifest_url='http://127.0.0.1:18901/api/federation/manifest',
+                live_runtime_proof_url='http://127.0.0.1:18901/api/runtime-proof',
+            )
         bundle.update({
             'proof_bundle_version': raw_bundle.get('proof_bundle_version'),
             'status': raw_bundle.get('status'),
@@ -624,7 +646,7 @@ def get_federated_proof_bundle(org_id: str) -> dict:
             'integrity_hash': agg.get('integrity_hash'),
         }
     except Exception as exc:
-        bundle['error'] = str(exc)[:80]
+        bundle['error'] = str(exc)[:120]
 
     # Enrich with federation context
     fed_state = get_federation_state(org_id)

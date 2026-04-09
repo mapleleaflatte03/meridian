@@ -21,6 +21,7 @@ check_api() {
     local label="$1"
     local path="$2"
     local field="$3"
+    local forbid_error="${4:-0}"
     local resp
     resp="$(curl -fsS --max-time 10 "$BASE_URL$path" 2>/dev/null || echo "")"
     if [[ -z "$resp" ]]; then
@@ -28,15 +29,23 @@ check_api() {
         return
     fi
     if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert d.get('$field') is not None" 2>/dev/null; then
-        pass "$label"
+        if [[ "$forbid_error" == "1" ]]; then
+            if echo "$resp" | python3 -c "import json,sys; d=json.loads(sys.stdin.read()); assert not d.get('error'), d.get('error')" 2>/dev/null; then
+                pass "$label"
+            else
+                fail "$label: response contains error field"
+            fi
+        else
+            pass "$label"
+        fi
     else
         fail "$label: field '$field' missing in response"
     fi
 }
 
-check_api "GET /api/commonwealth/federation: protocol_version" "/api/commonwealth/federation" "protocol_version"
-check_api "GET /api/commonwealth/memory/anchor: anchor_status" "/api/commonwealth/memory/anchor" "anchor_status"
-check_api "GET /api/commonwealth/proof-bundle: protocol" "/api/commonwealth/proof-bundle" "protocol"
+check_api "GET /api/commonwealth/federation: protocol_version" "/api/commonwealth/federation" "protocol_version" 1
+check_api "GET /api/commonwealth/memory/anchor: anchor_status" "/api/commonwealth/memory/anchor" "anchor_status" 1
+check_api "GET /api/commonwealth/proof-bundle: protocol" "/api/commonwealth/proof-bundle" "protocol" 1
 
 # ── /api/status commonwealth blocks ──────────────────────────────────────────
 echo ""
