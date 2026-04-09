@@ -120,6 +120,30 @@ class PayoutPlanApprovalCandidateQueueTests(unittest.TestCase):
                 org_id=self.org_id,
             )
 
+    def test_payout_plan_approval_candidate_queue_summary_empty(self):
+        summary = self.candidate_queue.payout_plan_approval_candidate_queue_summary(self.org_id)
+        self.assertEqual(summary['total'], 0)
+        self.assertEqual(summary['ready_for_approval'], 0)
+        self.assertEqual(summary['settlement_claimed'], 0)
+        self.assertEqual(summary['candidate'], 0)
+
+    def test_payout_plan_approval_candidate_queue_summary_populated(self):
+        self._seed_preview()
+        self.treasury.promote_payout_plan_preview_to_approval_candidate(
+            'ptx_preview_demo',
+            'user:owner',
+            org_id=self.org_id,
+            promotion_note='ready for approval review',
+        )
+
+        summary = self.candidate_queue.payout_plan_approval_candidate_queue_summary(self.org_id)
+        self.assertEqual(summary['total'], 1)
+        self.assertEqual(summary['ready_for_approval'], 1)
+        self.assertEqual(summary['settlement_claimed'], 0)
+        self.assertEqual(summary['candidate'], 1)
+        self.assertEqual(summary['state_counts'], {'candidate': 1})
+        self.assertEqual(summary['adapter_counts'], {'internal_ledger': 1})
+
 
 if __name__ == '__main__':
     unittest.main()
