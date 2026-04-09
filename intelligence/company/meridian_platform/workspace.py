@@ -235,8 +235,8 @@ PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS = max(
 PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_FULL_SECONDS = max(
     PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_SECONDS,
     float(
-        os.environ.get('MERIDIAN_PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_FULL_SECONDS', '60')
-        or '60'
+        os.environ.get('MERIDIAN_PUBLIC_PROOF_BUILD_SYNC_TIMEOUT_FULL_SECONDS', '20')
+        or '20'
     ),
 )
 PUBLIC_PROOF_FALLBACK_MAX_AGE_SECONDS = max(
@@ -825,6 +825,27 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
     try:
         return refresh_future.result(timeout=sync_timeout_seconds)
     except concurrent.futures.TimeoutError:
+        if run_reference_proofs:
+            try:
+                fast_payload = _kernel_public_proof_bundle(
+                    base_url=normalized_base,
+                    run_reference_proofs=False,
+                )
+                fallback_payload = copy.deepcopy(fast_payload)
+                fallback_payload['status'] = 'degraded'
+                fallback_payload['degraded_reason'] = 'public_bundle_build_in_progress_fast_fallback'
+                cache_meta = dict(fallback_payload.get('cache') or {})
+                cache_meta.update({
+                    'state': 'fast_fallback',
+                    'requested_mode': 'full',
+                    'source': 'fast_mode_cache',
+                })
+                fallback_payload['cache'] = cache_meta
+                return fallback_payload
+            except Exception:
+                # Keep contract stable: if fast fallback also fails, return
+                # explicit building placeholder instead of surfacing internal trace.
+                pass
         return _placeholder_payload(
             'public_bundle_build_in_progress',
             cache_state='building',
