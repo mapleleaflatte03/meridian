@@ -52,6 +52,39 @@ class AccountingServiceTests(unittest.TestCase):
         with open(self._capsule_path(org_id, filename)) as f:
             return json.load(f)
 
+    def test_accounting_snapshot(self):
+        org_id = 'org_snapshot_test'
+        self._write_ledger(org_id, {
+            'treasury': {
+                'owner_capital_contributed_usd': 100.0,
+            }
+        })
+
+        entries = [{'type': f'dummy_entry_{i}'} for i in range(25)]
+
+        with open(self._capsule_path(org_id, 'owner_ledger.json'), 'w') as f:
+            json.dump({
+                'capital_contributed_usd': 100.0,
+                'expenses_paid_usd': 50.0,
+                'reimbursements_received_usd': 20.0,
+                'draws_taken_usd': 10.0,
+                'entries': entries,
+                '_meta': {'bound_org_id': org_id},
+            }, f, indent=2)
+
+        snap = self.service.accounting_snapshot(org_id)
+
+        # Verify fields returned by the actual code implementation
+        self.assertEqual(snap['summary']['capital_contributed_usd'], 100.0)
+        self.assertEqual(snap['summary']['expenses_paid_usd'], 50.0)
+        self.assertEqual(snap['summary']['reimbursements_received_usd'], 20.0)
+        self.assertEqual(snap['summary']['draws_taken_usd'], 10.0)
+        self.assertEqual(snap['summary']['unreimbursed_expenses_usd'], 30.0)
+        self.assertEqual(snap['summary']['entry_count'], 25)
+
+        self.assertEqual(len(snap['entries_tail']), 20)
+        self.assertEqual(snap['entries_tail'], entries[-20:])
+
     def test_snapshot_backfills_owner_capital_from_treasury(self):
         org_id = 'org_alpha'
         self._write_ledger(org_id, {
