@@ -101,6 +101,10 @@ Live surfaces:
 ./scripts/dev-up.sh
 ./scripts/dev-down.sh
 
+# Supervisor (auto-restart 18901/19001/8266)
+./scripts/dev-supervisor.sh status
+MERIDIAN_SUPERVISOR_ENABLE=0 ./scripts/dev-up.sh
+
 # Bootstrap only (without auto-start)
 MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
 

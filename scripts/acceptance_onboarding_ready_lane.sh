@@ -25,6 +25,10 @@ if [ ! -x "./scripts/new-first-agent.sh" ]; then
   echo "[onboarding-lane] missing executable helper: ./scripts/new-first-agent.sh" >&2
   exit 1
 fi
+if [ ! -x "./scripts/dev-supervisor.sh" ]; then
+  echo "[onboarding-lane] missing executable helper: ./scripts/dev-supervisor.sh" >&2
+  exit 1
+fi
 
 echo "[onboarding-lane] bootstrap full stack (skip loom build for fast/portable gate)"
 bootstrap_ok=0
@@ -310,5 +314,14 @@ assert active_rules_count >= 0, status_after
 install_script = (Path("scripts/install-full.sh")).read_text(encoding="utf-8")
 assert "MERIDIAN_VERIFY_ONBOARDING" in install_script, "install-full.sh missing onboarding verification toggle"
 PY
+
+if [ "${MERIDIAN_SUPERVISOR_ENABLE:-1}" = "1" ]; then
+  if [ ! -f "runtime/pids/supervisor.pid" ]; then
+    echo "[onboarding-lane] missing runtime/pids/supervisor.pid while supervisor is enabled" >&2
+    exit 1
+  fi
+  echo "[onboarding-lane] supervisor status snapshot"
+  ./scripts/dev-supervisor.sh status
+fi
 
 echo "[onboarding-lane] PASS"

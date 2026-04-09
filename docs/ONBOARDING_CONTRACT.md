@@ -26,6 +26,9 @@ must produce a local state where a new user can immediately inspect governance/r
 5. Court rule set initialized (>=3 rules in template path).
 6. First agent can be provisioned through one helper command:
    - `./scripts/new-first-agent.sh "My Assistant"`
+7. Supervisor auto-restart layer active for local stack reliability:
+   - tracks `18901` (workspace), `19001` (peer workspace), `8266` (gateway)
+   - status command: `./scripts/dev-supervisor.sh status`
 
 ## Verification Gate
 

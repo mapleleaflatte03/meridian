@@ -32,7 +32,9 @@ stop_from_pid_file() {
   rm -f "$pid_file"
 }
 
+stop_from_pid_file "supervisor"
 stop_from_pid_file "gateway"
+stop_from_pid_file "workspace-peer"
 stop_from_pid_file "workspace"
 
 echo "[dev-down] done"
