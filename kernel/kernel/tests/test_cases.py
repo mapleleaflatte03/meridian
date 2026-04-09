@@ -3,6 +3,7 @@ import importlib.util
 import pathlib
 import shutil
 import unittest
+from unittest.mock import patch
 import uuid
 
 
@@ -181,6 +182,12 @@ class CaseCapsuleTests(unittest.TestCase):
         self.assertTrue(created_first)
         self.assertFalse(created_second)
         self.assertEqual(first['case_id'], second['case_id'])
+
+    @patch.object(cases, '_load_store')
+    def test_get_case_fallback_behavior(self, mock_load_store):
+        mock_load_store.side_effect = Exception("Simulated read error")
+        result = cases.get_case('case_dummy', self.org_id)
+        self.assertIsNone(result)
 
 
 if __name__ == '__main__':

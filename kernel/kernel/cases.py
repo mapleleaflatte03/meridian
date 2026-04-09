@@ -198,8 +198,12 @@ def list_cases(org_id=None, *, status=None, claim_type=None):
 def get_case(case_id, org_id=None):
     if not case_id:
         return None
-    store = _load_store(org_id)
-    return store.get('cases', {}).get(case_id)
+    try:
+        store = _load_store(org_id)
+        return store.get('cases', {}).get(case_id)
+    except Exception as e:
+        print(f"Error getting case: {e}")
+        return None
 
 
 def review_case(case_id, decision, by, *, org_id=None, note=''):
