@@ -792,12 +792,97 @@ def get_commonwealth_marketplace(org_id: str) -> dict:
     data = _load_cw_marketplace(org_id)
     listings = list(data['listings'].values())
     acquisitions = list(data['acquisitions'].values())
+    settlements = list(data.get('settlements', {}).values())
     return {
         'open_listings': sum(1 for l in listings if l['status'] == 'open'),
         'acquired_count': sum(1 for l in listings if l['status'] == 'acquired'),
         'active_acquisitions': sum(1 for a in acquisitions if a['status'] == 'assigned'),
+        'settled_count': sum(1 for s in settlements if s['status'] == 'settled'),
         'listings': listings,
         'acquisitions': acquisitions,
+        'settlements': settlements,
+    }
+
+
+def settle_commonwealth_acquisition(
+    org_id: str,
+    acquisition_id: str,
+    *,
+    proof_receipt: str,
+    settled_by: str,
+) -> dict:
+    """Settle an assigned commonwealth acquisition with a proof receipt.
+
+    Performs deterministic split (worker + royalty == total) and records a
+    verifiable settlement receipt per RFC-0004 § Acceptance Criteria.
+    """
+    if not acquisition_id:
+        raise ValueError('acquisition_id is required')
+
+    data = _load_cw_marketplace(org_id)
+    data.setdefault('settlements', {})
+    acquisition = data['acquisitions'].get(acquisition_id)
+    if not acquisition:
+        raise ValueError(f'Acquisition not found: {acquisition_id}')
+    if acquisition['status'] != 'assigned':
+        raise ValueError(
+            f'Acquisition {acquisition_id} is not assigned (status={acquisition["status"]})'
+        )
+
+    if not proof_receipt:
+        raise ValueError('proof_receipt is required')
+
+    amount_usd = acquisition['amount_usd']
+    royalty_rate = acquisition.get('royalty_rate', 0.10)
+    worker_usd = round(amount_usd * (1 - royalty_rate), 6)
+    royalty_usd = round(amount_usd - worker_usd, 6)
+    split = {
+        'total_usd': amount_usd,
+        'worker_usd': worker_usd,
+        'royalty_usd': royalty_usd,
+    }
+
+    settlement_id = _short_id('cwstl')
+    settlement_receipt = _sha256_hex(
+        settlement_id,
+        acquisition_id,
+        proof_receipt,
+        str(amount_usd),
+    )
+
+    acquisition['status'] = 'settled'
+    acquisition['settled_at'] = _now()
+
+    # Mark listing as settled too
+    listing_id = acquisition.get('listing_id', '')
+    listing = data['listings'].get(listing_id)
+    if listing:
+        listing['status'] = 'settled'
+
+    data['settlements'][settlement_id] = {
+        'settlement_id': settlement_id,
+        'acquisition_id': acquisition_id,
+        'listing_id': listing_id,
+        'agent_id': acquisition['agent_id'],
+        'amount_usd': amount_usd,
+        'split': dict(split),
+        'royalty_rate': royalty_rate,
+        'proof_receipt': proof_receipt,
+        'settlement_receipt': settlement_receipt,
+        'settled_by': settled_by,
+        'reservation_id': acquisition.get('reservation_id', ''),
+        'status': 'settled',
+        'created_at': _now(),
+    }
+    _save_cw_marketplace(data, org_id)
+
+    return {
+        'settlement_id': settlement_id,
+        'acquisition_id': acquisition_id,
+        'status': 'settled',
+        'split': split,
+        'settlement_receipt': settlement_receipt,
+        'proof_receipt': proof_receipt,
     }
 
 

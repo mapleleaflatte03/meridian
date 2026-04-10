@@ -8826,6 +8826,23 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                           details=result, session_id=_sid)
                 return self._json(result)
 
+            elif path == '/api/commonwealth/marketplace/settle':
+                acquisition_id = body.get('acquisition_id', '').strip()
+                proof_receipt = body.get('proof_receipt', '').strip()
+                settled_by = body.get('settled_by', by).strip() or by
+                if not acquisition_id:
+                    return self._json({'error': 'acquisition_id is required'}, 400)
+                result = _commonwealth.settle_commonwealth_acquisition(
+                    org_id,
+                    acquisition_id,
+                    proof_receipt=proof_receipt,
+                    settled_by=settled_by,
+                )
+                log_event(org_id, by, 'commonwealth_marketplace_settle',
+                          resource=acquisition_id, outcome='success',
+                          details=result, session_id=_sid)
+                return self._json(result)
+
             # ─────────────────────────────────────────────────────────────────
             else:
                 return self._json({'error': 'Not found'}, 404)
