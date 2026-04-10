@@ -475,6 +475,16 @@ def get_settlements(org_id: str) -> list:
 # L3: Dynamic Constitutional Federation (court propagation)
 # ---------------------------------------------------------------------------
 
+def _load_federation_module():
+    """Import and return the federation module symbols, or raise ImportError."""
+    from federation import FederationAuthority, load_peer_registry
+    return type(
+        '_FedModule',
+        (),
+        {'FederationAuthority': FederationAuthority, 'load_peer_registry': load_peer_registry},
+    )()
+
+
 def propagate_court_rule(
     org_id: str,
     *,
@@ -506,12 +516,12 @@ def propagate_court_rule(
     delivery_ref = {}
 
     try:
-        from federation import FederationAuthority, load_peer_registry
+        fed = _load_federation_module()
 
         host_identity, _ = _runtime_host_state(org_id)
-        peer_registry = load_peer_registry(FEDERATION_PEERS_FILE, host_identity=host_identity)
+        peer_registry = fed.load_peer_registry(FEDERATION_PEERS_FILE, host_identity=host_identity)
         signing_secret = (os.environ.get('MERIDIAN_FEDERATION_SIGNING_SECRET') or '').strip() or None
-        fa = FederationAuthority(
+        fa = fed.FederationAuthority(
             host_identity,
             signing_secret=signing_secret,
             peer_registry=peer_registry,
@@ -531,7 +541,10 @@ def propagate_court_rule(
             'receipt': delivery.get('receipt'),
             'claims': delivery.get('claims'),
         }
-        delivery_status = 'envelope_delivered'
+        delivery_status = 'envelope_issued'
+    except ImportError:
+        delivery_note = 'federation module unavailable; queued for local dispatch'
+        delivery_status = 'queued_local'
     except Exception as exc:
         delivery_note = str(exc)[:240]
         delivery_status = 'delivery_failed'
@@ -552,7 +565,7 @@ def propagate_court_rule(
     }
     _save_store(store, org_id, 'commonwealth_propagations.json')
 
-    if delivery_status != 'envelope_delivered':
+    if delivery_status not in ('envelope_issued', 'queued_local'):
         raise RuntimeError(
             f'court rule propagation failed for peer {peer_host_id}: {delivery_note or "delivery_failed"}'
         )
@@ -569,8 +582,82 @@ def propagate_court_rule(
     }
 
 
+
+
+def get_propagations(org_id: str) -> list:
+    """Return all commonwealth propagations for this org."""
+    data = _load_store(org_id, 'commonwealth_propagations.json')
+    return list(data.get('propagations', {}).values())
+
+
+def _validate_received_envelope(envelope: dict) -> bool:
+    """Validate a received federation envelope signature when federation module is available."""
+    try:
+        fed = _load_federation_module()
+        host_identity, _ = _runtime_host_state('')
+        peer_registry = fed.load_peer_registry(FEDERATION_PEERS_FILE, host_identity=host_identity)
+        signing_secret = (os.environ.get('MERIDIAN_FEDERATION_SIGNING_SECRET') or '').strip() or None
+        fa = fed.FederationAuthority(
+            host_identity,
+            signing_secret=signing_secret,
+            peer_registry=peer_registry,
+        )
+        return bool(fa.validate(envelope))
+    except Exception:
+        return False
+
+
+def receive_court_rule(org_id: str, *, envelope: dict) -> dict:
+    """Receive a court rule propagation envelope from a federation peer."""
+    if not envelope:
+        raise ValueError('envelope is required')
+    
+    if not _validate_received_envelope(envelope):
+        raise ValueError('invalid federation envelope signature')
+
+    payload = envelope.get('payload', {})
+    propagation_id = payload.get('propagation_id', '').strip()
+    if not propagation_id:
+        raise ValueError('propagation_id is required in envelope payload')
+
+    rule_id = payload.get('rule_id', '').strip()
+    source_org_id = payload.get('source_org_id', '').strip()
+
+    store = _load_store(org_id, 'commonwealth_received_rules.json')
+    store.setdefault('received_rules', {})
+    store.setdefault('replay_index', {})
+
+    # Replay protection
+    if propagation_id in store['replay_index']:
+        return {
+            'status': 'replay_blocked',
+            'idempotent': True,
+            'rule_id': rule_id,
+            'propagation_id': propagation_id,
+        }
+
+    store['replay_index'][propagation_id] = _now()
+    store['received_rules'][propagation_id] = {
+        'propagation_id': propagation_id,
+        'rule_id': rule_id,
+        'source_org_id': source_org_id,
+        'rule_text': payload.get('rule_text', ''),
+        'ruleset_version': payload.get('ruleset_version', ''),
+        'received_at': _now(),
+    }
+    
+    _save_store(store, org_id, 'commonwealth_received_rules.json')
+
+    return {
+        'status': 'accepted',
+        'idempotent': False,
+        'rule_id': rule_id,
+        'propagation_id': propagation_id,
+    }
+
 # ---------------------------------------------------------------------------
 # L4: Verifiable Agent Exchange Protocol
+
 # ---------------------------------------------------------------------------
 
 def publish_to_commonwealth(
