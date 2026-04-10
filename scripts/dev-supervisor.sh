@@ -27,12 +27,31 @@ SUPERVISOR_LOCK_FILE="${PID_DIR}/supervisor.lock"
 
 port_listening() {
   local port="$1"
-  ss -lnt "( sport = :${port} )" 2>/dev/null | grep -Eq ":${port}([^0-9]|$)"
+  python3 - "$port" <<'PY'
+import socket
+import sys
+
+port = int(sys.argv[1])
+candidates = ["127.0.0.1", "::1"]
+for host in candidates:
+    family = socket.AF_INET6 if ":" in host else socket.AF_INET
+    try:
+        with socket.socket(family, socket.SOCK_STREAM) as sock:
+            sock.settimeout(0.35)
+            if sock.connect_ex((host, port)) == 0:
+                raise SystemExit(0)
+    except OSError:
+        continue
+raise SystemExit(1)
+PY
 }
 
 pid_for_port() {
   local port="$1"
-  ss -ltnp "( sport = :${port} )" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1
+  if ! command -v ss >/dev/null 2>&1; then
+    return 0
+  fi
+  ss -ltnp "( sport = :${port} )" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1 || true
 }
 
 process_cmdline() {
@@ -439,7 +458,15 @@ status() {
   for pair in "workspace:${MERIDIAN_WORKSPACE_PORT}" "workspace-peer:${MERIDIAN_WORKSPACE_PEER_PORT}" "gateway:${MERIDIAN_GATEWAY_PORT}"; do
     local name="${pair%%:*}"
     local port="${pair##*:}"
-    if port_listening "${port}"; then
+    local pid_name="${name}"
+    local pid_file="${PID_DIR}/${pid_name}.pid"
+    local pid=""
+    if [[ -f "${pid_file}" ]]; then
+      pid="$(cat "${pid_file}" 2>/dev/null || true)"
+    fi
+    if [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1; then
+      echo "${name} : up (${port}) pid=${pid}"
+    elif port_listening "${port}"; then
       echo "${name} : up (${port})"
     else
       echo "${name} : down (${port})"
