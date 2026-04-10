@@ -328,7 +328,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         item.approval_required ? '<span class="operator-chip operator-chip-action">Approval required</span>' : '<span class="operator-chip">Delivery allowed</span>'
       ].join(' ');
       var actionButtons = ['approve', 'stale', 'revoke', 'unresolved'].map(function (decision) {
-        return '<button type="button" class="operator-action" data-queue-id="' + escapeHtml(item.queue_id) + '" data-decision="' + decision + '">' + escapeHtml(decision) + '</button>';
+        return '<button type="button" class="operator-action" data-queue-id="' + escapeHtml(item.queue_id) + '" data-decision="' + decision + '" aria-label="' + escapeHtml(decision) + ' queue item">' + escapeHtml(decision) + '</button>';
       }).join('');
       return '<tr>' +
         '<td data-label="Select" class="operator-select-cell"><input type="checkbox" data-queue-select="' + escapeHtml(item.queue_id) + '"></td>' +
