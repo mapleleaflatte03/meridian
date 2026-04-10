@@ -8843,6 +8843,23 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                           details=result, session_id=_sid)
                 return self._json(result)
 
+            elif path == '/api/commonwealth/memory/verify':
+                peer_org_id = body.get('peer_org_id', '').strip()
+                proof = body.get('proof')
+                if not peer_org_id:
+                    return self._json({'error': 'peer_org_id is required'}, 400)
+                if not proof:
+                    return self._json({'error': 'proof is required'}, 400)
+                result = _commonwealth.verify_commonwealth_temporal_proof(
+                    org_id,
+                    peer_org_id=peer_org_id,
+                    proof=proof,
+                )
+                log_event(org_id, by, 'commonwealth_memory_verify',
+                          resource=peer_org_id, outcome='success',
+                          details=result, session_id=_sid)
+                return self._json(result)
+
             # ─────────────────────────────────────────────────────────────────
             else:
                 return self._json({'error': 'Not found'}, 404)

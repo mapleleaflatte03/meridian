@@ -919,6 +919,69 @@ def get_memory_anchor(org_id: str, *, agent_id: str | None = None) -> dict:
         }
 
 
+def _load_memory_graph():
+    """Load the memory_graph module. Extracted for testability (can be mocked)."""
+    import memory_graph as _mg
+    return _mg
+
+
+def verify_commonwealth_temporal_proof(
+    org_id: str,
+    *,
+    peer_org_id: str,
+    proof: dict | None,
+) -> dict:
+    """Verify a temporal memory proof from a peer institution.
+
+    Cross-institution temporal proof verification for L5 commonwealth chain.
+    Validates proof structure and integrity against local memory graph state.
+
+    Args:
+        org_id: Local institution org_id
+        peer_org_id: Peer institution org_id providing the proof
+        proof: Temporal proof payload from peer (contains chain_valid, head_hash, proof_nodes)
+
+    Returns:
+        dict with status ('verified' or 'verification_failed'), valid (bool),
+        peer_org_id, and optional error_detail
+    """
+    if not peer_org_id or not str(peer_org_id).strip():
+        raise ValueError('peer_org_id is required for cross-institution verification')
+
+    if proof is None:
+        raise ValueError('proof is required')
+
+    try:
+        mg = _load_memory_graph()
+    except ImportError:
+        return {
+            'status': 'verification_failed',
+            'valid': False,
+            'peer_org_id': peer_org_id,
+            'error_detail': {'reason': 'memory_graph_unavailable'},
+        }
+
+    valid, error_detail = mg.verify_temporal_proof(proof, org_id)
+
+    if valid:
+        proof_nodes = proof.get('proof_nodes', [])
+        return {
+            'status': 'verified',
+            'valid': True,
+            'peer_org_id': peer_org_id,
+            'verified_node_count': len(proof_nodes),
+            'verified_at': _now(),
+        }
+    else:
+        return {
+            'status': 'verification_failed',
+            'valid': False,
+            'peer_org_id': peer_org_id,
+            'error_detail': error_detail or {'reason': 'unknown'},
+            'verified_at': _now(),
+        }
+
+
 # ---------------------------------------------------------------------------
 # L1: Federated Proof Bundle
 # ---------------------------------------------------------------------------
