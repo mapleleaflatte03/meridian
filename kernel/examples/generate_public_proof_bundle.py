@@ -391,6 +391,138 @@ def build_bundle(live_manifest_url=None, live_runtime_proof_url=None, run_refere
     }
 
 
+def build_federated_bundle(institution_receipts, federation_context):
+    """Build a federated proof bundle from multi-institution proof receipts.
+
+    Extends PoGE to multi-Institution verifiable proof by producing a
+    cross-institution Merkle tree where each institution's receipt hash
+    is a leaf. Uses FEDERATED_INTEGRITY_v1 tag for the integrity hash.
+
+    Args:
+        institution_receipts: list of dicts, each with:
+            - org_id: str — institution identifier (must be unique)
+            - host_id: str — host identifier
+            - role: str — sender / receiver / witness / peer
+            - receipt_hash: str — 64-char hex SHA-256 of the institution's proof
+            - witness_archives: int (optional) — count of witness archive entries
+        federation_context: dict with:
+            - enabled: bool
+            - peer_count: int
+            - protocol_version: str
+
+    Returns:
+        Federated proof bundle dict (version 5).
+
+    Raises:
+        ValueError: if institution_receipts is empty or contains duplicate org_ids.
+    """
+    if not institution_receipts:
+        raise ValueError('institution_receipts must not be empty')
+
+    org_ids = [r['org_id'] for r in institution_receipts]
+    if len(org_ids) != len(set(org_ids)):
+        raise ValueError(
+            f'Duplicate org_ids in institution_receipts: '
+            f'{[o for o in org_ids if org_ids.count(o) > 1]}'
+        )
+
+    # Normalize receipt hashes
+    member_hashes = []
+    institution_proofs = []
+    for receipt in institution_receipts:
+        raw_hash = str(receipt['receipt_hash']).strip().lower()
+        if raw_hash.startswith('0x'):
+            raw_hash = raw_hash[2:]
+        if len(raw_hash) != 64 or not all(c in '0123456789abcdef' for c in raw_hash):
+            raise ValueError(f"Invalid receipt_hash for {receipt['org_id']}: {raw_hash}")
+        member_hashes.append(raw_hash)
+        institution_proofs.append({
+            'org_id': receipt['org_id'],
+            'host_id': receipt['host_id'],
+            'role': receipt['role'],
+            'receipt_hash': raw_hash,
+        })
+
+    # Build Merkle tree (hypercube-padded to power of 2)
+    bundle_id = f"fhc_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    leaves = [bytes.fromhex(h) for h in member_hashes]
+    padded_len = max(1, len(leaves))
+    while padded_len & (padded_len - 1):
+        padded_len += 1
+    padded_leaves = leaves + [b'\x00' * 32] * (padded_len - len(leaves))
+
+    levels = [padded_leaves]
+    while len(levels[-1]) > 1:
+        prev = levels[-1]
+        nxt = []
+        for i in range(0, len(prev), 2):
+            nxt.append(hashlib.sha256(prev[i] + prev[i + 1]).digest())
+        levels.append(nxt)
+    aggregate_root = levels[-1][0].hex() if levels and levels[-1] else ('0' * 64)
+
+    # Build inclusion proofs and verify
+    inclusion_proofs = []
+    sample_verified = []
+    for idx, receipt_hex in enumerate(member_hashes):
+        sibling_path = []
+        position = idx
+        for level in levels[:-1]:
+            sibling_idx = position ^ 1
+            sibling_path.append(level[sibling_idx].hex())
+            position //= 2
+        inclusion_proofs.append({
+            'receipt_hash': receipt_hex,
+            'index': idx,
+            'sibling_path': sibling_path,
+        })
+
+        # Verify
+        current = bytes.fromhex(receipt_hex)
+        position = idx
+        for sibling_hex in sibling_path:
+            sibling = bytes.fromhex(sibling_hex)
+            if position % 2 == 0:
+                current = hashlib.sha256(current + sibling).digest()
+            else:
+                current = hashlib.sha256(sibling + current).digest()
+            position //= 2
+        sample_verified.append(current.hex() == aggregate_root)
+
+    # Compute integrity hash: H(tag || bundle_id || aggregate_root || member_hashes...)
+    tag = b'FEDERATED_INTEGRITY_v1\x00'
+    h = hashlib.sha256()
+    h.update(tag)
+    h.update(bundle_id.encode())
+    h.update(bytes.fromhex(aggregate_root))
+    for mh in member_hashes:
+        h.update(bytes.fromhex(mh))
+    integrity_hash = h.hexdigest()
+
+    dimension = int(math.log2(padded_len)) if padded_len > 0 else 0
+
+    return {
+        'federated_proof_bundle_version': 5,
+        'generated_at': datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        'federation_context': {
+            'enabled': bool(federation_context.get('enabled')),
+            'peer_count': int(federation_context.get('peer_count', 0)),
+            'protocol_version': str(federation_context.get('protocol_version', '1.0')),
+        },
+        'institution_proofs': institution_proofs,
+        'federated_aggregate': {
+            'topology': 'hypercube',
+            'bundle_id': bundle_id,
+            'dimension': dimension,
+            'member_count': len(member_hashes),
+            'member_receipts': member_hashes,
+            'inclusion_proofs': inclusion_proofs,
+            'inclusion_verified': all(sample_verified) if sample_verified else True,
+            'integrity_hash': integrity_hash,
+            'aggregate_root': aggregate_root,
+        },
+    }
+
+
 def _normalize_member_hash(value):
     candidate = str(value or '').strip().lower()
     if candidate.startswith('0x'):
