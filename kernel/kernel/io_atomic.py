@@ -5,15 +5,19 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from typing import Any
 
 
 def atomic_write_json(path: str, data: Any, *, indent: int = 2) -> None:
     directory = os.path.dirname(path) or '.'
     os.makedirs(directory, exist_ok=True)
-    tmp_path = f"{path}.tmp.{os.getpid()}"
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=f".{os.path.basename(path)}.tmp.",
+        dir=directory,
+    )
     try:
-        with open(tmp_path, 'w') as f:
+        with os.fdopen(fd, 'w') as f:
             json.dump(data, f, indent=indent)
             f.flush()
             os.fsync(f.fileno())

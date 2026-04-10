@@ -7,11 +7,15 @@ cd "${ROOT_DIR}"
 SUPERVISOR_SERVICE_NAME="meridian-runtime-supervisor.service"
 SUPERVISOR_SERVICE_WAS_ACTIVE=0
 SUPERVISOR_SERVICE_SEEN=0
+SUPERVISOR_PROCESS_WAS_ACTIVE=0
 
 cleanup_on_exit() {
   ./scripts/dev-down.sh >/dev/null 2>&1 || true
   if [[ "${SUPERVISOR_SERVICE_SEEN}" -eq 1 && "${SUPERVISOR_SERVICE_WAS_ACTIVE}" -eq 1 ]]; then
     systemctl --user start "${SUPERVISOR_SERVICE_NAME}" >/dev/null 2>&1 || true
+  fi
+  if [[ "${SUPERVISOR_PROCESS_WAS_ACTIVE}" -eq 1 && "${SUPERVISOR_SERVICE_WAS_ACTIVE}" -eq 0 ]]; then
+    MERIDIAN_SUPERVISOR_ENABLE=1 ./scripts/dev-up.sh --no-summary >/dev/null 2>&1 || true
   fi
 }
 trap cleanup_on_exit EXIT
@@ -28,8 +32,40 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
 fi
 
+if pgrep -f "scripts/dev-supervisor.sh run" >/dev/null 2>&1; then
+  SUPERVISOR_PROCESS_WAS_ACTIVE=1
+  echo "[onboarding-lane] stopping standalone dev-supervisor loop for isolated bootstrap gate"
+  pkill -f "scripts/dev-supervisor.sh run" >/dev/null 2>&1 || true
+  sleep 1
+fi
+
+./scripts/dev-supervisor.sh stop >/dev/null 2>&1 || true
 ./scripts/dev-down.sh >/dev/null 2>&1 || true
 sleep 1
+
+if pgrep -f "/home/ubuntu/meridian/intelligence/company/meridian_platform/workspace.py" >/dev/null 2>&1; then
+  echo "[onboarding-lane] stopping orphan workspace.py processes for isolated bootstrap gate"
+  pkill -f "/home/ubuntu/meridian/intelligence/company/meridian_platform/workspace.py" >/dev/null 2>&1 || true
+  sleep 1
+fi
+if pgrep -f "/home/ubuntu/meridian/intelligence/meridian_gateway.py" >/dev/null 2>&1; then
+  echo "[onboarding-lane] stopping orphan meridian_gateway.py processes for isolated bootstrap gate"
+  pkill -f "/home/ubuntu/meridian/intelligence/meridian_gateway.py" >/dev/null 2>&1 || true
+  sleep 1
+fi
+
+if pgrep -f "scripts/dev-supervisor.sh run" >/dev/null 2>&1; then
+  echo "[onboarding-lane] unable to isolate runtime: dev-supervisor loop still running" >&2
+  exit 1
+fi
+if pgrep -f "/home/ubuntu/meridian/intelligence/company/meridian_platform/workspace.py" >/dev/null 2>&1; then
+  echo "[onboarding-lane] unable to isolate runtime: orphan workspace.py process still running" >&2
+  exit 1
+fi
+if pgrep -f "/home/ubuntu/meridian/intelligence/meridian_gateway.py" >/dev/null 2>&1; then
+  echo "[onboarding-lane] unable to isolate runtime: orphan meridian_gateway.py process still running" >&2
+  exit 1
+fi
 
 find_free_port() {
   python3 - <<'PY'
@@ -134,11 +170,14 @@ import urllib.request
 import urllib.error
 
 BASE = f"http://127.0.0.1:{os.environ['ONBOARDING_GATEWAY_PORT']}"
-HTTP_TIMEOUT_SECONDS = float(os.environ.get("MERIDIAN_ACCEPTANCE_HTTP_TIMEOUT", "60"))
+HTTP_TIMEOUT_SECONDS = float(os.environ.get("MERIDIAN_ACCEPTANCE_HTTP_TIMEOUT", "20"))
+
+def step(label: str):
+    print(f"[onboarding-lane] {label}", flush=True)
 
 def get_json(path: str, *, required: bool = True):
     last_error = None
-    for attempt in range(60):
+    for attempt in range(20):
         try:
             with urllib.request.urlopen(BASE + path, timeout=HTTP_TIMEOUT_SECONDS) as response:
                 return json.loads(response.read().decode("utf-8"))
@@ -153,10 +192,11 @@ def get_json(path: str, *, required: bool = True):
         raise RuntimeError(f"API probe failed for {path}: {last_error}")
     return None
 
-def post_json(path: str, payload: dict, *, allow_forbidden: bool = False):
+def post_json(path: str, payload: dict, *, allow_forbidden: bool = False, accept_statuses=None):
+    accepted = set(accept_statuses or [])
     body = json.dumps(payload).encode("utf-8")
     last_error = None
-    for attempt in range(40):
+    for attempt in range(12):
         request = urllib.request.Request(
             BASE + path,
             data=body,
@@ -174,6 +214,18 @@ def post_json(path: str, payload: dict, *, allow_forbidden: bool = False):
                     "_forbidden": True,
                     "status_code": exc.code,
                     "raw": raw,
+                }
+            if exc.code in accepted:
+                parsed = None
+                try:
+                    parsed = json.loads(raw)
+                except Exception:
+                    parsed = None
+                return {
+                    "_http_error": True,
+                    "status_code": exc.code,
+                    "raw": raw,
+                    "payload": parsed,
                 }
             if exc.code not in {502, 503, 504}:
                 raise last_error
@@ -215,12 +267,14 @@ def ensure_treasury_headroom(required_usd: float, *, note: str):
     return refreshed
 
 status = get_json("/api/status")
+step("status probe complete")
 template = get_json("/api/institution/template")
 treasury = get_json("/api/treasury")
 runtime_proof = get_json("/api/runtime-proof", required=False)
 runtime_proof_contract = get_json("/api/runtime-proof-contract", required=False)
 kernel_bundle = get_json("/api/kernel-proof-bundle", required=False)
 agents_payload = get_json("/api/agents")
+step("institution/template/treasury/proof probes complete")
 
 assert status.get("runtime_id"), status
 slo = status.get("slo") or {}
@@ -271,6 +325,7 @@ ensure_treasury_headroom(
     required_usd=0.25,
     note="acceptance_onboarding_marketplace_headroom",
 )
+step("treasury headroom validated for marketplace lifecycle")
 stamp = datetime.datetime.utcnow().strftime("%Y%m%d%H%M%S")
 bid = post_json(
     "/api/marketplace/bids",
@@ -289,9 +344,27 @@ else:
     bid_id = str(bid.get("bid_id") or "").strip()
     assert bid_id, bid
 
-    assignment = post_json("/api/marketplace/assign", {"bid_id": bid_id})
-    reservation_id = str(assignment.get("reservation_id") or "").strip()
+    step(f"marketplace bid posted ({bid_id})")
+    assignment = post_json(
+        "/api/marketplace/assign",
+        {"bid_id": bid_id},
+        accept_statuses={400},
+    )
+    reservation_id = ""
+    if assignment.get("_http_error"):
+        raw = str(assignment.get("raw") or "").lower()
+        if "status=assigned" in raw or "not open" in raw:
+            marketplace_snapshot = get_json("/api/marketplace")
+            assignments = list(marketplace_snapshot.get("assignments") or [])
+            matches = [row for row in assignments if row.get("bid_id") == bid_id]
+            assert matches, marketplace_snapshot
+            reservation_id = str(matches[-1].get("reservation_id") or "").strip()
+        else:
+            raise AssertionError(f"unexpected marketplace assign error: {assignment}")
+    else:
+        reservation_id = str(assignment.get("reservation_id") or "").strip()
     assert reservation_id, assignment
+    step(f"marketplace bid assigned ({bid_id}, reservation={reservation_id})")
 
     settlement = post_json(
         "/api/marketplace/settle",
@@ -300,12 +373,24 @@ else:
             "proof_receipt": f"proof_onboarding_{stamp}",
             "reservation_id": reservation_id,
         },
+        accept_statuses={400},
     )
+    if settlement.get("_http_error"):
+        raw = str(settlement.get("raw") or "").lower()
+        if "status=settled" in raw:
+            marketplace_snapshot = get_json("/api/marketplace")
+            settlements = list(marketplace_snapshot.get("settlements") or [])
+            matches = [row for row in settlements if row.get("bid_id") == bid_id]
+            assert matches, marketplace_snapshot
+            settlement = matches[-1]
+        else:
+            raise AssertionError(f"unexpected marketplace settle error: {settlement}")
     split = settlement.get("split") or {}
     total = float(split.get("total_usd") or 0.0)
     worker = float(split.get("worker_usd") or 0.0)
     royalty = float(split.get("royalty_usd") or 0.0)
     assert round(worker + royalty, 4) == round(total, 4), settlement
+    step(f"marketplace bid settled ({bid_id})")
 
     opened_dispute = post_json(
         "/api/marketplace/dispute",
@@ -314,9 +399,26 @@ else:
             "reason": "acceptance_dispute_lifecycle",
             "action_ids": ["acceptance_onboarding_marketplace_dispute"],
         },
+        accept_statuses={400},
     )
-    dispute_id = str(opened_dispute.get("dispute_id") or "").strip()
+    if opened_dispute.get("_http_error"):
+        raw = str(opened_dispute.get("raw") or "").lower()
+        if "cannot be disputed (status=disputed)" in raw:
+            marketplace_snapshot = get_json("/api/marketplace")
+            bids = list(marketplace_snapshot.get("bids") or [])
+            disputes = list(marketplace_snapshot.get("disputes") or [])
+            active_bid = next((row for row in bids if row.get("id") == bid_id), {})
+            existing_dispute_id = str(active_bid.get("dispute_id") or "").strip()
+            if existing_dispute_id:
+                opened_dispute = next(
+                    (row for row in disputes if row.get("id") == existing_dispute_id),
+                    {"dispute_id": existing_dispute_id},
+                )
+        else:
+            raise AssertionError(f"unexpected marketplace dispute-open error: {opened_dispute}")
+    dispute_id = str(opened_dispute.get("dispute_id") or opened_dispute.get("id") or "").strip()
     assert dispute_id, opened_dispute
+    step(f"marketplace dispute opened ({dispute_id})")
 
     stayed_dispute = post_json(
         "/api/marketplace/dispute",
@@ -328,6 +430,7 @@ else:
         },
     )
     assert (stayed_dispute.get("dispute") or {}).get("decision") == "stay", stayed_dispute
+    step(f"marketplace dispute stayed ({dispute_id})")
 
     refunded_dispute = post_json(
         "/api/marketplace/dispute",
@@ -337,9 +440,23 @@ else:
             "reservation_id": reservation_id,
             "court_decision_ref": f"court_acceptance_refund_{stamp}",
         },
+        accept_statuses={400},
     )
     release_status = ((refunded_dispute.get("treasury_release") or {}).get("status") or "").strip().lower()
+    if refunded_dispute.get("_http_error"):
+        raw = str(refunded_dispute.get("raw") or "").lower()
+        if "already resolved" in raw:
+            marketplace_snapshot = get_json("/api/marketplace")
+            disputes = list(marketplace_snapshot.get("disputes") or [])
+            resolved = next((row for row in disputes if row.get("id") == dispute_id), None)
+            assert resolved and (resolved.get("status") or "").lower() == "resolved", marketplace_snapshot
+            decision = (resolved.get("decision") or "").strip().lower()
+            assert decision in {"refund", "release"}, resolved
+            release_status = "refunded" if decision == "refund" else "released"
+        else:
+            raise AssertionError(f"unexpected marketplace dispute-refund error: {refunded_dispute}")
     assert release_status in {"released", "refunded"}, refunded_dispute
+    step(f"marketplace dispute refunded ({dispute_id})")
 
     marketplace_snapshot = get_json("/api/marketplace")
     settlements = list(marketplace_snapshot.get("settlements") or [])
@@ -363,6 +480,7 @@ if proposal.get("_forbidden"):
 else:
     proposal_id = str(proposal.get("proposal_id") or "").strip()
     assert proposal_id, proposal
+    step(f"court proposal created ({proposal_id})")
     vote = post_json(
         "/api/court/vote",
         {
@@ -372,11 +490,14 @@ else:
         },
     )
     assert (vote.get("vote") or {}).get("vote") == "for", vote
+    step(f"court vote submitted ({proposal_id})")
     tally = post_json("/api/court/tally", {"proposal_id": proposal_id})
     assert bool((tally.get("tally") or {}).get("approved")), tally
+    step(f"court tally approved ({proposal_id})")
     activation = post_json("/api/court/proposals/activate", {"proposal_id": proposal_id})
     rule_id = str(activation.get("rule_id") or "").strip()
     assert rule_id, activation
+    step(f"court rule activated ({rule_id})")
     rules = get_json("/api/court/rules")
     active_rules = list(rules.get("rules") or [])
     assert any((row.get("id") or "") == rule_id for row in active_rules), rules

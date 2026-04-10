@@ -17,6 +17,8 @@ import argparse
 import datetime
 import json
 import os
+import queue
+import threading
 import uuid
 
 import observability_store
@@ -26,10 +28,64 @@ AUDIT_FILE = os.path.join(PLATFORM_DIR, 'audit_log.jsonl')
 
 # Max audit log size before rotation (10MB)
 MAX_LOG_SIZE = 10 * 1024 * 1024
+_ASYNC_DB_WRITE_ENABLED = (
+    (os.environ.get('MERIDIAN_OBSERVABILITY_ASYNC_WRITE', '1') or '1').strip().lower()
+    in {'1', 'true', 'yes', 'on'}
+)
+_DB_QUEUE_MAX = max(
+    1,
+    int(os.environ.get('MERIDIAN_OBSERVABILITY_DB_QUEUE_MAX', '2048') or '2048'),
+)
+_db_write_queue: queue.Queue[tuple[str, dict] | None] = queue.Queue(maxsize=_DB_QUEUE_MAX)
+_db_worker_lock = threading.Lock()
+_db_worker_started = False
 
 
 def _now():
     return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+
+
+def _db_writer_loop():
+    while True:
+        item = _db_write_queue.get()
+        if item is None:
+            _db_write_queue.task_done()
+            break
+        log_path, event = item
+        try:
+            observability_store.write_audit_event(log_path, event)
+        except Exception:
+            pass
+        finally:
+            _db_write_queue.task_done()
+
+
+def _ensure_db_worker():
+    global _db_worker_started
+    if _db_worker_started:
+        return
+    with _db_worker_lock:
+        if _db_worker_started:
+            return
+        worker = threading.Thread(
+            target=_db_writer_loop,
+            name='meridian-audit-observability-writer',
+            daemon=True,
+        )
+        worker.start()
+        _db_worker_started = True
+
+
+def _write_observability_event(log_path, event):
+    if not _ASYNC_DB_WRITE_ENABLED:
+        observability_store.write_audit_event(log_path, event)
+        return
+    _ensure_db_worker()
+    try:
+        _db_write_queue.put_nowait((log_path, dict(event)))
+    except queue.Full:
+        # Drop mirror writes under pressure; canonical JSONL audit stream remains intact.
+        return
 
 
 def log_event(org_id, agent_id, action, resource='', outcome='success',
@@ -63,7 +119,7 @@ def log_event(org_id, agent_id, action, resource='', outcome='success',
     with open(AUDIT_FILE, 'a') as f:
         f.write(json.dumps(event) + '\n')
 
-    observability_store.write_audit_event(AUDIT_FILE, event)
+    _write_observability_event(AUDIT_FILE, event)
 
     return event['id']
 

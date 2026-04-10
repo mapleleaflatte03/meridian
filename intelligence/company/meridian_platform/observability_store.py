@@ -9,6 +9,8 @@ import sqlite3
 from datetime import datetime, timezone
 from typing import Any
 
+_JOURNAL_MODE_INITIALIZED: set[str] = set()
+
 
 def db_path_for_log(log_path: str) -> str:
     directory = os.path.dirname(os.path.abspath(log_path))
@@ -21,11 +23,19 @@ def _connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=max(0.05, timeout))
     conn.row_factory = sqlite3.Row
     conn.execute(f'PRAGMA busy_timeout={int(max(50.0, timeout * 1000.0))}')
-    try:
-        conn.execute('PRAGMA journal_mode=WAL')
-    except sqlite3.OperationalError:
-        # Continue in default journal mode when WAL negotiation is temporarily unavailable.
-        pass
+    configured_journal_mode = (
+        os.environ.get('MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE', 'WAL') or 'WAL'
+    ).strip().upper()
+    if configured_journal_mode not in {'', 'DEFAULT', 'OFF'}:
+        needs_init = configured_journal_mode != 'WAL' or db_path not in _JOURNAL_MODE_INITIALIZED
+        if needs_init:
+            try:
+                conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')
+                if configured_journal_mode == 'WAL':
+                    _JOURNAL_MODE_INITIALIZED.add(db_path)
+            except sqlite3.OperationalError:
+                # Continue in default journal mode when negotiation is temporarily unavailable.
+                pass
     conn.execute('PRAGMA synchronous=NORMAL')
     conn.execute('PRAGMA foreign_keys=ON')
     return conn

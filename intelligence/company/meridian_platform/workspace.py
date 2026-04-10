@@ -350,12 +350,29 @@ from treasury import (treasury_snapshot, get_balance,
                       open_payout_dispute_window, reject_payout_proposal,
                       cancel_payout_proposal, execute_payout_proposal,
                       load_payout_proposals)
-from court import (file_violation, resolve_violation,
-                   file_appeal, decide_appeal, auto_review,
-                   get_restrictions, remediate, _load_records,
-                   propose_rule, vote_on_proposal, tally_proposal,
-                   activate_rule, get_proposals, get_dynamic_rules,
-                   dynamic_court_status)
+# Load workspace court module by absolute file path to avoid collisions with
+# similarly named kernel modules already present in sys.modules.
+_workspace_court_spec = importlib.util.spec_from_file_location(
+    'meridian_workspace_court',
+    os.path.join(PLATFORM_DIR, 'court.py'),
+)
+_workspace_court_mod = importlib.util.module_from_spec(_workspace_court_spec)
+_workspace_court_spec.loader.exec_module(_workspace_court_mod)
+file_violation = _workspace_court_mod.file_violation
+resolve_violation = _workspace_court_mod.resolve_violation
+file_appeal = _workspace_court_mod.file_appeal
+decide_appeal = _workspace_court_mod.decide_appeal
+auto_review = _workspace_court_mod.auto_review
+get_restrictions = _workspace_court_mod.get_restrictions
+remediate = _workspace_court_mod.remediate
+_load_records = _workspace_court_mod._load_records
+propose_rule = _workspace_court_mod.propose_rule
+vote_on_proposal = _workspace_court_mod.vote_on_proposal
+tally_proposal = _workspace_court_mod.tally_proposal
+activate_rule = _workspace_court_mod.activate_rule
+get_proposals = _workspace_court_mod.get_proposals
+get_dynamic_rules = _workspace_court_mod.get_dynamic_rules
+dynamic_court_status = _workspace_court_mod.dynamic_court_status
 # Load workspace marketplace module by absolute file path to avoid import
 # collisions with similarly named kernel modules already present in sys.modules.
 _workspace_marketplace_spec = importlib.util.spec_from_file_location(
