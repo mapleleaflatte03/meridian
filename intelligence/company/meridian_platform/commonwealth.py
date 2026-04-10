@@ -1055,3 +1055,57 @@ def get_federated_proof_bundle(org_id: str) -> dict:
     bundle['protocol'] = 'federated_commonwealth_proof_bundle_v1'
     bundle['generated_at'] = _now()
     return bundle
+
+
+# ---------------------------------------------------------------------------
+# L6: UX/UI Verifiable AI Commonwealth + Research/Open Moat Lock
+# ---------------------------------------------------------------------------
+
+def get_research_moat_lock(org_id: str) -> dict:
+    """Return the programmatic open-source boundary classification (Slice 6).
+
+    Categorizes artifacts into 'open' (specs, reference code, tests)
+    and 'patent_candidate' (advanced optimizations, binding designs).
+    """
+    return {
+        'open': [
+            {
+                'category': 'protocol_specs',
+                'description': 'Open protocol specifications and documentation',
+                'artifacts': ['RFC-0001', 'RFC-0002', 'RFC-0003', 'RFC-0004', 'RFC-0009'],
+            },
+            {
+                'category': 'reference_code',
+                'description': 'Reference implementation code in the canonical repository',
+                'artifacts': ['Loom runtime', 'Kernel boundary', 'Commonwealth APIs'],
+            },
+            {
+                'category': 'tests_and_benchmarks',
+                'description': 'Reproducible test cases and benchmarks',
+                'artifacts': ['BENCHMARK-0001'],
+            },
+        ],
+        'patent_candidate': [
+            {
+                'topic': 'hypercube_pairing_optimization',
+                'description': 'Hypercube pairing optimization strategy',
+                'status': 'investigation',
+            },
+            {
+                'topic': 'adaptive_constitutional_sanction_scoring',
+                'description': 'Adaptive constitutional sanction scoring',
+                'status': 'investigation',
+            },
+            {
+                'topic': 'royalty_proof_binding_design',
+                'description': 'Royalty-proof binding design',
+                'status': 'investigation',
+            },
+        ],
+        'boundary_policy': (
+            'Meridian is open research infrastructure. Protocol specs, reference code, tests, and '
+            'reproducible benchmark artifacts are open by default. Advanced optimizations and '
+            'commercial-grade governance derivatives remain patent-candidate investigation topics.'
+        ),
+        'last_updated': _now(),
+    }

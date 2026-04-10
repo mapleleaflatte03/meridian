@@ -1394,7 +1394,8 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
   var hasCourtTable = document.querySelector('[data-court-rules-body]') || document.querySelector('[data-court-proposals-body]');
   var hasProofExplorer = document.querySelector('[data-proof-explorer]');
   var hasMarketplacePanel = document.querySelector('[data-marketplace-panel]');
-  if (!hasInstitutionStatus && !hasCourtTable && !hasProofExplorer && !hasMarketplacePanel) {
+  var hasCommonwealthPanel = document.querySelector('[data-commonwealth-panel]');
+  if (!hasInstitutionStatus && !hasCourtTable && !hasProofExplorer && !hasMarketplacePanel && !hasCommonwealthPanel) {
     return;
   }
 
@@ -1578,6 +1579,52 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     setAll('[data-marketplace-latest-event]', latestText);
   }
 
+  function renderCommonwealthPanel(statusPayload, moatLockPayload) {
+    if (!hasCommonwealthPanel) {
+      return;
+    }
+
+    var commonwealth = statusPayload && statusPayload.commonwealth ? statusPayload.commonwealth : {};
+    var federation = commonwealth && commonwealth.federation ? commonwealth.federation : {};
+    var settlement = commonwealth && commonwealth.settlement ? commonwealth.settlement : {};
+    var openArtifacts = toArray(moatLockPayload && moatLockPayload.open);
+    var patentCandidates = toArray(moatLockPayload && moatLockPayload.patent_candidate);
+
+    setAll('[data-cw-peer-count]', String(safeNumber(federation.peer_count)));
+    setAll(
+      '[data-cw-federation-note]',
+      (federation.enabled ? 'federation enabled' : 'federation disabled') + ' · last sync ' + firstNonEmpty([federation.last_sync_ms], 'n/a')
+    );
+    setAll('[data-cw-settlement-pending]', String(safeNumber(settlement.pending_count)));
+    setAll('[data-cw-settlement-settled]', String(safeNumber(settlement.settled_count)));
+    setAll('[data-cw-open-artifacts]', String(openArtifacts.length));
+
+    var openList = document.querySelector('[data-cw-open-list]');
+    if (openList) {
+      openList.innerHTML = openArtifacts.length
+        ? openArtifacts.map(function (item) {
+            return '<li><strong>' + escapeHtml(firstNonEmpty([item.category], 'open')) + '</strong> — ' +
+              escapeHtml(firstNonEmpty([item.description], '')) + '</li>';
+          }).join('')
+        : '<li>No open artifacts reported.</li>';
+    }
+
+    var patentList = document.querySelector('[data-cw-patent-list]');
+    if (patentList) {
+      patentList.innerHTML = patentCandidates.length
+        ? patentCandidates.map(function (item) {
+            return '<li><strong>' + escapeHtml(firstNonEmpty([item.topic], 'candidate')) + '</strong> — ' +
+              escapeHtml(firstNonEmpty([item.status], 'investigation')) + '</li>';
+          }).join('')
+        : '<li>No patent-candidate artifacts reported.</li>';
+    }
+
+    setAll(
+      '[data-cw-boundary-policy]',
+      firstNonEmpty([moatLockPayload && moatLockPayload.boundary_policy], 'Boundary policy unavailable.')
+    );
+  }
+
   async function refreshLivingInstitutionSurface() {
     var statusPayload = {};
     var runtimePayload = {};
@@ -1585,6 +1632,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     var proposalsPayload = {};
     var kernelBundle = {};
     var marketplacePayload = {};
+    var moatLockPayload = {};
     try {
       statusPayload = await fetchJson('/api/status');
     } catch (error) {
@@ -1616,12 +1664,18 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     } catch (_error) {
       marketplacePayload = {};
     }
+    try {
+      moatLockPayload = await fetchJson('/api/research/moat-lock');
+    } catch (_error) {
+      moatLockPayload = {};
+    }
 
     renderInstitutionStatus(statusPayload, runtimePayload);
     renderCourtRules(rulesPayload);
     renderCourtProposals(proposalsPayload);
     renderProofExplorer(statusPayload, kernelBundle);
     renderMarketplacePanel(statusPayload, marketplacePayload);
+    renderCommonwealthPanel(statusPayload, moatLockPayload);
     setAll('[data-court-updated-at]', 'Court voting chamber updated ' + new Date().toLocaleString() + '.');
   }
 

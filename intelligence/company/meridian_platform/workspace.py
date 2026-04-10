@@ -5924,6 +5924,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             qs = parse_qs(parsed.query)
             target = (qs.get('org_id') or [org_id])[0]
             return self._json(_commonwealth.get_federated_proof_bundle(target))
+        elif path == '/api/research/moat-lock':
+            qs = parse_qs(parsed.query)
+            target = (qs.get('org_id') or [org_id])[0]
+            return self._json(_commonwealth.get_research_moat_lock(target))
         # ─────────────────────────────────────────────────────────────────────
         else:
             self.send_response(404)
