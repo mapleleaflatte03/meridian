@@ -267,6 +267,8 @@ class LiveWorkspaceContextTests(unittest.TestCase):
         auth = {'enabled': True, 'role': 'admin'}
         permissions = self.workspace._permission_snapshot(auth)['mutation_paths']
         self.assertTrue(permissions['/api/authority/kill-switch']['allowed'])
+        self.assertFalse(permissions['/api/institution/create']['allowed'])
+        self.assertEqual(permissions['/api/institution/create']['required_role'], 'owner')
         self.assertTrue(permissions['/api/institution/charter']['allowed'])
         self.assertFalse(permissions['/api/treasury/contribute']['allowed'])
         self.assertTrue(permissions['/api/warrants/issue']['allowed'])
@@ -727,6 +729,139 @@ class LiveWorkspaceContextTests(unittest.TestCase):
         self.assertEqual(handler.response['data']['reason'], 'open_source_mode')
         self.assertIn('/pilot', handler.response['data']['message'])
         self.assertEqual(result, handler.response)
+
+    def test_institution_create_route_provisions_new_org(self):
+        calls = []
+        self.workspace._resolve_workspace_context = lambda **_: types.SimpleNamespace(org_id='org_founding', org={}, context_source='configured_org')
+
+        class PostHandler:
+            def __init__(self):
+                self.path = '/api/institution/create'
+                self.headers = _Headers({'Content-Type': 'application/json'})
+                self.response = None
+
+            def _require_auth(self, path):
+                calls.append(('require_auth', path))
+                return True
+
+            def _json(self, data, status=200):
+                self.response = {'data': data, 'status': status}
+                return self.response
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError(message)
+
+            def _session_claims_from_request(self, expected_org_id=None):
+                return None
+
+            def _read_body(self):
+                return {
+                    'name': 'New Institution',
+                    'owner_id': 'user_new_owner',
+                    'plan': 'pro',
+                }
+
+        with mock.patch.object(self.workspace, 'provision_institution', return_value={
+            'org_id': 'org_new1234',
+            'org': {
+                'id': 'org_new1234',
+                'name': 'New Institution',
+                'slug': 'new-institution',
+                'owner_id': 'user_new_owner',
+                'plan': 'pro',
+                'status': 'active',
+            },
+            'capsule_path': '/tmp/capsules/org_new1234',
+            'treasury': {
+                'ledger': '/tmp/capsules/org_new1234/ledger.json',
+                'revenue': '/tmp/capsules/org_new1234/revenue.json',
+                'transactions': '/tmp/capsules/org_new1234/transactions.jsonl',
+            },
+        }), mock.patch.object(self.workspace, 'log_event', return_value='evt_demo'), mock.patch.object(self.workspace, '_resolve_auth_context', return_value={
+            'enabled': True,
+            'mode': 'credential_bound',
+            'org_id': 'org_founding',
+            'user_id': 'user_owner',
+            'role': 'owner',
+            'actor_id': 'user_owner',
+            'actor_source': 'test',
+            'session_id': 'sid_demo',
+        }):
+            handler = PostHandler()
+            result = self.workspace.WorkspaceHandler.do_POST(handler)
+
+        self.assertEqual(calls, [('require_auth', '/api/institution/create')])
+        self.assertEqual(handler.response['status'], 201)
+        self.assertEqual(handler.response['data']['institution']['id'], 'org_new1234')
+        self.assertEqual(handler.response['data']['institution']['slug'], 'new-institution')
+        self.assertEqual(handler.response['data']['provisioning']['treasury']['ledger'], '/tmp/capsules/org_new1234/ledger.json')
+        self.assertEqual(result, handler.response)
+
+    def test_institutions_public_returns_directory(self):
+        self.workspace._resolve_workspace_context = lambda **_: types.SimpleNamespace(org_id='org_founding', org={}, context_source='configured_org')
+        self.workspace._resolve_auth_context = lambda org_id: {
+            'enabled': True, 'mode': 'credential_bound', 'org_id': 'org_founding',
+            'user_id': 'user_owner', 'role': 'owner', 'actor_id': 'user_owner',
+            'actor_source': 'test', 'session_id': 'sid_demo',
+        }
+
+        class GetHandler:
+            def __init__(self):
+                self.path = '/api/institutions/public'
+                self.headers = _Headers()
+                self.response = None
+            def _require_auth(self, path):
+                return True
+            def _json(self, data, status=200):
+                self.response = {'data': data, 'status': status}
+                return self.response
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError(message)
+            def _session_claims_from_request(self, expected_org_id=None):
+                return None
+
+        with mock.patch.object(self.workspace, 'list_public_institutions', return_value=[
+            {'id': 'org_1', 'name': 'Meridian', 'slug': 'meridian', 'plan': 'enterprise', 'lifecycle_state': 'active', 'member_count': 3, 'created_at': '2026-01-01T00:00:00Z'},
+        ]):
+            handler = GetHandler()
+            self.workspace.WorkspaceHandler.do_GET(handler)
+
+        self.assertEqual(handler.response['status'], 200)
+        self.assertEqual(len(handler.response['data']['institutions']), 1)
+        self.assertEqual(handler.response['data']['institutions'][0]['slug'], 'meridian')
+
+    def test_institutions_mine_returns_user_institutions(self):
+        self.workspace._resolve_workspace_context = lambda **_: types.SimpleNamespace(org_id='org_founding', org={}, context_source='configured_org')
+        self.workspace._resolve_auth_context = lambda org_id: {
+            'enabled': True, 'mode': 'credential_bound', 'org_id': 'org_founding',
+            'user_id': 'user_owner', 'role': 'owner', 'actor_id': 'user_owner',
+            'actor_source': 'test', 'session_id': 'sid_demo',
+        }
+
+        class GetHandler:
+            def __init__(self):
+                self.path = '/api/institutions/mine'
+                self.headers = _Headers()
+                self.response = None
+            def _require_auth(self, path):
+                return True
+            def _json(self, data, status=200):
+                self.response = {'data': data, 'status': status}
+                return self.response
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError(message)
+            def _session_claims_from_request(self, expected_org_id=None):
+                return None
+
+        with mock.patch.object(self.workspace, 'list_user_institutions', return_value=[
+            {'id': 'org_1', 'name': 'Meridian', 'slug': 'meridian', 'plan': 'enterprise', 'role': 'owner', 'member_count': 3, 'created_at': '2026-01-01T00:00:00Z'},
+        ]):
+            handler = GetHandler()
+            self.workspace.WorkspaceHandler.do_GET(handler)
+
+        self.assertEqual(handler.response['status'], 200)
+        self.assertEqual(handler.response['data']['user_id'], 'user_owner')
+        self.assertEqual(len(handler.response['data']['institutions']), 1)
 
     def test_subscription_draft_from_preview_route_creates_status_surface(self):
         calls = []

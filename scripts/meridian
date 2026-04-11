@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# meridian — Unified CLI entry point for Meridian.
+#
+# Usage:
+#   meridian local [--port N]      Start local dashboard
+#   meridian bootstrap             Run platform bootstrap
+#   meridian help                  Show this help
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+case "${1:-help}" in
+  local)
+    shift
+    exec "$SCRIPT_DIR/meridian-local.sh" "$@"
+    ;;
+  serve)
+    shift
+    exec "$SCRIPT_DIR/../meridian-server" "$@"
+    ;;
+  build)
+    shift
+    exec "$SCRIPT_DIR/build-unified.sh" "$@"
+    ;;
+  bootstrap)
+    shift
+    cd "$SCRIPT_DIR/../intelligence/company/meridian_platform"
+    exec python3 bootstrap.py "$@"
+    ;;
+  migrate)
+    shift
+    exec "$SCRIPT_DIR/migrate-from-claw.sh" "$@"
+    ;;
+  help|--help|-h)
+    echo "meridian — Governed Agent Runtime"
+    echo ""
+    echo "Commands:"
+    echo "  local [--port N]   Start local workspace dashboard (default: 18901)"
+    echo "  serve              Start unified server (Loom + Intelligence)"
+    echo "  build [--release]  Build unified Rust+Python binary"
+    echo "  bootstrap          Run platform bootstrap (founding org + agents)"
+    echo "  migrate            Migrate from OpenClaw/OpenFang/ZeroClaw/Paperclip"
+    echo "  help               Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  meridian local"
+    echo "  meridian serve"
+    echo "  meridian build --release"
+    echo "  meridian bootstrap"
+    echo "  meridian migrate --source-dir /path/to/claw-project"
+    ;;
+  *)
+    echo "Unknown command: $1"
+    echo "Run 'meridian help' for usage."
+    exit 1
+    ;;
+esac

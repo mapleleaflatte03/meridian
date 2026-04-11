@@ -14,6 +14,11 @@ PUBLIC_SURFACE_GET_ROUTES = (
     ('/api/runtimes', 'Runtime registry with contract compliance and binding usage'),
     ('/api/institution/template', 'Institution template contract for constitutional deployments'),
     ('/api/institution/license/catalog', 'Deprecated (410): institution-license catalog disabled in open-source mode'),
+    ('/api/institutions/public', 'Public institution directory'),
+    ('/api/institutions/mine', 'Institutions for the authenticated user'),
+    ('/api/hands/templates', 'Available Hand agent templates'),
+    ('/api/federation/marketplace/catalog', 'Federated proof marketplace catalog'),
+    ('/api/auth/config', 'Authentication configuration and available providers'),
     ('/api/subscriptions', 'Subscription service state'),
     ('/api/pilot/intake', 'Deprecated (410): pilot intake disabled in open-source mode'),
     ('/api/federation/manifest', 'Public host federation manifest'),
@@ -27,6 +32,7 @@ PUBLIC_SURFACE_POST_ROUTES = (
     ('/api/subscriptions/checkout-capture', 'Deprecated (410): subscription checkout capture disabled in open-source mode'),
     ('/api/institution/license/checkout-capture', 'Deprecated (410): institution-license checkout capture disabled in open-source mode'),
     ('/api/federation/receive', 'Inbound federation envelope validation/receipt'),
+    ('/api/institution/create', 'Create and provision a new institution'),
 )
 
 PUBLIC_UNAUTHENTICATED_PATHS = tuple(dict.fromkeys(
@@ -116,10 +122,17 @@ WORKSPACE_MUTATION_ROLE_REQUIREMENTS = {
     '/api/federation/peers/refresh': 'owner',
     '/api/federation/peers/suspend': 'owner',
     '/api/federation/peers/revoke': 'owner',
+    '/api/hands/provision': 'admin',
+    '/api/hands/provision-all': 'admin',
+    '/api/federation/marketplace/publish': 'admin',
+    '/api/federation/marketplace/rent': 'operator',
+    '/api/institution/create': 'owner',
     '/api/institution/charter': 'admin',
     '/api/institution/lifecycle': 'owner',
     '/api/session/issue': 'member',
     '/api/session/revoke': 'admin',
+    '/api/auth/github/callback': 'member',
+    '/api/auth/did': 'member',
 }
 
 

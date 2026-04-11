@@ -15,6 +15,7 @@
   <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="GitHub stars">
   <img src="https://img.shields.io/badge/focus-open%20research-0f766e?style=flat-square" alt="Open research">
   <img src="https://img.shields.io/badge/runtime-local%20first-1f6feb?style=flat-square" alt="Local-first runtime">
+  <img src="https://img.shields.io/badge/migrated%20from-OpenClaw%20%2F%20OpenFang%20%2F%20ZeroClaw%20%2F%20Paperclip-ff6b35?style=flat-square" alt="Migrated from Claw ecosystem">
 </p>
 
 <p align="center">

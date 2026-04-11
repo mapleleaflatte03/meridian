@@ -287,12 +287,8 @@ def _default_org_id():
 
 
 def _resolve_org_id(org_id=None):
-    founding_org_id = _default_org_id()
-    if org_id and founding_org_id and org_id != founding_org_id:
-        raise ValueError(
-            f'Live treasury only supports founding org {founding_org_id}, got {org_id}'
-        )
-    return org_id or founding_org_id
+    from capsule import resolve_org_id as _capsule_resolve
+    return _capsule_resolve(org_id)
 
 
 def _protocol_path(filename, org_id=None):

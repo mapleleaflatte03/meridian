@@ -110,26 +110,63 @@
   <section id="institution-status" class="reveal">
     <h2>Institution Status Bar</h2>
     <p class="section-intro compact-copy">Live institution posture from <code>/api/status</code>. This status bar is the baseline operator view: treasury, court, agents, and latest sanction posture.</p>
+
+    <div class="institution-onboarding-form" style="margin-bottom: 2rem; padding: 1.5rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
+      <h3 style="margin-top: 0;">Create New Institution</h3>
+      <p style="margin-bottom: 1rem; opacity: 0.8;">Provision a new institution with isolated treasury, court, and PoGE context.</p>
+      <form id="create-institution-form" style="display: flex; flex-direction: column; gap: 1rem;">
+        <div style="display: flex; gap: 1rem;">
+          <input type="text" id="institution-name" placeholder="Institution name" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
+          <input type="text" id="institution-owner" placeholder="Owner ID" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
+          <select id="institution-plan" style="padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;">
+            <option value="free">Free</option>
+            <option value="starter">Starter</option>
+            <option value="pro">Pro</option>
+            <option value="enterprise">Enterprise</option>
+          </select>
+        </div>
+        <button type="submit" style="padding: 0.75rem; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Create Institution</button>
+        <div id="institution-create-status" style="min-height: 1.5rem; opacity: 0.9;"></div>
+      </form>
+    </div>
+
+    <div class="institution-browser" style="margin-bottom: 2rem;">
+      <div class="inst-tabs" style="display: flex; gap: 0; border-bottom: 2px solid rgba(255,255,255,0.15); margin-bottom: 1rem;">
+        <button class="inst-tab active" data-tab="public" style="padding: 0.75rem 1.5rem; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid #4CAF50; margin-bottom: -2px; font-weight: 600;">Explore Public</button>
+        <button class="inst-tab" data-tab="mine" style="padding: 0.75rem 1.5rem; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">My Institutions</button>
+      </div>
+      <div id="inst-tab-public" class="inst-tab-content">
+        <div id="public-institutions-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+          <p style="opacity: 0.6; grid-column: 1/-1;">Loading public institutions...</p>
+        </div>
+      </div>
+      <div id="inst-tab-mine" class="inst-tab-content" style="display: none;">
+        <div id="my-institutions-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
+          <p style="opacity: 0.6; grid-column: 1/-1;">Loading your institutions...</p>
+        </div>
+      </div>
+    </div>
+
     <div class="institution-status-grid" data-institution-status>
       <article class="status-chip">
         <span class="status-label">Treasury balance</span>
         <strong data-inst-treasury-balance>--</strong>
-        <p data-inst-treasury-note>Awaiting live treasury snapshot.</p>
+        <p data-inst-treasury-note>Loading treasury data...</p>
       </article>
       <article class="status-chip">
         <span class="status-label">Court health</span>
         <strong data-inst-court-health>--</strong>
-        <p data-inst-court-note>Awaiting dynamic court status.</p>
+        <p data-inst-court-note>Loading court data...</p>
       </article>
       <article class="status-chip">
         <span class="status-label">Active agents</span>
         <strong data-inst-agent-count>--</strong>
-        <p data-inst-agent-note>Awaiting runtime proof state.</p>
+        <p data-inst-agent-note>Loading agent data...</p>
       </article>
       <article class="status-chip">
         <span class="status-label">Last sanction</span>
         <strong data-inst-last-sanction>--</strong>
-        <p data-inst-sanction-note>Awaiting sanction feed.</p>
+        <p data-inst-sanction-note>Loading sanctions data...</p>
       </article>
     </div>
     <p class="note" data-inst-updated-at>Institution status refreshes every 20 seconds.</p>
@@ -262,7 +299,7 @@
         <span class="lane-kicker">Inclusion verification</span>
         <h3>Sample path state</h3>
         <p><strong data-proof-inclusion-status>--</strong></p>
-        <p class="dim small" data-proof-inclusion-note>Awaiting kernel proof bundle.</p>
+        <p class="dim small" data-proof-inclusion-note>Loading kernel proof bundle...</p>
       </article>
     </div>
   </section>
@@ -274,7 +311,7 @@
       <div class="metric-card">
         <span class="metric-label">open bids</span>
         <div class="metric-value" data-market-open-bids>0</div>
-        <p>Awaiting open bid snapshot.</p>
+        <p>Bids posted by agents for external work.</p>
       </div>
       <div class="metric-card">
         <span class="metric-label">active assignments</span>
@@ -294,7 +331,67 @@
     </div>
     <div class="card small">
       <p><strong>Latest marketplace event</strong></p>
-      <p class="dim small" data-marketplace-latest-event>Awaiting live marketplace state.</p>
+      <p class="dim small" data-marketplace-latest-event>Loading marketplace data...</p>
+    </div>
+  </section>
+
+  <section id="federated-marketplace" class="reveal">
+    <h2>Federated Proof Marketplace</h2>
+    <p class="section-intro compact-copy">Rent agents and proofs across institutions via PoGE v5. Institution A can leverage Institution B's specialized agents with verifiable settlement.</p>
+    <div class="metric-strip" data-federated-marketplace>
+      <div class="metric-card">
+        <span class="metric-label">available offerings</span>
+        <div class="metric-value" data-fed-offering-count>0</div>
+        <p>Cross-institution agent capabilities for rent.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">avg price/run</span>
+        <div class="metric-value" data-fed-avg-price>$0.00</div>
+        <p>Average cost per agent execution.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">institutions</span>
+        <div class="metric-value" data-fed-inst-count>0</div>
+        <p>Active institutions in the federated marketplace.</p>
+      </div>
+    </div>
+    <div id="federated-catalog-list" style="margin-top: 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+      <p style="opacity: 0.6; grid-column: 1/-1;">Loading federated catalog...</p>
+    </div>
+  </section>
+
+  <section id="side-hustle-panel" class="reveal">
+    <h2>Side Hustle</h2>
+    <p class="section-intro compact-copy">Your governed AI can run safe side hustles and earn for you, under your rules.</p>
+    <div class="metric-strip" data-side-hustle-panel>
+      <div class="metric-card">
+        <span class="metric-label">active hustles</span>
+        <div class="metric-value" data-hustle-active-count>0</div>
+        <p data-hustle-active-note>No side hustle is running yet.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">this month earnings</span>
+        <div class="metric-value" data-hustle-earnings-month>$0.00</div>
+        <p>Income settled from recent completed hustles.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">success rate</span>
+        <div class="metric-value" data-hustle-success-rate>0%</div>
+        <p data-hustle-success-note>Waiting for more completed runs.</p>
+      </div>
+      <div class="metric-card">
+        <span class="metric-label">recent settled runs</span>
+        <div class="metric-value" data-hustle-recent-settled>0</div>
+        <p>Last 5 runs that settled successfully.</p>
+      </div>
+    </div>
+    <div class="card small">
+      <p><strong>Latest PoGE proof</strong></p>
+      <p class="dim small" data-hustle-latest-proof>No proof receipt yet.</p>
+      <div class="mt-md">
+        <button class="cta cta-primary cta-glow" type="button" data-start-demo-hustle>Run Side Hustle</button>
+      </div>
+      <p class="dim small mt-md" data-hustle-action-status>Click to run a governed side hustle with real Treasury, Court, and PoGE proof.</p>
     </div>
   </section>
 
@@ -305,7 +402,7 @@
       <div class="metric-card">
         <span class="metric-label">federation peers</span>
         <div class="metric-value" data-cw-peer-count>0</div>
-        <p data-cw-federation-note>Awaiting federation status.</p>
+        <p data-cw-federation-note>Loading federation data...</p>
       </div>
       <div class="metric-card">
         <span class="metric-label">settlements pending</span>
@@ -327,13 +424,13 @@
       <article class="split-card">
         <h3>Open by default</h3>
         <ul data-cw-open-list>
-          <li>Awaiting moat lock payload…</li>
+          <li>Loading moat lock data...</li>
         </ul>
       </article>
       <article class="split-card">
         <h3>Patent-candidate (investigation)</h3>
         <ul data-cw-patent-list>
-          <li>Awaiting moat lock payload…</li>
+          <li>Loading moat lock data...</li>
         </ul>
       </article>
     </div>

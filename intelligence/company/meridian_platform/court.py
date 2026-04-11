@@ -104,12 +104,8 @@ def _default_org_id():
 
 
 def _resolve_org_id(org_id=None):
-    founding_org_id = _default_org_id()
-    if org_id and founding_org_id and org_id != founding_org_id:
-        raise ValueError(
-            f'Live court only supports founding org {founding_org_id}, got {org_id}'
-        )
-    return org_id or founding_org_id
+    from capsule import resolve_org_id as _capsule_resolve
+    return _capsule_resolve(org_id)
 
 
 def _matches_org(entry_org_id, org_id):
@@ -276,8 +272,8 @@ def file_violation(agent_id, org_id, violation_type, severity, evidence, policy_
             if result:
                 _econ_save_ledger(ledger, org_id)
                 sanction_applied = sanction_type
-        except Exception as e:
-            print(f'WARN: could not apply sanction: {e}')
+        except Exception:
+            pass  # Agent may not exist in economy ledger (platform-only agents)
 
     # Record incident in agent registry (try economy_key-based ID then registry ID)
     try:
@@ -411,8 +407,8 @@ def decide_appeal(appeal_id, decision, decided_by, org_id=None):
                     ledger, violation['agent_id'], violation['sanction_applied'],
                     f'Appeal {appeal_id} overturned')
                 _econ_save_ledger(ledger, org_id)
-            except Exception as e:
-                print(f'WARN: could not lift sanction: {e}')
+            except Exception:
+                pass  # Agent may not exist in economy ledger (platform-only agents)
     elif decision == 'upheld' and violation:
         violation['status'] = 'sanctioned'
 
@@ -488,8 +484,8 @@ def auto_review(ledger_data=None, org_id=None):
                     policy_ref='CLAUDE.md section 9 (auto-sanction)',
                 )
                 violations_created.append(vid)
-            except Exception as e:
-                print(f'WARN: auto_review could not file violation for {agent_id}: {e}')
+            except Exception:
+                pass  # Agent may not exist in economy ledger
 
     # Now actually apply the sanctions
     _econ_check_auto_sanctions(ledger_data, dry_run=False)

@@ -62,13 +62,34 @@ def default_org_id():
     return None
 
 
+def _resolve_slug_to_org_id(slug: str) -> str | None:
+    """Look up an org by slug and return its org_id, or None if not found."""
+    for oid, org in _load_orgs().items():
+        if org.get('slug') == slug:
+            return oid
+    return None
+
+
 def resolve_org_id(org_id=None):
     founding_org_id = default_org_id()
-    if org_id and founding_org_id and org_id != founding_org_id:
-        raise ValueError(
-            f'Live capsule only supports founding org {founding_org_id}, got {org_id}'
-        )
-    return org_id or founding_org_id
+    if not org_id:
+        return founding_org_id
+
+    orgs = _load_orgs()
+
+    # Accept any known org_id directly
+    if org_id in orgs:
+        return org_id
+
+    # Accept a slug and resolve it to the real org_id
+    resolved_from_slug = _resolve_slug_to_org_id(org_id)
+    if resolved_from_slug:
+        return resolved_from_slug
+
+    # Reject unknown org IDs
+    raise ValueError(
+        f'Live capsule cannot resolve org {org_id} — not a known org_id or slug'
+    )
 
 
 def _founding_capsule_alias_dir(org_id=None):
@@ -191,6 +212,38 @@ def _ensure_alias(path, target):
 
 def ensure_treasury_aliases(org_id=None):
     resolved_org_id = resolve_org_id(org_id)
+
+    # For non-founding orgs, create fresh treasury files in their capsule
+    founding_org_id = default_org_id()
+    if resolved_org_id != founding_org_id:
+        ledger_path = capsule_path(resolved_org_id, 'ledger.json')
+        revenue_path = capsule_path(resolved_org_id, 'revenue.json')
+        transactions_path = capsule_path(resolved_org_id, 'transactions.jsonl')
+
+        # Initialize empty files if they don't exist
+        if not os.path.exists(ledger_path):
+            _write_json(ledger_path, {
+                'balance_usd': 0.0,
+                'reserved_usd': 0.0,
+                'transactions': [],
+            })
+        if not os.path.exists(revenue_path):
+            _write_json(revenue_path, {
+                'total_revenue_usd': 0.0,
+                'clients': {},
+                'orders': {},
+                'receivables_usd': 0.0,
+            })
+        if not os.path.exists(transactions_path):
+            open(transactions_path, 'a').close()
+
+        return {
+            'ledger': ledger_path,
+            'revenue': revenue_path,
+            'transactions': transactions_path,
+        }
+
+    # Founding org uses legacy files with aliases
     if not os.path.exists(LEGACY_LEDGER_FILE):
         raise FileNotFoundError(f'Missing live ledger: {LEGACY_LEDGER_FILE}')
     if not os.path.exists(LEGACY_REVENUE_FILE):

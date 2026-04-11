@@ -24,7 +24,7 @@ import organizations_store
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 ORGS_FILE = os.path.join(PLATFORM_DIR, 'organizations.json')
 
-VALID_ROLES = ('owner', 'admin', 'member', 'viewer')
+VALID_ROLES = ('owner', 'admin', 'operator', 'member', 'viewer')
 VALID_PLANS = ('free', 'trial', 'starter', 'pro', 'enterprise')
 VALID_STATUSES = ('active', 'suspended', 'closed')
 VALID_LIFECYCLE_STATES = ('founding', 'active', 'suspended', 'dissolved')
@@ -152,6 +152,54 @@ def get_org_for_user(user_id):
             if m['user_id'] == user_id:
                 return org
     return None
+
+
+def list_public_institutions():
+    """Return all active institutions as public directory entries."""
+    data = load_orgs()
+    entries = []
+    for org_id, org in data['organizations'].items():
+        if org.get('status') != 'active':
+            continue
+        entries.append({
+            'id': org_id,
+            'name': org.get('name', ''),
+            'slug': org.get('slug', ''),
+            'plan': org.get('plan', 'free'),
+            'lifecycle_state': org.get('lifecycle_state', 'active'),
+            'member_count': len(org.get('members', [])),
+            'created_at': org.get('created_at', ''),
+        })
+    entries.sort(key=lambda e: e.get('created_at', ''), reverse=True)
+    return entries
+
+
+def list_user_institutions(user_id):
+    """Return all institutions where user_id is a member."""
+    data = load_orgs()
+    entries = []
+    for org_id, org in data['organizations'].items():
+        members = org.get('members', [])
+        user_role = None
+        for m in members:
+            if m['user_id'] == user_id:
+                user_role = m['role']
+                break
+        if user_role is None:
+            continue
+        entries.append({
+            'id': org_id,
+            'name': org.get('name', ''),
+            'slug': org.get('slug', ''),
+            'plan': org.get('plan', 'free'),
+            'status': org.get('status', 'active'),
+            'lifecycle_state': org.get('lifecycle_state', 'active'),
+            'role': user_role,
+            'member_count': len(members),
+            'created_at': org.get('created_at', ''),
+        })
+    entries.sort(key=lambda e: e.get('created_at', ''), reverse=True)
+    return entries
 
 
 def set_charter(org_id, charter_text):

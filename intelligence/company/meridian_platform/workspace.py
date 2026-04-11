@@ -246,7 +246,15 @@ PUBLIC_PROOF_FALLBACK_MAX_AGE_SECONDS = max(
 sys.path.insert(0, PLATFORM_DIR)
 
 from organizations import (load_orgs, set_charter, set_policy_defaults, DEFAULT_POLICY_DEFAULTS,
-                           transition_lifecycle as org_transition_lifecycle)
+                           transition_lifecycle as org_transition_lifecycle,
+                           list_public_institutions, list_user_institutions)
+from hands import list_hand_templates, provision_hand, provision_all_hands
+from federated_marketplace import (
+    federated_catalog as get_federated_catalog,
+    publish_offering as publish_marketplace_offering,
+    request_rental as request_marketplace_rental,
+)
+from onboarding import provision_institution
 from agent_registry import (
     load_registry,
     normalize_agent_record,
@@ -606,6 +614,7 @@ from runtime_host import (
     ensure_org_admitted,
 )
 import commonwealth as _commonwealth
+import side_hustle
 
 # Process-level session authority (tokens do not survive restarts unless
 # MERIDIAN_SESSION_SECRET is set in the environment).
@@ -5589,6 +5598,33 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     'The institution template remains available at /api/institution/template',
                 ],
             }, 410)
+        elif path == '/api/institutions/public':
+            return self._json({
+                'institutions': list_public_institutions(),
+                'total': len(list_public_institutions()),
+            })
+        elif path == '/api/institutions/mine':
+            user_id = ''
+            auth_ctx = _resolve_auth_context(org_id)
+            if auth_ctx and auth_ctx.get('enabled'):
+                user_id = auth_ctx.get('user_id') or auth_ctx.get('actor_id') or ''
+            mine = list_user_institutions(user_id) if user_id else []
+            return self._json({
+                'institutions': mine,
+                'total': len(mine),
+                'user_id': user_id,
+            })
+        elif path == '/api/hands/templates':
+            return self._json({
+                'templates': list_hand_templates(),
+                'total': len(list_hand_templates()),
+            })
+        elif path == '/api/federation/marketplace/catalog':
+            catalog = get_federated_catalog()
+            return self._json({
+                'offerings': catalog,
+                'total': len(catalog),
+            })
         elif path == '/api/agents':
             reg = load_registry()
             return self._json([
@@ -6715,6 +6751,34 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             elif path == '/api/marketplace/settlements':
                 settlements = get_settlements(org_id=org_id)
                 return self._json({'settlements': settlements, 'count': len(settlements)})
+
+            elif path == '/api/agent/hustle':
+                hustle_result = side_hustle.run_side_hustle(
+                    agent_id=body['agent_id'],
+                    org_id=org_id,
+                    task_description=body['task_description'],
+                    amount_usd=float(body.get('amount_usd', 0.0)),
+                    proof_receipt=body['proof_receipt'],
+                    assigned_by=body['assigned_by'],
+                    settled_by=body['settled_by'],
+                    estimated_cost_usd=float(body.get('estimated_cost_usd', 0.0)),
+                )
+                event_outcome = 'success' if hustle_result.get('status') == 'settled' else 'blocked'
+                log_event(
+                    org_id,
+                    by,
+                    'side_hustle_executed',
+                    resource=body['agent_id'],
+                    outcome=event_outcome,
+                    details={
+                        'status': hustle_result.get('status'),
+                        'task_description': body.get('task_description', ''),
+                        'amount_usd': float(body.get('amount_usd', 0.0)),
+                        'reason': hustle_result.get('reason', ''),
+                    },
+                    session_id=_sid,
+                )
+                return self._json(hustle_result)
 
             elif path == '/api/memory/append':
                 node_hash, depth = memory_append_node(
@@ -8376,6 +8440,89 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 action = path.rsplit('/', 1)[-1]
                 _mutate_admission(org_id, action, body.get('org_id'))
                 return self._json({'message': f'Admission {action} applied'})
+
+            elif path == '/api/institution/create':
+                name = str(body.get('name') or '').strip()
+                owner_id = str(body.get('owner_id') or by or '').strip()
+                plan = str(body.get('plan') or 'free').strip() or 'free'
+                if not name:
+                    return self._json({'error': 'name is required'}, 400)
+                if not owner_id:
+                    return self._json({'error': 'owner_id is required'}, 400)
+
+                result = provision_institution(name=name, owner_id=owner_id, plan=plan)
+                log_event(
+                    org_id,
+                    by,
+                    'institution_created',
+                    resource=result['org_id'],
+                    outcome='success',
+                    details={
+                        'name': result['org'].get('name', ''),
+                        'slug': result['org'].get('slug', ''),
+                        'plan': result['org'].get('plan', ''),
+                    },
+                    session_id=_sid,
+                )
+                return self._json({
+                    'message': 'Institution created and provisioned',
+                    'institution': result['org'],
+                    'provisioning': {
+                        'capsule_path': result['capsule_path'],
+                        'treasury': result['treasury'],
+                    },
+                }, 201)
+
+            elif path == '/api/federation/marketplace/publish':
+                agent_id = str(body.get('agent_id') or '').strip()
+                capability = str(body.get('capability') or '').strip()
+                price = float(body.get('price_usd_per_run', 0))
+                description = str(body.get('description') or '').strip()
+                if not agent_id or not capability:
+                    return self._json({'error': 'agent_id and capability are required'}, 400)
+                offering = publish_marketplace_offering(
+                    org_id=org_id, agent_id=agent_id, capability=capability,
+                    price_usd_per_run=price, description=description,
+                )
+                log_event(org_id, by, 'marketplace_offering_published', resource=offering['id'],
+                          outcome='success', details={'capability': capability}, session_id=_sid)
+                return self._json({'message': 'Offering published', 'offering': offering}, 201)
+
+            elif path == '/api/federation/marketplace/rent':
+                offering_id = str(body.get('offering_id') or '').strip()
+                provider_org = str(body.get('provider_org_id') or '').strip()
+                task_desc = str(body.get('task_description') or '').strip()
+                if not offering_id or not provider_org:
+                    return self._json({'error': 'offering_id and provider_org_id are required'}, 400)
+                try:
+                    rental = request_marketplace_rental(org_id, offering_id, provider_org, task_desc)
+                except ValueError as e:
+                    return self._json({'error': str(e)}, 400)
+                log_event(org_id, by, 'marketplace_rental_requested', resource=rental['rental_id'],
+                          outcome='success', session_id=_sid)
+                return self._json({'message': 'Rental requested', 'rental': rental}, 201)
+
+            elif path == '/api/hands/provision':
+                hand_key = str(body.get('hand_key') or '').strip()
+                target_org = str(body.get('org_id') or org_id).strip()
+                if not hand_key:
+                    return self._json({'error': 'hand_key is required'}, 400)
+                try:
+                    agent = provision_hand(target_org, hand_key)
+                except ValueError as e:
+                    return self._json({'error': str(e)}, 400)
+                log_event(org_id, by, 'hand_provisioned', resource=agent.get('id', ''),
+                          outcome='success', details={'hand_key': hand_key, 'target_org': target_org},
+                          session_id=_sid)
+                return self._json({'message': f'Hand {hand_key} provisioned', 'agent': agent}, 201)
+
+            elif path == '/api/hands/provision-all':
+                target_org = str(body.get('org_id') or org_id).strip()
+                agents = provision_all_hands(target_org)
+                log_event(org_id, by, 'hands_all_provisioned', outcome='success',
+                          details={'target_org': target_org, 'count': len(agents)},
+                          session_id=_sid)
+                return self._json({'message': f'{len(agents)} hands provisioned', 'agents': agents}, 201)
 
             elif path == '/api/institution/charter':
                 set_charter(org_id, body['text'])
