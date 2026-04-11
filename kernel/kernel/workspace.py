@@ -4357,9 +4357,9 @@ def _routing_planner_snapshot(bound_org_id, *, requested_org_ids=None, host_iden
         'requested_org_ids': candidates,
         'summary': {
             'total': len(decisions),
-            'local': len([item for item in decisions if item['route_kind'] == 'local']),
-            'remote': len([item for item in decisions if item['route_kind'] == 'remote']),
-            'blocked': len([item for item in decisions if item['route_kind'] == 'blocked']),
+            'local': sum(1 for item in decisions if item['route_kind'] == 'local'),
+            'remote': sum(1 for item in decisions if item['route_kind'] == 'remote'),
+            'blocked': sum(1 for item in decisions if item['route_kind'] == 'blocked'),
         },
         'decisions': decisions,
     }
@@ -4825,10 +4825,10 @@ def _routing_handoff_preview_snapshot(bound_org_id, *, requested_org_ids=None,
         'routing_planner': routing_planner,
         'summary': {
             'total': len(handoff_candidates),
-            'local': len([item for item in handoff_candidates if item['route_kind'] == 'local']),
-            'remote': len([item for item in handoff_candidates if item['route_kind'] == 'remote']),
-            'blocked': len([item for item in handoff_candidates if item['route_kind'] == 'blocked']),
-            'remote_previewed': len([item for item in handoff_candidates if item['handoff_state'] == 'previewed']),
+            'local': sum(1 for item in handoff_candidates if item['route_kind'] == 'local'),
+            'remote': sum(1 for item in handoff_candidates if item['route_kind'] == 'remote'),
+            'blocked': sum(1 for item in handoff_candidates if item['route_kind'] == 'blocked'),
+            'remote_previewed': sum(1 for item in handoff_candidates if item['handoff_state'] == 'previewed'),
         },
         'handoff_candidates': handoff_candidates,
     }
