@@ -130,6 +130,14 @@
       </form>
     </div>
 
+    <div class="institution-selector" id="institution-selector" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: rgba(255,255,255,0.04); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+      <span style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap;">Active Institution</span>
+      <select id="institution-selector-dropdown" style="flex: 1; padding: 0.4rem 0.75rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.9rem; cursor: pointer;">
+        <option value="">Loading institutions...</option>
+      </select>
+      <span id="institution-selector-role" style="font-size: 0.75rem; padding: 2px 8px; background: rgba(76,175,80,0.15); border-radius: 3px; color: #4CAF50; white-space: nowrap; display: none;"></span>
+    </div>
+
     <div class="institution-browser" style="margin-bottom: 2rem;">
       <div class="inst-tabs" style="display: flex; gap: 0; border-bottom: 2px solid rgba(255,255,255,0.15); margin-bottom: 1rem;">
         <button class="inst-tab active" data-tab="public" style="padding: 0.75rem 1.5rem; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid #4CAF50; margin-bottom: -2px; font-weight: 600;">Explore Public</button>

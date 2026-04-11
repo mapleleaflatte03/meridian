@@ -279,6 +279,10 @@ def case_targets_peer(case_record):
     )
 
 
+# Alias used by workspace surface layer
+case_targets_peer_block = case_targets_peer
+
+
 def blocking_commitment_case(commitment_id, org_id=None):
     commitment_id = (commitment_id or '').strip()
     if not commitment_id:

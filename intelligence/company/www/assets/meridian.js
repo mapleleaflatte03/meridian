@@ -1763,6 +1763,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
   bindInstitutionCreateForm();
   refreshLivingInstitutionSurface();
   window.setInterval(refreshLivingInstitutionSurface, 20000);
+  window.setInterval(loadInstitutionBrowser, 60000);
 
   function bindInstitutionCreateForm() {
     var form = document.getElementById('create-institution-form');
@@ -1838,39 +1839,98 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     '</div>';
   }
 
+  /* ── Institution Selector ─────────────────────────────────────── */
+  var _activeInstitutionId = '';
+  var _activeInstitutionName = '';
+
+  function populateInstitutionSelector(publicItems, myItems) {
+    var dropdown = document.getElementById('institution-selector-dropdown');
+    var roleTag = document.getElementById('institution-selector-role');
+    if (!dropdown) { return; }
+    var allItems = [];
+    var seen = new Set();
+    myItems.forEach(function (inst) {
+      if (!seen.has(inst.id)) { seen.add(inst.id); allItems.push(inst); }
+    });
+    publicItems.forEach(function (inst) {
+      if (!seen.has(inst.id)) { seen.add(inst.id); allItems.push(inst); }
+    });
+    if (allItems.length === 0) {
+      dropdown.innerHTML = '<option value="">No institutions available</option>';
+      return;
+    }
+    dropdown.innerHTML = allItems.map(function (inst) {
+      var label = inst.name + (inst.role ? ' (' + inst.role + ')' : '') + ' · ' + (inst.plan || 'free');
+      return '<option value="' + inst.id + '">' + label + '</option>';
+    }).join('');
+    if (!_activeInstitutionId && allItems.length > 0) {
+      _activeInstitutionId = allItems[0].id;
+      _activeInstitutionName = allItems[0].name;
+    }
+    if (_activeInstitutionId) {
+      dropdown.value = _activeInstitutionId;
+      var active = allItems.find(function (i) { return i.id === _activeInstitutionId; });
+      if (active && active.role && roleTag) {
+        roleTag.textContent = active.role;
+        roleTag.style.display = '';
+      }
+    }
+    dropdown.onchange = function () {
+      _activeInstitutionId = dropdown.value;
+      var selected = allItems.find(function (i) { return i.id === _activeInstitutionId; });
+      if (selected) {
+        _activeInstitutionName = selected.name;
+        if (roleTag) {
+          if (selected.role) { roleTag.textContent = selected.role; roleTag.style.display = ''; }
+          else { roleTag.style.display = 'none'; }
+        }
+      }
+    };
+  }
+
   function loadInstitutionBrowser() {
     var publicList = document.getElementById('public-institutions-list');
     var myList = document.getElementById('my-institutions-list');
+    var publicItemsCache = [];
+    var myItemsCache = [];
 
-    if (publicList) {
-      window.__meridianFetchJsonWithTimeout('/api/institutions/public', 8000)
-        .then(function (data) {
-          var items = data.institutions || [];
-          if (items.length === 0) {
+    var publicPromise = window.__meridianFetchJsonWithTimeout('/api/institutions/public', 8000)
+      .then(function (data) {
+        publicItemsCache = data.institutions || [];
+        if (publicList) {
+          if (publicItemsCache.length === 0) {
             publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">No public institutions yet. Create one above.</p>';
           } else {
-            publicList.innerHTML = items.map(function (inst) { return renderInstitutionCard(inst, false); }).join('');
+            publicList.innerHTML = publicItemsCache.map(function (inst) { return renderInstitutionCard(inst, false); }).join('');
           }
-        })
-        .catch(function () {
-          publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load public institutions.</p>';
-        });
-    }
+        }
+        return publicItemsCache;
+      })
+      .catch(function () {
+        if (publicList) { publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load public institutions.</p>'; }
+        return [];
+      });
 
-    if (myList) {
-      window.__meridianFetchJsonWithTimeout('/api/institutions/mine', 8000)
-        .then(function (data) {
-          var items = data.institutions || [];
-          if (items.length === 0) {
+    var myPromise = window.__meridianFetchJsonWithTimeout('/api/institutions/mine', 8000)
+      .then(function (data) {
+        myItemsCache = data.institutions || [];
+        if (myList) {
+          if (myItemsCache.length === 0) {
             myList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">You are not a member of any institutions yet.</p>';
           } else {
-            myList.innerHTML = items.map(function (inst) { return renderInstitutionCard(inst, true); }).join('');
+            myList.innerHTML = myItemsCache.map(function (inst) { return renderInstitutionCard(inst, true); }).join('');
           }
-        })
-        .catch(function () {
-          myList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load your institutions.</p>';
-        });
-    }
+        }
+        return myItemsCache;
+      })
+      .catch(function () {
+        if (myList) { myList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load your institutions.</p>'; }
+        return [];
+      });
+
+    Promise.all([publicPromise, myPromise]).then(function (results) {
+      populateInstitutionSelector(results[0], results[1]);
+    });
   }
 
   function bindInstitutionTabs() {

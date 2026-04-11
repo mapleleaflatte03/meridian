@@ -2196,10 +2196,13 @@ def _execution_job_view(bound_org_id, job):
 
 
 def _federation_execution_jobs_snapshot(bound_org_id, *, limit=50):
-    jobs = [
-        _execution_job_view(bound_org_id, job)
-        for job in list_execution_jobs(bound_org_id)[:limit]
-    ]
+    try:
+        raw_jobs = list_execution_jobs(bound_org_id)[:limit]
+        summary = execution_job_summary(bound_org_id)
+    except (ValueError, OSError):
+        raw_jobs = []
+        summary = {'total': 0, 'pending': 0, 'ready': 0, 'executing': 0, 'completed': 0}
+    jobs = [_execution_job_view(bound_org_id, job) for job in raw_jobs]
     return {
         'management_mode': 'capsule_backed',
         'mutation_enabled': False,
@@ -2207,7 +2210,7 @@ def _federation_execution_jobs_snapshot(bound_org_id, *, limit=50):
         'storage_model': 'capsule_canonical',
         'boundary_name': 'federation_gateway',
         'identity_model': 'signed_host_service',
-        'summary': execution_job_summary(bound_org_id),
+        'summary': summary,
         'jobs': jobs,
     }
 
