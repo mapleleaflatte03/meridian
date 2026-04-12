@@ -24,6 +24,16 @@ class _Headers(dict):
 
 
 class LiveWorkspaceContextTests(unittest.TestCase):
+    def test_workspace_kernel_boundary_loader_contract(self):
+        with open(WORKSPACE_PY, 'r', encoding='utf-8') as f:
+            source = f.read()
+
+        self.assertIn('def _load_kernel_module_isolated(', source)
+        self.assertIn('def _load_kernel_module_from_path(', source)
+        self.assertNotIn('sys.path.append(KERNEL_MODULE_DIR)', source)
+        self.assertIn('_runtime_adapter_mod = _load_kernel_module_isolated(', source)
+        self.assertIn('_kernel_treasury_mod = _load_kernel_module_isolated(', source)
+
     def setUp(self):
         self.workspace = _load_workspace('live_workspace_context_test')
         self.orig_workspace_org_id = self.workspace.WORKSPACE_ORG_ID

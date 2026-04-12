@@ -272,16 +272,55 @@ import alerting
 
 import importlib.util
 
+_KERNEL_IMPORT_CONFLICTS = (
+    'agent_registry',
+    'capsule',
+    'commitments',
+    'metering',
+    'organizations',
+    'runtime_adapter',
+    'treasury',
+)
+
+
+def _load_kernel_module_from_path(module_name, module_path):
+    spec = importlib.util.spec_from_file_location(module_name, module_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f'Unable to load module {module_name} from {module_path}')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _load_kernel_module_isolated(module_name, kernel_filename):
+    module_path = os.path.join(KERNEL_MODULE_DIR, kernel_filename)
+    original_sys_path = list(sys.path)
+    saved_modules = {}
+    try:
+        sys.path[:] = [KERNEL_MODULE_DIR] + [
+            entry for entry in original_sys_path
+            if entry != KERNEL_MODULE_DIR and entry != PLATFORM_DIR
+        ]
+        for module_name_conflict in _KERNEL_IMPORT_CONFLICTS:
+            if module_name_conflict in sys.modules:
+                saved_modules[module_name_conflict] = sys.modules.pop(module_name_conflict)
+        return _load_kernel_module_from_path(module_name, module_path)
+    finally:
+        for module_name_conflict in _KERNEL_IMPORT_CONFLICTS:
+            sys.modules.pop(module_name_conflict, None)
+        for module_name_conflict, module in saved_modules.items():
+            sys.modules[module_name_conflict] = module
+        sys.path[:] = original_sys_path
+
+
 _phase_spec = importlib.util.spec_from_file_location('company_phase_machine', PHASE_MACHINE_FILE)
 _phase_mod = importlib.util.module_from_spec(_phase_spec)
 _phase_spec.loader.exec_module(_phase_mod)
 
-_runtime_adapter_spec = importlib.util.spec_from_file_location(
+_runtime_adapter_mod = _load_kernel_module_isolated(
     'meridian_kernel_runtime_adapter',
-    KERNEL_RUNTIME_ADAPTER_FILE,
+    'runtime_adapter.py',
 )
-_runtime_adapter_mod = importlib.util.module_from_spec(_runtime_adapter_spec)
-_runtime_adapter_spec.loader.exec_module(_runtime_adapter_mod)
 kernel_load_runtimes = _runtime_adapter_mod.load_runtimes
 kernel_get_runtime = _runtime_adapter_mod.get_runtime
 kernel_check_all_contracts = _runtime_adapter_mod.check_all_contracts
@@ -296,14 +335,10 @@ _public_kernel_proof_executor = concurrent.futures.ThreadPoolExecutor(
     thread_name_prefix='meridian_public_proof_bundle',
 )
 
-if KERNEL_MODULE_DIR not in sys.path:
-    sys.path.append(KERNEL_MODULE_DIR)
-_kernel_treasury_spec = importlib.util.spec_from_file_location(
+_kernel_treasury_mod = _load_kernel_module_isolated(
     'meridian_kernel_treasury',
-    os.path.join(KERNEL_MODULE_DIR, 'treasury.py'),
+    'treasury.py',
 )
-_kernel_treasury_mod = importlib.util.module_from_spec(_kernel_treasury_spec)
-_kernel_treasury_spec.loader.exec_module(_kernel_treasury_mod)
 kernel_load_maintainers = _kernel_treasury_mod.load_maintainers
 kernel_reserve_runtime_budget = _kernel_treasury_mod.reserve_runtime_budget
 kernel_commit_runtime_budget = _kernel_treasury_mod.commit_runtime_budget
@@ -316,25 +351,31 @@ kernel_inspect_payout_plan_approval_candidate_queue = _kernel_treasury_mod.inspe
 kernel_payout_execution_queue_snapshot = _kernel_treasury_mod.payout_execution_queue_snapshot
 kernel_promote_payout_plan_preview_to_approval_candidate = _kernel_treasury_mod.promote_payout_plan_preview_to_approval_candidate
 
-_kernel_handoff_queue_spec = importlib.util.spec_from_file_location(
+_kernel_handoff_queue_mod = _load_kernel_module_isolated(
     'meridian_kernel_federation_handoff_queue',
-    os.path.join(KERNEL_MODULE_DIR, 'federation_handoff_queue.py'),
+    'federation_handoff_queue.py',
 )
-_kernel_handoff_queue_mod = importlib.util.module_from_spec(_kernel_handoff_queue_spec)
-_kernel_handoff_queue_spec.loader.exec_module(_kernel_handoff_queue_mod)
 kernel_handoff_preview_queue_snapshot = _kernel_handoff_queue_mod.handoff_preview_queue_snapshot
 kernel_acknowledge_handoff_preview = _kernel_handoff_queue_mod.acknowledge_handoff_preview
 
-_kernel_handoff_dispatch_spec = importlib.util.spec_from_file_location(
+_kernel_handoff_dispatch_mod = _load_kernel_module_isolated(
     'meridian_kernel_federation_handoff_dispatch_queue',
-    os.path.join(KERNEL_MODULE_DIR, 'federation_handoff_dispatch_queue.py'),
+    'federation_handoff_dispatch_queue.py',
 )
-_kernel_handoff_dispatch_mod = importlib.util.module_from_spec(_kernel_handoff_dispatch_spec)
-_kernel_handoff_dispatch_spec.loader.exec_module(_kernel_handoff_dispatch_mod)
 kernel_handoff_dispatch_queue_snapshot = _kernel_handoff_dispatch_mod.handoff_dispatch_queue_snapshot
 kernel_get_handoff_dispatch_record = _kernel_handoff_dispatch_mod.get_handoff_dispatch_record
 kernel_promote_acknowledged_handoff_preview_to_dispatch_record = _kernel_handoff_dispatch_mod.promote_acknowledged_handoff_preview_to_dispatch_record
 kernel_mark_handoff_dispatch_record_dispatched = _kernel_handoff_dispatch_mod.mark_handoff_dispatch_record_dispatched
+
+if PLATFORM_DIR in sys.path:
+    sys.path[:] = [entry for entry in sys.path if entry != PLATFORM_DIR]
+sys.path.insert(0, PLATFORM_DIR)
+for module_name_conflict in ('organizations', 'commitments', 'treasury'):
+    module = sys.modules.get(module_name_conflict)
+    if module is not None:
+        module_path = str(getattr(module, '__file__', '') or '')
+        if module_path.startswith(KERNEL_MODULE_DIR):
+            sys.modules.pop(module_name_conflict, None)
 
 # Import authority, treasury, court via their public APIs
 from authority import (check_authority, request_approval, decide_approval,
