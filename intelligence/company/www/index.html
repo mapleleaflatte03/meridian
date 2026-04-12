@@ -116,9 +116,9 @@
       <p style="margin-bottom: 1rem; opacity: 0.8;">Provision a new institution with isolated treasury, court, and PoGE context.</p>
       <form id="create-institution-form" style="display: flex; flex-direction: column; gap: 1rem;">
         <div style="display: flex; gap: 1rem;">
-          <input type="text" id="institution-name" placeholder="Institution name" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
-          <input type="text" id="institution-owner" placeholder="Owner ID" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
-          <select id="institution-plan" style="padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;">
+          <input type="text" id="institution-name" aria-label="Institution name" placeholder="Institution name" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
+          <input type="text" id="institution-owner" aria-label="Owner ID" placeholder="Owner ID" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
+          <select id="institution-plan" aria-label="Institution plan" style="padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;">
             <option value="free">Free</option>
             <option value="starter">Starter</option>
             <option value="pro">Pro</option>
@@ -132,7 +132,7 @@
 
     <div class="institution-selector" id="institution-selector" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: rgba(255,255,255,0.04); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
       <span style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap;">Institution Directory</span>
-      <select id="institution-selector-dropdown" aria-describedby="institution-selector-note" style="flex: 1; padding: 0.4rem 0.75rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.9rem; cursor: pointer;">
+      <select id="institution-selector-dropdown" aria-label="Institution Directory" aria-describedby="institution-selector-note" style="flex: 1; padding: 0.4rem 0.75rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.9rem; cursor: pointer;">
         <option value="">Loading institutions...</option>
       </select>
       <span id="institution-selector-role" style="font-size: 0.75rem; padding: 2px 8px; background: rgba(76,175,80,0.15); border-radius: 3px; color: #4CAF50; white-space: nowrap; display: none;"></span>
