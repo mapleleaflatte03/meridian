@@ -164,6 +164,7 @@ if [[ "$api_ready" -eq 1 ]]; then
 else
     if [[ "$ALLOW_API_SKIP" == "1" ]]; then
         echo "[SKIP] API server not reachable at $BASE_URL — skipping API checks (MERIDIAN_ALLOW_API_SKIP=1)"
+        echo "[WARN] ui-anatomy-lane used API skip; this is not valid evidence for production readiness"
     else
         echo "[FAIL] API server not reachable at $BASE_URL"
         FAIL=1

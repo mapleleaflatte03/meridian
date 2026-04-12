@@ -13,6 +13,13 @@ Organizations use Meridian to:
 - Run agent workflows with identity, permissions, budget, and audit
 - Meter usage and manage spend per organization and per agent
 
+### Batch 4 policy/observability baseline
+
+- Public route declaration and runtime protection are now intentionally split for selected sensitive POST routes (e.g. `/api/institution/create`): public discovery remains available, but runtime auth is enforced.
+- Workspace auth gate emits explicit audit evidence (`workspace_auth_decision`) for allow/deny outcomes so policy behavior is externally inspectable via existing audit/observability surfaces.
+- Operational scripts treat local credentials/secrets defaults as `MERIDIAN_ENV_PROFILE=local` only; non-local profiles must set explicit values.
+- Acceptance-lane API skip output is explicitly marked as non-production-readiness evidence.
+
 ## What Meridian Is Not
 
 - Not a chatbot or assistant product

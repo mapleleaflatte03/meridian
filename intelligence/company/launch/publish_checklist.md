@@ -23,6 +23,10 @@
 6. Verify latest publish artifact:
    - `company/launch/artifacts/publish_live_latest.json`
    - every configured channel reports `status: posted`
-7. After publish:
+7. Batch 4 policy/observability evidence gate:
+   - confirm `/api/institution/create` is auth-protected in runtime checks (not in unauthenticated-path contract)
+   - confirm `workspace_auth_decision` audit events appear for allow/deny auth paths
+   - if any acceptance lane used `MERIDIAN_ALLOW_API_SKIP=1`, treat result as non-production evidence and re-run without skip before publish
+8. After publish:
    - open one pinned discussion on Loom repo for feedback triage
    - log first 24h responses into `company/LEAD_TRACKER.md`

@@ -27,12 +27,18 @@ class LiveWorkspaceContextTests(unittest.TestCase):
     def test_workspace_kernel_boundary_loader_contract(self):
         with open(WORKSPACE_PY, 'r', encoding='utf-8') as f:
             source = f.read()
+        with open(os.path.join(PLATFORM_DIR, 'app.py'), 'r', encoding='utf-8') as f:
+            app_source = f.read()
 
         self.assertIn('def _load_kernel_module_isolated(', source)
         self.assertIn('def _load_kernel_module_from_path(', source)
         self.assertNotIn('sys.path.append(KERNEL_MODULE_DIR)', source)
         self.assertIn('_runtime_adapter_mod = _load_kernel_module_isolated(', source)
         self.assertIn('_kernel_treasury_mod = _load_kernel_module_isolated(', source)
+        self.assertIn('AUTH_REQUIRED_PUBLIC_POST_PATHS = (', app_source)
+        self.assertIn("'/api/institution/create'", app_source)
+        self.assertIn("'workspace_auth_decision'", source)
+        self.assertIn("'auth_required_public_post'", source)
 
     def setUp(self):
         self.workspace = _load_workspace('live_workspace_context_test')
@@ -806,6 +812,799 @@ class LiveWorkspaceContextTests(unittest.TestCase):
         self.assertEqual(handler.response['data']['institution']['slug'], 'new-institution')
         self.assertEqual(handler.response['data']['provisioning']['treasury']['ledger'], '/tmp/capsules/org_new1234/ledger.json')
         self.assertEqual(result, handler.response)
+
+    def test_app_contract_requires_auth_for_institution_create(self):
+        app_source_path = os.path.join(PLATFORM_DIR, 'app.py')
+        with open(app_source_path, 'r', encoding='utf-8') as f:
+            app_source = f.read()
+        self.assertIn("AUTH_REQUIRED_PUBLIC_POST_PATHS = (", app_source)
+        self.assertIn("'/api/institution/create'", app_source)
+
+    def test_require_auth_emits_observability_event_for_protected_deny(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers({'Authorization': 'Basic bad-token'})
+                self.unauthorized_calls = 0
+                self.service_unavailable_calls = 0
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                self.unauthorized_calls += 1
+
+            def _service_unavailable(self, message, is_api=False):
+                self.service_unavailable_calls += 1
+
+        audit_events = []
+        handler = FakeHandler()
+
+        with mock.patch.object(
+            self.workspace,
+            '_load_workspace_credentials',
+            return_value=('owner', 'secret', 'org_founding', 'user_owner'),
+        ), mock.patch.object(
+            self.workspace,
+            'log_event',
+            side_effect=lambda *args, **kwargs: audit_events.append((args, kwargs)),
+        ):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/institution/create')
+
+        self.assertFalse(allowed)
+        self.assertEqual(handler.unauthorized_calls, 1)
+        self.assertEqual(handler.service_unavailable_calls, 0)
+        self.assertEqual(len(audit_events), 1)
+        args, kwargs = audit_events[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['resource'], '/api/institution/create')
+        self.assertEqual(kwargs['outcome'], 'deny')
+        self.assertTrue(kwargs['details']['protected'])
+        self.assertEqual(kwargs['details']['required_role'], 'owner')
+        self.assertTrue(kwargs['details']['auth_required_public_post'])
+
+    def test_require_auth_emits_observability_event_for_public_allow(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers()
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                raise AssertionError('public route must not trigger unauthorized')
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError('public route must not trigger service unavailable')
+
+        audit_events = []
+        handler = FakeHandler()
+
+        with mock.patch.object(self.workspace, 'log_event', side_effect=lambda *args, **kwargs: audit_events.append((args, kwargs))):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/status')
+
+        self.assertTrue(allowed)
+        self.assertEqual(len(audit_events), 1)
+        args, kwargs = audit_events[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['resource'], '/api/status')
+        self.assertEqual(kwargs['outcome'], 'allow')
+        self.assertFalse(kwargs['details']['protected'])
+        self.assertFalse(kwargs['details']['auth_required_public_post'])
+        self.assertEqual(kwargs['details']['reason'], 'public_route')
+
+    def test_auth_observability_details_include_auth_required_public_post_flag(self):
+        class FakeHandler:
+            pass
+
+        details = self.workspace.WorkspaceHandler._auth_observability_details(
+            FakeHandler(),
+            '/api/institution/create',
+            protected=True,
+            decision='deny',
+            reason='unauthorized',
+            auth_mode='basic',
+        )
+        self.assertTrue(details['protected'])
+        self.assertEqual(details['required_role'], 'owner')
+        self.assertTrue(details['auth_required_public_post'])
+        self.assertEqual(details['auth_mode'], 'basic')
+
+        details_public = self.workspace.WorkspaceHandler._auth_observability_details(
+            FakeHandler(),
+            '/api/status',
+            protected=False,
+            decision='allow',
+            reason='public_route',
+            auth_mode='none',
+        )
+        self.assertFalse(details_public['protected'])
+        self.assertEqual(details_public['required_role'], '')
+        self.assertFalse(details_public['auth_required_public_post'])
+        self.assertEqual(details_public['auth_mode'], 'none')
+
+    def test_institution_create_is_protected_path(self):
+        self.assertTrue(self.workspace.is_workspace_protected_path('/api/institution/create'))
+        self.assertEqual(self.workspace.required_mutation_role('/api/institution/create'), 'owner')
+        self.assertNotIn('/api/institution/create', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+
+    def test_status_route_remains_public_unprotected(self):
+        self.assertIn('/api/status', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/status'))
+
+    def test_runtime_prefix_remains_public_unprotected(self):
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/runtimes'))
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/runtimes/loom_native'))
+        self.assertIn('/api/runtimes/', self.workspace.PUBLIC_UNAUTHENTICATED_PREFIXES)
+
+    def test_session_validate_route_remains_public_unprotected(self):
+        self.assertIn('/api/session/validate', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/session/validate'))
+
+    def test_required_mutation_role_fallback_remains_admin(self):
+        self.assertEqual(self.workspace.required_mutation_role('/api/unknown-route'), 'admin')
+
+    def test_institution_create_route_enforces_auth_gate_before_body_parse(self):
+        calls = []
+
+        class PostHandler:
+            def __init__(self):
+                self.path = '/api/institution/create'
+                self.headers = _Headers({'Content-Type': 'application/json'})
+                self.response = None
+                self.read_called = False
+
+            def _require_auth(self, path):
+                calls.append(('require_auth', path))
+                return False
+
+            def _read_body(self):
+                self.read_called = True
+                raise AssertionError('body parse must not happen when auth fails')
+
+            def _json(self, data, status=200):
+                self.response = {'data': data, 'status': status}
+                return self.response
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError(message)
+
+            def _session_claims_from_request(self, expected_org_id=None):
+                return None
+
+        handler = PostHandler()
+        result = self.workspace.WorkspaceHandler.do_POST(handler)
+
+        self.assertEqual(calls, [('require_auth', '/api/institution/create')])
+        self.assertFalse(handler.read_called)
+        self.assertIsNone(result)
+
+    def test_is_authorized_returns_auth_mode_for_bearer_and_basic(self):
+        class BearerHandler:
+            def __init__(self):
+                self.headers = _Headers({'Authorization': 'Bearer token_demo'})
+
+        class BasicHandler:
+            def __init__(self):
+                token = 'owner:secret'.encode('utf-8')
+                self.headers = _Headers({'Authorization': f"Basic {__import__('base64').b64encode(token).decode('utf-8')}"})
+
+        with mock.patch.object(self.workspace._session_authority, 'validate', return_value={'sub': 'user_owner'}):
+            authorized, mode = self.workspace.WorkspaceHandler._is_authorized(BearerHandler())
+        self.assertTrue(authorized)
+        self.assertEqual(mode, 'bearer')
+
+        with mock.patch.object(self.workspace, '_load_workspace_credentials', return_value=('owner', 'secret', 'org_founding', 'user_owner')):
+            authorized, mode = self.workspace.WorkspaceHandler._is_authorized(BasicHandler())
+        self.assertTrue(authorized)
+        self.assertEqual(mode, 'basic')
+
+    def test_require_auth_denies_when_auth_required_and_credentials_missing(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers({'Authorization': 'Basic bad'})
+                self.service_unavailable_calls = 0
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                raise AssertionError('must return service unavailable when credentials missing and auth required')
+
+            def _service_unavailable(self, message, is_api=False):
+                self.service_unavailable_calls += 1
+
+        handler = FakeHandler()
+        audit_events = []
+        with mock.patch.object(
+            self.workspace,
+            '_load_workspace_credentials',
+            return_value=('', '', '', ''),
+        ), mock.patch.object(
+            self.workspace,
+            'WORKSPACE_AUTH_REQUIRED',
+            True,
+        ), mock.patch.object(
+            self.workspace,
+            'log_event',
+            side_effect=lambda *args, **kwargs: audit_events.append((args, kwargs)),
+        ):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/institution/create')
+
+        self.assertFalse(allowed)
+        self.assertEqual(handler.service_unavailable_calls, 1)
+        self.assertEqual(len(audit_events), 1)
+        args, kwargs = audit_events[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['outcome'], 'deny')
+        self.assertEqual(kwargs['details']['reason'], 'missing_credentials')
+
+    def test_auth_observability_event_shape_matches_status_surface_expectation(self):
+        class FakeHandler:
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+        captured = []
+        handler = FakeHandler()
+
+        with mock.patch.object(self.workspace, 'log_event', side_effect=lambda *args, **kwargs: captured.append((args, kwargs))):
+            self.workspace.WorkspaceHandler._log_auth_decision(
+                handler,
+                '/api/institution/create',
+                protected=True,
+                decision='deny',
+                reason='unauthorized',
+                auth_mode='basic',
+            )
+
+        self.assertEqual(len(captured), 1)
+        args, kwargs = captured[0]
+        self.assertEqual(args[0], 'org_founding')
+        self.assertEqual(args[1], 'workspace')
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['resource'], '/api/institution/create')
+        self.assertEqual(kwargs['actor_type'], 'service')
+        self.assertIn('decision', kwargs['details'])
+        self.assertIn('reason', kwargs['details'])
+        self.assertIn('auth_mode', kwargs['details'])
+
+    def test_acceptance_publish_lane_declares_skip_signal(self):
+        lane_path = os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'acceptance_publish_live_lane.sh')
+        with open(os.path.abspath(lane_path), 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('MERIDIAN_ALLOW_API_SKIP', source)
+        self.assertIn('[SKIP]', source)
+        self.assertIn('not valid evidence for production readiness', source)
+
+    def test_acceptance_ui_lane_declares_skip_signal(self):
+        lane_path = os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'acceptance_ui_anatomy_lane.sh')
+        with open(os.path.abspath(lane_path), 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('MERIDIAN_ALLOW_API_SKIP', source)
+        self.assertIn('[SKIP]', source)
+        self.assertIn('not valid evidence for production readiness', source)
+
+    def test_intelligence_publish_lane_still_mentions_skip_control(self):
+        lane_path = os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'acceptance_publish_live_lane.sh')
+        with open(os.path.abspath(lane_path), 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('ALLOW_API_SKIP', source)
+        self.assertIn('MERIDIAN_ALLOW_API_SKIP', source)
+        self.assertIn('[WARN] publish-live-lane used API skip', source)
+
+    def test_intelligence_publish_lane_contract_still_references_api_status(self):
+        lane_path = os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'acceptance_publish_live_lane.sh')
+        with open(os.path.abspath(lane_path), 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('/api/status', source)
+        self.assertIn('/api/status', source)
+        self.assertIn('missing runtime_id', source)
+
+    def test_script_guards_require_env_profile_marker(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+            ('..', '..', '..', 'scripts', 'bootstrap_full.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('MERIDIAN_ENV_PROFILE', source)
+            self.assertIn('local', source)
+
+    def test_dev_scripts_guard_non_local_secret_defaults(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('MERIDIAN_FEDERATION_SIGNING_SECRET', source)
+            self.assertIn('meridian_local_shared_secret', source)
+            self.assertIn('MERIDIAN_ENV_PROFILE', source)
+            self.assertIn('[ERROR] MERIDIAN_FEDERATION_SIGNING_SECRET is required', source)
+
+    def test_workspace_password_default_is_blocked_outside_local_profile(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+            ('..', '..', '..', 'scripts', 'bootstrap_full.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('MERIDIAN_WORKSPACE_PASSWORD', source)
+            self.assertIn('meridian_local_operator', source)
+            self.assertIn('must not use local default', source)
+
+    def test_dev_and_bootstrap_scripts_still_write_workspace_credentials_file(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+            ('..', '..', '..', 'scripts', 'bootstrap_full.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('os.chmod(cred_file, 0o600)', source)
+            self.assertIn('MERIDIAN_WORKSPACE_CREDENTIALS_FILE', source)
+
+    def test_script_contracts_keep_local_defaults_available_for_local_profile(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+            ('..', '..', '..', 'scripts', 'bootstrap_full.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('MERIDIAN_ENV_PROFILE', source)
+            self.assertIn('meridian_local_operator', source)
+
+    def test_acceptance_skip_warning_text_is_consistent(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'acceptance_publish_live_lane.sh'),
+            ('..', '..', '..', 'scripts', 'acceptance_ui_anatomy_lane.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('not valid evidence for production readiness', source)
+            self.assertIn('[WARN]', source)
+
+    def test_docs_capture_batch4_security_observability_notes(self):
+        readme_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', 'README.md'))
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            readme = f.read()
+        self.assertIn('Batch 4 Security/Observability Notes', readme)
+        self.assertIn('workspace_auth_decision', readme)
+        self.assertIn('/api/institution/create', readme)
+
+    def test_architecture_doc_mentions_batch4_baseline(self):
+        architecture_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', 'ARCHITECTURE.md'))
+        with open(architecture_path, 'r', encoding='utf-8') as f:
+            architecture = f.read()
+        self.assertIn('Batch 4 policy/observability baseline', architecture)
+        self.assertIn('workspace_auth_decision', architecture)
+        self.assertIn('MERIDIAN_ENV_PROFILE', architecture)
+
+    def test_publish_checklist_includes_batch4_evidence_gate(self):
+        checklist_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', 'launch', 'publish_checklist.md'))
+        with open(checklist_path, 'r', encoding='utf-8') as f:
+            checklist = f.read()
+        self.assertIn('Batch 4 policy/observability evidence gate', checklist)
+        self.assertIn('workspace_auth_decision', checklist)
+        self.assertIn('MERIDIAN_ALLOW_API_SKIP=1', checklist)
+
+    def test_docs_align_runtime_auth_claim_with_mutation_route(self):
+        readme_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', 'README.md'))
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            readme = f.read()
+        self.assertIn('auth-required at runtime', readme)
+        self.assertIn('owner-gated mutation path', readme)
+
+    def test_architecture_doc_marks_public_discovery_and_runtime_protection_split(self):
+        architecture_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', 'ARCHITECTURE.md'))
+        with open(architecture_path, 'r', encoding='utf-8') as f:
+            architecture = f.read()
+        self.assertIn('public discovery remains available, but runtime auth is enforced', architecture)
+
+    def test_publish_checklist_blocks_skip_based_production_evidence(self):
+        checklist_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', 'launch', 'publish_checklist.md'))
+        with open(checklist_path, 'r', encoding='utf-8') as f:
+            checklist = f.read()
+        self.assertIn('non-production evidence', checklist)
+        self.assertIn('re-run without skip before publish', checklist)
+
+    def test_docs_keep_existing_install_claim_reference(self):
+        readme_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', 'README.md'))
+        with open(readme_path, 'r', encoding='utf-8') as f:
+            readme = f.read()
+        self.assertIn('1-Command Install', readme)
+        self.assertIn('acceptance_onboarding_ready_lane.sh', readme)
+
+    def test_architecture_doc_keeps_six_primitives_claim(self):
+        architecture_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', 'ARCHITECTURE.md'))
+        with open(architecture_path, 'r', encoding='utf-8') as f:
+            architecture = f.read()
+        self.assertIn('exactly six primitives', architecture)
+        self.assertIn('Institution, Agent, Authority, Treasury, Court, Commitment', architecture)
+
+    def test_publish_checklist_keeps_publish_artifact_gate(self):
+        checklist_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', 'launch', 'publish_checklist.md'))
+        with open(checklist_path, 'r', encoding='utf-8') as f:
+            checklist = f.read()
+        self.assertIn('publish_live_latest.json', checklist)
+        self.assertIn('status: posted', checklist)
+
+    def test_batch4_contract_source_mentions_auth_required_public_post_flag(self):
+        with open(WORKSPACE_PY, 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('auth_required_public_post', source)
+        self.assertIn('AUTH_REQUIRED_PUBLIC_POST_PATHS', source)
+        self.assertIn('workspace_auth_decision', source)
+
+    def test_batch4_contract_source_mentions_env_profile_guard(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+            ('..', '..', '..', 'scripts', 'bootstrap_full.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('MERIDIAN_ENV_PROFILE', source)
+            self.assertIn('[ERROR]', source)
+            self.assertIn('local', source)
+
+    def test_batch4_contract_source_mentions_skip_warning(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'acceptance_publish_live_lane.sh'),
+            ('..', '..', '..', 'scripts', 'acceptance_ui_anatomy_lane.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('[WARN]', source)
+            self.assertIn('not valid evidence for production readiness', source)
+
+    def test_batch4_contract_keeps_federation_receive_public(self):
+        self.assertIn('/api/federation/receive', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/federation/receive'))
+
+    def test_batch4_contract_keeps_runtime_surface_prefix_public(self):
+        self.assertIn('/api/runtimes/', self.workspace.PUBLIC_UNAUTHENTICATED_PREFIXES)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/runtimes/loom_runtime'))
+
+    def test_batch4_contract_keeps_session_validate_public(self):
+        self.assertIn('/api/session/validate', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/session/validate'))
+
+    def test_batch4_contract_marks_institution_create_as_auth_required_public_post(self):
+        self.assertIn('/api/institution/create', self.workspace.AUTH_REQUIRED_PUBLIC_POST_PATHS)
+        self.assertTrue(self.workspace.is_workspace_protected_path('/api/institution/create'))
+        self.assertEqual(self.workspace.required_mutation_role('/api/institution/create'), 'owner')
+
+    def test_batch4_contract_keeps_checkout_capture_public_for_deprecated_surface(self):
+        self.assertIn('/api/subscriptions/checkout-capture', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertIn(
+            ('/api/subscriptions/checkout-capture', 'Deprecated (410): subscription checkout capture disabled in open-source mode'),
+            self.workspace.PUBLIC_SURFACE_POST_ROUTES,
+        )
+
+    def test_batch4_contract_keeps_pilot_intake_public_for_deprecated_surface(self):
+        self.assertIn('/api/pilot/intake', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertIn(
+            ('/api/pilot/intake', 'Deprecated (410): pilot intake submission disabled in open-source mode'),
+            self.workspace.PUBLIC_SURFACE_POST_ROUTES,
+        )
+
+    def test_batch4_contract_keeps_kernel_proof_bundle_public(self):
+        self.assertIn('/api/kernel-proof-bundle', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/kernel-proof-bundle'))
+
+    def test_batch4_contract_keeps_auth_config_public(self):
+        self.assertIn('/api/auth/config', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/auth/config'))
+
+    def test_batch4_contract_keeps_context_public(self):
+        self.assertIn('/api/context', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/context'))
+
+    def test_batch4_contract_keeps_institutions_public_directory_public(self):
+        self.assertIn('/api/institutions/public', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/institutions/public'))
+
+    def test_batch4_contract_keeps_institutions_mine_public_route_but_session_scoped(self):
+        self.assertIn('/api/institutions/mine', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/institutions/mine'))
+
+    def test_batch4_contract_keeps_public_post_route_list_stable(self):
+        self.assertEqual(
+            tuple(path for path, _label in self.workspace.PUBLIC_SURFACE_POST_ROUTES),
+            (
+                '/api/pilot/intake',
+                '/api/subscriptions/checkout-capture',
+                '/api/institution/license/checkout-capture',
+                '/api/federation/receive',
+                '/api/institution/create',
+            ),
+        )
+
+    def test_workspace_script_defaults_are_documented_as_local_only(self):
+        for rel in (
+            ('..', '..', '..', 'scripts', 'dev-up.sh'),
+            ('..', '..', '..', 'scripts', 'dev-supervisor.sh'),
+            ('..', '..', '..', 'scripts', 'bootstrap_full.sh'),
+        ):
+            script_path = os.path.abspath(os.path.join(PLATFORM_DIR, *rel))
+            with open(script_path, 'r', encoding='utf-8') as f:
+                source = f.read()
+            self.assertIn('MERIDIAN_ENV_PROFILE', source)
+            self.assertIn('local', source)
+            self.assertIn('MERIDIAN_WORKSPACE_PASSWORD', source)
+
+    def test_policy_contract_excludes_auth_required_public_post_paths(self):
+        for path in self.workspace.AUTH_REQUIRED_PUBLIC_POST_PATHS:
+            self.assertNotIn(path, self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+            self.assertTrue(self.workspace.is_workspace_protected_path(path))
+            self.assertIn(path, self.workspace.WORKSPACE_MUTATION_ROLE_REQUIREMENTS)
+
+    def test_public_surface_post_routes_still_declare_institution_create(self):
+        self.assertIn(
+            ('/api/institution/create', 'Create and provision a new institution'),
+            self.workspace.PUBLIC_SURFACE_POST_ROUTES,
+        )
+
+    def test_auth_required_public_post_paths_is_immutable_tuple(self):
+        self.assertIsInstance(self.workspace.AUTH_REQUIRED_PUBLIC_POST_PATHS, tuple)
+        with self.assertRaises(AttributeError):
+            self.workspace.AUTH_REQUIRED_PUBLIC_POST_PATHS.append('/api/should-not-work')
+
+    def test_auth_observability_records_owner_requirement_for_institution_create(self):
+        details = self.workspace.WorkspaceHandler._auth_observability_details(
+            object(),
+            '/api/institution/create',
+            protected=True,
+            decision='allow',
+            reason='authorized',
+            auth_mode='basic',
+        )
+        self.assertEqual(details['required_role'], 'owner')
+        self.assertTrue(details['auth_required_public_post'])
+
+    def test_auth_observability_records_empty_required_role_for_non_mutation_path(self):
+        details = self.workspace.WorkspaceHandler._auth_observability_details(
+            object(),
+            '/api/status',
+            protected=False,
+            decision='allow',
+            reason='public_route',
+            auth_mode='none',
+        )
+        self.assertEqual(details['required_role'], '')
+        self.assertFalse(details['auth_required_public_post'])
+
+    def test_require_auth_allows_public_route_without_credentials_and_logs_allow(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers()
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                raise AssertionError('public route must not challenge')
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError('public route must not be unavailable')
+
+        handler = FakeHandler()
+        captured = []
+        with mock.patch.object(self.workspace, 'log_event', side_effect=lambda *args, **kwargs: captured.append((args, kwargs))):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/status')
+        self.assertTrue(allowed)
+        self.assertEqual(len(captured), 1)
+        args, kwargs = captured[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['outcome'], 'allow')
+
+    def test_require_auth_denies_protected_route_without_valid_auth_and_logs_deny(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers({'Authorization': 'Basic bad'})
+                self.unauthorized_called = 0
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                self.unauthorized_called += 1
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError('credentials exist, should challenge unauthorized')
+
+        handler = FakeHandler()
+        captured = []
+        with mock.patch.object(
+            self.workspace,
+            '_load_workspace_credentials',
+            return_value=('owner', 'secret', 'org_founding', 'user_owner'),
+        ), mock.patch.object(
+            self.workspace,
+            'log_event',
+            side_effect=lambda *args, **kwargs: captured.append((args, kwargs)),
+        ):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/institution/create')
+        self.assertFalse(allowed)
+        self.assertEqual(handler.unauthorized_called, 1)
+        self.assertEqual(len(captured), 1)
+        args, kwargs = captured[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['outcome'], 'deny')
+        self.assertEqual(kwargs['details']['reason'], 'unauthorized')
+
+    def test_require_auth_allows_protected_route_with_valid_bearer_and_logs_allow(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers({'Authorization': 'Bearer token_demo'})
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                raise AssertionError('valid bearer must not challenge')
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError('valid bearer must not be unavailable')
+
+        handler = FakeHandler()
+        captured = []
+        with mock.patch.object(
+            self.workspace._session_authority,
+            'validate',
+            return_value={'sub': 'user_owner'},
+        ), mock.patch.object(
+            self.workspace,
+            'log_event',
+            side_effect=lambda *args, **kwargs: captured.append((args, kwargs)),
+        ):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/institution/create')
+        self.assertTrue(allowed)
+        self.assertEqual(len(captured), 1)
+        args, kwargs = captured[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['outcome'], 'allow')
+        self.assertEqual(kwargs['details']['auth_mode'], 'bearer')
+        self.assertEqual(kwargs['details']['reason'], 'authorized')
+
+    def test_require_auth_allows_when_auth_optional_and_credentials_missing(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers()
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                raise AssertionError('optional auth should not challenge without credentials')
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError('optional auth should not be unavailable')
+
+        handler = FakeHandler()
+        captured = []
+        with mock.patch.object(
+            self.workspace,
+            '_load_workspace_credentials',
+            return_value=('', '', '', ''),
+        ), mock.patch.object(
+            self.workspace,
+            'WORKSPACE_AUTH_REQUIRED',
+            False,
+        ), mock.patch.object(
+            self.workspace,
+            'log_event',
+            side_effect=lambda *args, **kwargs: captured.append((args, kwargs)),
+        ):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/institution/create')
+        self.assertTrue(allowed)
+        self.assertEqual(len(captured), 1)
+        args, kwargs = captured[0]
+        self.assertEqual(args[2], 'workspace_auth_decision')
+        self.assertEqual(kwargs['outcome'], 'allow')
+        self.assertEqual(kwargs['details']['reason'], 'auth_optional_no_credentials')
+
+    def test_require_auth_logs_even_if_audit_writer_fails(self):
+        class FakeHandler:
+            def __init__(self):
+                self.headers = _Headers()
+
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+            def _unauthorized(self, is_api=False):
+                raise AssertionError('public route must not challenge')
+
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError('public route must not be unavailable')
+
+        handler = FakeHandler()
+        with mock.patch.object(self.workspace, 'log_event', side_effect=RuntimeError('audit unavailable')):
+            allowed = self.workspace.WorkspaceHandler._require_auth(handler, '/api/status')
+        self.assertTrue(allowed)
+
+    def test_auth_required_public_post_paths_are_subset_of_post_routes(self):
+        post_paths = {path for path, _label in self.workspace.PUBLIC_SURFACE_POST_ROUTES}
+        for path in self.workspace.AUTH_REQUIRED_PUBLIC_POST_PATHS:
+            self.assertIn(path, post_paths)
+
+    def test_institution_create_not_in_public_unauthenticated_paths_after_policy_hardening(self):
+        self.assertNotIn('/api/institution/create', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertIn('/api/federation/receive', self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+
+    def test_workspace_protected_path_contract_for_public_and_protected_routes(self):
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/status'))
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/session/validate'))
+        self.assertFalse(self.workspace.is_workspace_protected_path('/api/runtimes/loom_native'))
+        self.assertTrue(self.workspace.is_workspace_protected_path('/api/institution/create'))
+        self.assertTrue(self.workspace.is_workspace_protected_path('/api/authority/kill-switch'))
+
+    def test_required_mutation_role_returns_owner_for_institution_create(self):
+        self.assertEqual(self.workspace.required_mutation_role('/api/institution/create'), 'owner')
+
+    def test_required_mutation_role_returns_admin_for_unknown(self):
+        self.assertEqual(self.workspace.required_mutation_role('/api/not-mapped'), 'admin')
+
+    def test_public_unauthenticated_paths_include_only_non_hardened_public_posts(self):
+        public_post_paths = {path for path, _label in self.workspace.PUBLIC_SURFACE_POST_ROUTES}
+        unauth_paths = set(self.workspace.PUBLIC_UNAUTHENTICATED_PATHS)
+        self.assertIn('/api/federation/receive', unauth_paths)
+        self.assertIn('/api/subscriptions/checkout-capture', unauth_paths)
+        self.assertNotIn('/api/institution/create', unauth_paths)
+        self.assertTrue(set(self.workspace.AUTH_REQUIRED_PUBLIC_POST_PATHS).issubset(public_post_paths))
+
+    def test_auth_observability_details_contains_expected_keys(self):
+        details = self.workspace.WorkspaceHandler._auth_observability_details(
+            object(),
+            '/api/institution/create',
+            protected=True,
+            decision='deny',
+            reason='unauthorized',
+            auth_mode='basic',
+        )
+        self.assertEqual(
+            set(details.keys()),
+            {
+                'path',
+                'protected',
+                'decision',
+                'reason',
+                'auth_mode',
+                'required_role',
+                'auth_required_public_post',
+            },
+        )
+
+    def test_auth_observability_uses_service_actor_and_workspace_agent_id(self):
+        class FakeHandler:
+            def _workspace_org_id(self):
+                return 'org_founding'
+
+        captured = []
+        with mock.patch.object(self.workspace, 'log_event', side_effect=lambda *args, **kwargs: captured.append((args, kwargs))):
+            self.workspace.WorkspaceHandler._log_auth_decision(
+                FakeHandler(),
+                '/api/status',
+                protected=False,
+                decision='allow',
+                reason='public_route',
+                auth_mode='none',
+            )
+        self.assertEqual(len(captured), 1)
+        args, kwargs = captured[0]
+        self.assertEqual(args[1], 'workspace')
+        self.assertEqual(kwargs['actor_type'], 'service')
 
     def test_institutions_public_returns_directory(self):
         self.workspace._resolve_workspace_context = lambda **_: types.SimpleNamespace(org_id='org_founding', org={}, context_source='configured_org')

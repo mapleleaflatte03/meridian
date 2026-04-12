@@ -125,6 +125,13 @@ Rollback plan (safe + quick):
 - [meridian/kernel](https://github.com/mapleleaflatte03/meridian/tree/main/kernel): governance truth, institution, authority, treasury, court, and the runtime contract Loom consumes.
 - [meridian/intelligence](https://github.com/mapleleaflatte03/meridian/tree/main/intelligence): portal, live host surface, first-party workflows, and contribution-first research routes.
 
+## Batch 4 Security/Observability Notes
+
+- `/api/institution/create` remains a public product route but is now explicitly auth-required at runtime (owner-gated mutation path).
+- Workspace auth decisions now emit audit events (`workspace_auth_decision`) with path, decision, reason, auth mode, and mutation-role context for policy evidence.
+- Script defaults (`meridian_local_shared_secret`, `meridian_local_operator`) are local-profile only; non-local profiles must provide explicit secure values.
+- Acceptance lane API skip (`MERIDIAN_ALLOW_API_SKIP=1`) now emits a warning that skip output is not production-readiness evidence.
+
 ## What Is Live Today
 
 - Loom as both the live execution runtime on this host and the installable local runtime.

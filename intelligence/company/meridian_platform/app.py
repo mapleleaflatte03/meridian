@@ -35,10 +35,18 @@ PUBLIC_SURFACE_POST_ROUTES = (
     ('/api/institution/create', 'Create and provision a new institution'),
 )
 
+AUTH_REQUIRED_PUBLIC_POST_PATHS = (
+    '/api/institution/create',
+)
+
 PUBLIC_UNAUTHENTICATED_PATHS = tuple(dict.fromkeys(
     ['/api/session/validate']
     + [path for path, _label in PUBLIC_SURFACE_GET_ROUTES if path.startswith('/api/')]
-    + [path for path, _label in PUBLIC_SURFACE_POST_ROUTES if path.startswith('/api/')]
+    + [
+        path
+        for path, _label in PUBLIC_SURFACE_POST_ROUTES
+        if path.startswith('/api/') and path not in AUTH_REQUIRED_PUBLIC_POST_PATHS
+    ]
 ))
 
 PUBLIC_UNAUTHENTICATED_PREFIXES = (

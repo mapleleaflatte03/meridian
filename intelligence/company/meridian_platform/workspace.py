@@ -582,10 +582,14 @@ except ImportError:
         return True, None
 from session import SessionAuthority
 from app import (
+    AUTH_REQUIRED_PUBLIC_POST_PATHS,
+    PUBLIC_SURFACE_POST_ROUTES,
     PUBLIC_UNAUTHENTICATED_PATHS,
+    PUBLIC_UNAUTHENTICATED_PREFIXES,
     SUPPORTED_RUNTIME_BOUNDARIES,
     WORKSPACE_MUTATION_ROLE_REQUIREMENTS,
     is_workspace_protected_path,
+    required_mutation_role,
 )
 _warrants_spec = importlib.util.spec_from_file_location(
     'meridian_workspace_warrants',
@@ -5455,41 +5459,105 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         else:
             self.wfile.write(message.encode())
 
+    def _auth_observability_details(self, path, *, protected, decision, reason, auth_mode='none'):
+        return {
+            'path': path,
+            'protected': bool(protected),
+            'decision': decision,
+            'reason': reason,
+            'auth_mode': auth_mode,
+            'required_role': required_mutation_role(path) if path in WORKSPACE_MUTATION_ROLE_REQUIREMENTS else '',
+            'auth_required_public_post': path in AUTH_REQUIRED_PUBLIC_POST_PATHS,
+        }
+
+    def _log_auth_decision(self, path, *, protected, decision, reason, auth_mode='none'):
+        try:
+            log_event(
+                self._workspace_org_id(),
+                'workspace',
+                'workspace_auth_decision',
+                resource=path,
+                outcome=decision,
+                actor_type='service',
+                details=WorkspaceHandler._auth_observability_details(
+                    self,
+                    path,
+                    protected=protected,
+                    decision=decision,
+                    reason=reason,
+                    auth_mode=auth_mode,
+                ),
+            )
+        except Exception:
+            pass
+
     def _is_authorized(self):
         header = self.headers.get('Authorization', '')
         # Bearer (session) auth — always available
         if header.startswith('Bearer '):
             token = header.split(' ', 1)[1].strip()
-            return _session_authority.validate(token) is not None
+            return _session_authority.validate(token) is not None, 'bearer'
         # Basic auth
         user, password, _credential_org_id, _credential_user_id = _load_workspace_credentials()
         if not user or not password:
-            return False
+            return False, 'basic'
         if not header.startswith('Basic '):
-            return False
+            return False, 'basic'
         try:
             decoded = base64.b64decode(header.split(' ', 1)[1]).decode('utf-8')
         except Exception:
-            return False
+            return False, 'basic'
         if ':' not in decoded:
-            return False
+            return False, 'basic'
         supplied_user, supplied_password = decoded.split(':', 1)
-        return hmac.compare_digest(supplied_user, user) and hmac.compare_digest(supplied_password, password)
+        return hmac.compare_digest(supplied_user, user) and hmac.compare_digest(supplied_password, password), 'basic'
 
     def _require_auth(self, path):
         # Session validate is a passive introspection endpoint — the token is the proof.
         protected = is_workspace_protected_path(path)
         if not protected:
+            WorkspaceHandler._log_auth_decision(self, path, protected=False, decision='allow', reason='public_route')
             return True
-        if self._is_authorized():
+        authorized, auth_mode = WorkspaceHandler._is_authorized(self)
+        if authorized:
+            WorkspaceHandler._log_auth_decision(
+                self,
+                path,
+                protected=True,
+                decision='allow',
+                reason='authorized',
+                auth_mode=auth_mode,
+            )
             return True
         user, password, _credential_org_id, _credential_user_id = _load_workspace_credentials()
         if not user or not password:
             if WORKSPACE_AUTH_REQUIRED:
+                WorkspaceHandler._log_auth_decision(
+                    self,
+                    path,
+                    protected=True,
+                    decision='deny',
+                    reason='missing_credentials',
+                )
                 self._service_unavailable('Workspace auth is required but credentials are not configured',
                                           is_api=path.startswith('/api/'))
                 return False
+            WorkspaceHandler._log_auth_decision(
+                self,
+                path,
+                protected=True,
+                decision='allow',
+                reason='auth_optional_no_credentials',
+            )
             return True
+        WorkspaceHandler._log_auth_decision(
+            self,
+            path,
+            protected=True,
+            decision='deny',
+            reason='unauthorized',
+            auth_mode=auth_mode,
+        )
         self._unauthorized(is_api=path.startswith('/api/'))
         return False
 
@@ -5524,17 +5592,19 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             return self._headers_only(200, 'application/json')
         is_api = path.startswith('/api/')
         protected = is_workspace_protected_path(path)
-        if protected and not self._is_authorized():
-            user, password, _credential_org_id, _credential_user_id = _load_workspace_credentials()
-            if not user or not password:
-                if WORKSPACE_AUTH_REQUIRED:
-                    return self._headers_only(503, 'application/json' if is_api else 'text/plain; charset=utf-8')
-            else:
-                return self._headers_only(
-                    401,
-                    'application/json' if is_api else 'text/plain; charset=utf-8',
-                    www_authenticate='Basic realm="Meridian Workspace"',
-                )
+        if protected:
+            authorized, _auth_mode = self._is_authorized()
+            if not authorized:
+                user, password, _credential_org_id, _credential_user_id = _load_workspace_credentials()
+                if not user or not password:
+                    if WORKSPACE_AUTH_REQUIRED:
+                        return self._headers_only(503, 'application/json' if is_api else 'text/plain; charset=utf-8')
+                else:
+                    return self._headers_only(
+                        401,
+                        'application/json' if is_api else 'text/plain; charset=utf-8',
+                        www_authenticate='Basic realm="Meridian Workspace"',
+                    )
 
         if path == '/' or path == '/workspace':
             try:
