@@ -59,6 +59,13 @@ curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scri
 
 This keeps onboarding in one place while preserving clear module boundaries.
 
+The public install claim is bounded by the repo contract and evidence chain:
+- [`../docs/ONBOARDING_CONTRACT.md`](../docs/ONBOARDING_CONTRACT.md)
+- `../scripts/acceptance_onboarding_ready_lane.sh`
+- [`../kernel/docs/PROOF_MATRIX.md`](../kernel/docs/PROOF_MATRIX.md)
+
+If those artifacts do not align, the contract wins over page copy.
+
 ## Product Hierarchy
 
 The current Meridian story across the stack is:

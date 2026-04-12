@@ -21,6 +21,7 @@ This file maps public claims to executable proof artifacts or live surfaces.
 | Warrant-bound payouts exist | [`kernel/tests/test_treasury_capsule.py`](../kernel/tests/test_treasury_capsule.py) | PROVEN | Includes reserve-floor gate, phase gate, settlement adapter preflight, verifier-ready contract checks |
 | Payout-plan dry-run preview queue exists | [`kernel/tests/test_payout_plan_preview_queue.py`](../kernel/tests/test_payout_plan_preview_queue.py) and [`kernel/tests/test_workspace_context.py`](../kernel/tests/test_workspace_context.py) | PROVEN | Inspectable dry-run queue with operator acknowledgment and read-only inspection; ack does not claim settlement |
 | Settlement notice fail-closed behavior exists | [`kernel/tests/test_workspace_context.py`](../kernel/tests/test_workspace_context.py) and [`kernel/tests/test_federation.py`](../kernel/tests/test_federation.py) | PROVEN | Invalid notices open cases and can suspend peers |
+| One-command onboarding readiness contract is executable | [`docs/ONBOARDING_CONTRACT.md`](../../docs/ONBOARDING_CONTRACT.md) and [`scripts/acceptance_onboarding_ready_lane.sh`](../../scripts/acceptance_onboarding_ready_lane.sh) | PROVEN | Lane validates bootstrap smoke artifact (`runtime/bootstrap_gateway_smoke.json`), local API readiness probes, court baseline, helper executables, and installer verification toggle |
 
 ## Live Proofs
 

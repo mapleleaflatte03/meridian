@@ -82,6 +82,7 @@ Ready-to-run definition and gate:
 - [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
 - `./scripts/acceptance_onboarding_ready_lane.sh`
 - first agent helper: `./scripts/new-first-agent.sh "My Assistant"`
+- claim-to-evidence matrix row: [`kernel/docs/PROOF_MATRIX.md`](kernel/docs/PROOF_MATRIX.md) ("One-command onboarding readiness contract is executable")
 
 ## Quick Visuals
 

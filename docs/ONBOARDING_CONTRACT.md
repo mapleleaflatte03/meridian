@@ -42,3 +42,17 @@ Use:
 ```
 
 This lane is the source of truth for onboarding readiness.
+
+## Claim-to-Evidence Lock (Batch 1)
+
+| Contract outcome | Executable check | Evidence artifact |
+| --- | --- | --- |
+| Kernel state initialized and template/treasury/runtime routes reachable | `./scripts/acceptance_onboarding_ready_lane.sh` (bootstrap smoke + local API readiness probes) | `runtime/bootstrap_gateway_smoke.json` produced by bootstrap and validated by the lane |
+| Court baseline initialized (`>=3` rules) | `./scripts/acceptance_onboarding_ready_lane.sh` (`court_rule_count` assertion + dynamic court lifecycle smoke) | Lane output (`[onboarding-lane] court ...`) and validated bootstrap smoke payload |
+| First governed agent helper exists and onboarding path is executable | `./scripts/acceptance_onboarding_ready_lane.sh` (`./scripts/new-first-agent.sh` executable assertion) | Lane output (`[onboarding-lane] ...`) |
+| Supervisor reliability path is available and status-checkable | `./scripts/acceptance_onboarding_ready_lane.sh` (`./scripts/dev-supervisor.sh` executable assertion + conditional status snapshot) | Lane output (`[onboarding-lane] supervisor status snapshot`) when supervisor is enabled |
+| One-command installer keeps onboarding verification toggle wired | `./scripts/acceptance_onboarding_ready_lane.sh` (`MERIDIAN_VERIFY_ONBOARDING` presence assertion in installer) | Verified against `scripts/install-full.sh` by the lane |
+
+## Evidence Requirements for Release Claims
+
+A claim that onboarding is "ready-to-run" is valid only when the acceptance lane passes in a clean local environment and the generated smoke artifact matches this contract.
