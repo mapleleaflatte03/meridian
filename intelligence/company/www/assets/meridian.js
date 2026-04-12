@@ -1489,7 +1489,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         ? 'Court sanctions are active and require remediation.'
         : 'No active sanctions in the latest governance evaluation.'
     );
-    setAll('[data-inst-updated-at]', 'Institution status updated ' + new Date().toLocaleString() + '.');
+    setAll('[data-inst-updated-at]', 'Institution status updated ' + new Date().toLocaleString() + '. Runtime context remains workspace-bound.');
   }
 
   function renderCourtRules(rulesPayload) {
@@ -1841,7 +1841,6 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
 
   /* ── Institution Selector ─────────────────────────────────────── */
   var _activeInstitutionId = '';
-  var _activeInstitutionName = '';
 
   function populateInstitutionSelector(publicItems, myItems) {
     var dropdown = document.getElementById('institution-selector-dropdown');
@@ -1865,7 +1864,6 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     }).join('');
     if (!_activeInstitutionId && allItems.length > 0) {
       _activeInstitutionId = allItems[0].id;
-      _activeInstitutionName = allItems[0].name;
     }
     if (_activeInstitutionId) {
       dropdown.value = _activeInstitutionId;
@@ -1879,11 +1877,11 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       _activeInstitutionId = dropdown.value;
       var selected = allItems.find(function (i) { return i.id === _activeInstitutionId; });
       if (selected) {
-        _activeInstitutionName = selected.name;
         if (roleTag) {
           if (selected.role) { roleTag.textContent = selected.role; roleTag.style.display = ''; }
           else { roleTag.style.display = 'none'; }
         }
+        setAll('[data-inst-updated-at]', 'Institution directory selection updated ' + new Date().toLocaleString() + '. Live status remains workspace-bound.');
       }
     };
   }

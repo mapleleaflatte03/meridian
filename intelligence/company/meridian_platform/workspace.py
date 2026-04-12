@@ -5608,9 +5608,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             })
         elif path == '/api/institutions/mine':
             user_id = ''
-            auth_ctx = _resolve_auth_context(org_id)
-            if auth_ctx and auth_ctx.get('enabled'):
-                user_id = auth_ctx.get('user_id') or auth_ctx.get('actor_id') or ''
+            if auth_context and auth_context.get('enabled'):
+                user_id = auth_context.get('user_id') or auth_context.get('actor_id') or ''
             mine = list_user_institutions(user_id) if user_id else []
             return self._json({
                 'institutions': mine,

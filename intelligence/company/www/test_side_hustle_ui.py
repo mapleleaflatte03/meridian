@@ -37,6 +37,12 @@ class SideHustleDashboardUITest(unittest.TestCase):
         for attr in required_attrs:
             self.assertIn(attr, self.index_html, f"Missing required attribute: {attr}")
 
+    def test_index_html_labels_selector_as_directory_not_context_switch(self):
+        """Institution selector copy must describe directory browsing only."""
+        self.assertIn('Institution Directory', self.index_html)
+        self.assertIn('id="institution-selector-note"', self.index_html)
+        self.assertIn('Live status remains bound to the current workspace context.', self.index_html)
+
     def test_index_html_contains_start_hustle_button(self):
         """Run Side Hustle button must exist."""
         self.assertIn('data-start-demo-hustle', self.index_html)
@@ -76,6 +82,17 @@ class SideHustleDashboardUITest(unittest.TestCase):
         self.assertIsNotNone(refresh_match, "refreshLivingInstitutionSurface function not found")
         refresh_body = refresh_match.group(1)
         self.assertIn('renderSideHustlePanel', refresh_body)
+
+    def test_meridian_js_status_copy_declares_workspace_bound_contract(self):
+        """Status copy must state workspace-bound runtime context contract."""
+        self.assertIn(
+            "Institution status updated ' + new Date().toLocaleString() + '. Runtime context remains workspace-bound.",
+            self.meridian_js,
+        )
+        self.assertIn(
+            "Institution directory selection updated ' + new Date().toLocaleString() + '. Live status remains workspace-bound.",
+            self.meridian_js,
+        )
 
     def test_meridian_js_has_start_hustle_handler(self):
         """meridian.js must wire up Run Side Hustle button click handler."""

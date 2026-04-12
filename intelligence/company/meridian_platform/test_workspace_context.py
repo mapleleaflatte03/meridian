@@ -863,6 +863,40 @@ class LiveWorkspaceContextTests(unittest.TestCase):
         self.assertEqual(handler.response['data']['user_id'], 'user_owner')
         self.assertEqual(len(handler.response['data']['institutions']), 1)
 
+    def test_institutions_mine_reuses_resolved_session_auth_context(self):
+        self.workspace._resolve_workspace_context = lambda **_: types.SimpleNamespace(org_id='org_founding', org={}, context_source='configured_org')
+        self.workspace._resolve_auth_context = lambda org_id: (_ for _ in ()).throw(AssertionError('should not re-resolve auth context'))
+        self.workspace._resolve_auth_context_from_session = lambda claims, org_id: {
+            'enabled': True, 'mode': 'session_bound', 'org_id': org_id,
+            'user_id': 'session_user', 'role': 'member', 'actor_id': 'session_user',
+            'actor_source': 'session', 'session_id': 'sid_session',
+        }
+
+        class GetHandler:
+            def __init__(self):
+                self.path = '/api/institutions/mine'
+                self.headers = _Headers()
+                self.response = None
+            def _require_auth(self, path):
+                return True
+            def _json(self, data, status=200):
+                self.response = {'data': data, 'status': status}
+                return self.response
+            def _service_unavailable(self, message, is_api=False):
+                raise AssertionError(message)
+            def _session_claims_from_request(self, expected_org_id=None):
+                return {'session_id': 'sid_session', 'user_id': 'session_user', 'org_id': expected_org_id}
+
+        with mock.patch.object(self.workspace, 'list_user_institutions', return_value=[
+            {'id': 'org_2', 'name': 'Session Org', 'slug': 'session-org', 'plan': 'starter', 'role': 'member', 'member_count': 2, 'created_at': '2026-01-01T00:00:00Z'},
+        ]):
+            handler = GetHandler()
+            self.workspace.WorkspaceHandler.do_GET(handler)
+
+        self.assertEqual(handler.response['status'], 200)
+        self.assertEqual(handler.response['data']['user_id'], 'session_user')
+        self.assertEqual(len(handler.response['data']['institutions']), 1)
+
     def test_subscription_draft_from_preview_route_creates_status_surface(self):
         calls = []
         self.workspace._resolve_workspace_context = lambda **_: types.SimpleNamespace(org_id='org_founding', org={}, context_source='configured_org')

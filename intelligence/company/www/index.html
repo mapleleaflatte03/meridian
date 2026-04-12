@@ -131,12 +131,13 @@
     </div>
 
     <div class="institution-selector" id="institution-selector" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: rgba(255,255,255,0.04); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
-      <span style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap;">Active Institution</span>
-      <select id="institution-selector-dropdown" style="flex: 1; padding: 0.4rem 0.75rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.9rem; cursor: pointer;">
+      <span style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap;">Institution Directory</span>
+      <select id="institution-selector-dropdown" aria-describedby="institution-selector-note" style="flex: 1; padding: 0.4rem 0.75rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.9rem; cursor: pointer;">
         <option value="">Loading institutions...</option>
       </select>
       <span id="institution-selector-role" style="font-size: 0.75rem; padding: 2px 8px; background: rgba(76,175,80,0.15); border-radius: 3px; color: #4CAF50; white-space: nowrap; display: none;"></span>
     </div>
+    <p id="institution-selector-note" class="note" style="margin-top: -0.75rem; margin-bottom: 1.5rem;">Directory selection previews institution membership only. Live status remains bound to the current workspace context.</p>
 
     <div class="institution-browser" style="margin-bottom: 2rem;">
       <div class="inst-tabs" style="display: flex; gap: 0; border-bottom: 2px solid rgba(255,255,255,0.15); margin-bottom: 1rem;">
