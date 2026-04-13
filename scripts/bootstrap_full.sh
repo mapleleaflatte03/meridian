@@ -6,13 +6,31 @@ export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 export MERIDIAN_LOOM_ROOT="${MERIDIAN_LOOM_ROOT:-$MERIDIAN_ROOT/loom}"
 export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
-export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
+export MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE:-user}"
+export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-}"
 export LOOM_RUNTIME_ROOT="${LOOM_RUNTIME_ROOT:-$MERIDIAN_ROOT/runtime/default}"
 export MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${MERIDIAN_WORKSPACE_CREDENTIALS_FILE:-$MERIDIAN_ROOT/runtime/workspace_credentials}"
-export MERIDIAN_AUTO_START_STACK="${MERIDIAN_AUTO_START_STACK:-1}"
+if [ -z "${MERIDIAN_AUTO_START_STACK:-}" ]; then
+  if [ "${MERIDIAN_INSTALL_MODE}" = "user" ]; then
+    export MERIDIAN_AUTO_START_STACK="0"
+  else
+    export MERIDIAN_AUTO_START_STACK="1"
+  fi
+else
+  export MERIDIAN_AUTO_START_STACK
+fi
 export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
 export MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED:-0}"
 export MERIDIAN_ENV_PROFILE="${MERIDIAN_ENV_PROFILE:-local}"
+
+case "${MERIDIAN_INSTALL_MODE}" in
+  user|demo|maintainer)
+    ;;
+  *)
+    echo "[bootstrap] Unsupported MERIDIAN_INSTALL_MODE=${MERIDIAN_INSTALL_MODE}. Use user, demo, or maintainer." >&2
+    exit 1
+    ;;
+esac
 
 if [[ "${MERIDIAN_ENV_PROFILE}" != "local" && "${MERIDIAN_WORKSPACE_PASSWORD:-}" == "meridian_local_operator" ]]; then
   echo "[ERROR] MERIDIAN_WORKSPACE_PASSWORD must not use local default when MERIDIAN_ENV_PROFILE=${MERIDIAN_ENV_PROFILE}" >&2
@@ -67,10 +85,8 @@ if org_file.exists():
                 owner_id = candidate
                 break
 
-if not org_id:
-    org_id = "local_foundry"
-if not owner_id:
-    owner_id = "user_meridian_5322393870"
+if not org_id or not owner_id:
+    raise SystemExit("workspace credentials require an institution created through onboarding or an explicit MERIDIAN_WORKSPACE_ORG_ID")
 
 cred_file.parent.mkdir(parents=True, exist_ok=True)
 cred_file.write_text(
@@ -391,22 +407,31 @@ echo "[bootstrap] Initializing kernel state..."
   python3 quickstart.py --init-only
 )
 
-RESOLVED_KERNEL_ORG_ID="$(resolve_kernel_org_id)"
-if [ -n "$RESOLVED_KERNEL_ORG_ID" ]; then
-  export MERIDIAN_ORG_ID="$RESOLVED_KERNEL_ORG_ID"
+if [ "${MERIDIAN_INSTALL_MODE}" != "user" ]; then
+  RESOLVED_KERNEL_ORG_ID="$(resolve_kernel_org_id)"
+  if [ -n "$RESOLVED_KERNEL_ORG_ID" ]; then
+    export MERIDIAN_ORG_ID="$RESOLVED_KERNEL_ORG_ID"
+  fi
+  echo "[bootstrap] Kernel org id: $MERIDIAN_ORG_ID"
+else
+  echo "[bootstrap] User mode: skipping kernel org resolution (clean-slate)."
 fi
-echo "[bootstrap] Kernel org id: $MERIDIAN_ORG_ID"
 
-WORKSPACE_ORG_ID="$(seed_workspace_founding_org)"
-if [ -n "$WORKSPACE_ORG_ID" ]; then
-  export MERIDIAN_WORKSPACE_ORG_ID="$WORKSPACE_ORG_ID"
+if [ "${MERIDIAN_INSTALL_MODE}" = "user" ]; then
+  echo "[bootstrap] User mode: leaving workspace state clean-slate for onboarding."
+  echo "[bootstrap] No institution seed, workspace credentials, or auto-started operator stack will be created."
+else
+  WORKSPACE_ORG_ID="$(seed_workspace_founding_org)"
+  if [ -n "$WORKSPACE_ORG_ID" ]; then
+    export MERIDIAN_WORKSPACE_ORG_ID="$WORKSPACE_ORG_ID"
+  fi
+  ensure_workspace_credentials >/dev/null
+  echo "[bootstrap] Workspace org id: ${MERIDIAN_WORKSPACE_ORG_ID:-<auto>}"
+  echo "[bootstrap] Bootstrapping workspace platform state..."
+  run_workspace_platform_bootstrap
+  echo "[bootstrap] Ensuring intelligence gateway config..."
+  ensure_intelligence_gateway_config
 fi
-ensure_workspace_credentials >/dev/null
-echo "[bootstrap] Workspace org id: ${MERIDIAN_WORKSPACE_ORG_ID:-<auto>}"
-echo "[bootstrap] Bootstrapping workspace platform state..."
-run_workspace_platform_bootstrap
-echo "[bootstrap] Ensuring intelligence gateway config..."
-ensure_intelligence_gateway_config
 
 if [ "${MERIDIAN_SKIP_LOOM_BUILD:-0}" = "1" ]; then
   echo "[bootstrap] Skipping Loom build (MERIDIAN_SKIP_LOOM_BUILD=1)"
@@ -420,23 +445,38 @@ else
 fi
 
 mkdir -p "$LOOM_RUNTIME_ROOT"
-run_kernel_smoke_check
 
-if [ "${MERIDIAN_AUTO_START_STACK}" = "1" ]; then
-  echo "[bootstrap] Starting local workspace+gateway stack..."
-  "${MERIDIAN_ROOT}/scripts/dev-up.sh" --no-summary
+if [ "${MERIDIAN_INSTALL_MODE}" = "user" ]; then
+  echo "[bootstrap] User mode bootstrap complete after kernel/runtime preparation."
 else
-  echo "[bootstrap] Auto-start disabled (MERIDIAN_AUTO_START_STACK=${MERIDIAN_AUTO_START_STACK})"
-fi
+  run_kernel_smoke_check
 
-run_gateway_smoke_check
+  if [ "${MERIDIAN_AUTO_START_STACK}" = "1" ]; then
+    echo "[bootstrap] Starting local workspace+gateway stack..."
+    "${MERIDIAN_ROOT}/scripts/dev-up.sh" --no-summary
+  else
+    echo "[bootstrap] Auto-start disabled (MERIDIAN_AUTO_START_STACK=${MERIDIAN_AUTO_START_STACK})"
+  fi
+
+  run_gateway_smoke_check
+fi
 
 echo "[bootstrap] Bootstrap complete."
 echo
-echo "Next steps:"
-echo "1) export MERIDIAN_ROOT=\"$MERIDIAN_ROOT\""
-echo "2) export MERIDIAN_ORG_ID=\"$MERIDIAN_ORG_ID\""
-echo "3) Stack up: \"$MERIDIAN_ROOT/scripts/dev-up.sh\""
-echo "4) Stack down: \"$MERIDIAN_ROOT/scripts/dev-down.sh\""
-echo "5) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
-echo "6) Gateway smoke report: \"$MERIDIAN_ROOT/runtime/bootstrap_gateway_smoke.json\""
+if [ "${MERIDIAN_INSTALL_MODE}" = "user" ]; then
+  echo "Next steps:"
+  echo "1) Complete onboarding to create your first institution."
+  echo "2) Start the local stack after onboarding: \"$MERIDIAN_ROOT/scripts/dev-up.sh\""
+  echo "3) Stop the local stack when needed: \"$MERIDIAN_ROOT/scripts/dev-down.sh\""
+  echo "4) Provision your first agent with explicit institution context:"
+  echo "   MERIDIAN_ORG_ID=<your-org-id> \"$MERIDIAN_ROOT/scripts/new-first-agent.sh\" \"My Assistant\""
+  echo "5) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
+else
+  echo "Next steps:"
+  echo "1) export MERIDIAN_ROOT=\"$MERIDIAN_ROOT\""
+  echo "2) export MERIDIAN_ORG_ID=\"$MERIDIAN_ORG_ID\""
+  echo "3) Stack up: \"$MERIDIAN_ROOT/scripts/dev-up.sh\""
+  echo "4) Stack down: \"$MERIDIAN_ROOT/scripts/dev-down.sh\""
+  echo "5) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
+  echo "6) Gateway smoke report: \"$MERIDIAN_ROOT/runtime/bootstrap_gateway_smoke.json\""
+fi

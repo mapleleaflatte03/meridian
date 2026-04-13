@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
+export MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE:-user}"
 export MERIDIAN_WORKSPACE_PORT="${MERIDIAN_WORKSPACE_PORT:-18901}"
 export MERIDIAN_WORKSPACE_PEER_PORT="${MERIDIAN_WORKSPACE_PEER_PORT:-19001}"
 export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
@@ -58,7 +59,7 @@ import os
 kernel_root = os.environ["MERIDIAN_KERNEL_ROOT"]
 path = os.path.join(kernel_root, "kernel", "organizations.json")
 if not os.path.exists(path):
-    print("local_foundry")
+    print("")
     raise SystemExit(0)
 
 with open(path, "r", encoding="utf-8") as f:
@@ -68,7 +69,7 @@ for oid, org in orgs.items():
     if (org or {}).get("slug") == "meridian":
         print(oid)
         raise SystemExit(0)
-print(next(iter(orgs.keys()), "local_foundry"))
+print(next(iter(orgs.keys()), ""))
 PY
 }
 
@@ -131,10 +132,8 @@ if org_file.exists():
                 owner_id = candidate
                 break
 
-if not org_id:
-    org_id = "local_foundry"
-if not owner_id:
-    owner_id = "user_meridian_5322393870"
+if not org_id or not owner_id:
+    raise SystemExit("workspace credentials require an onboarding-created institution or explicit MERIDIAN_WORKSPACE_ORG_ID")
 
 cred_file.parent.mkdir(parents=True, exist_ok=True)
 cred_file.write_text(
@@ -157,6 +156,12 @@ PY
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-$(resolve_org_id)}"
 export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$(resolve_workspace_org_id)}"
 export MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${WORKSPACE_CREDENTIALS_FILE}"
+
+if [ -z "${MERIDIAN_ORG_ID}" ] || [ -z "${MERIDIAN_WORKSPACE_ORG_ID}" ]; then
+  echo "[dev-up] No institution context found. Complete onboarding first or set MERIDIAN_ORG_ID and MERIDIAN_WORKSPACE_ORG_ID explicitly." >&2
+  exit 1
+fi
+
 ensure_workspace_credentials >/dev/null
 
 port_listening() {

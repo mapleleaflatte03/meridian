@@ -646,6 +646,9 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
 
 (function () {
   'use strict';
+  if (document.body && document.body.classList.contains('page-home')) {
+    return;
+  }
   var shells = document.querySelectorAll('[data-live-snapshot]');
   if (!shells.length) {
     return;
@@ -1396,8 +1399,10 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
   var hasMarketplacePanel = document.querySelector('[data-marketplace-panel]');
   var hasSideHustlePanel = document.querySelector('[data-side-hustle-panel]');
   var hasCommonwealthPanel = document.querySelector('[data-commonwealth-panel]');
+  var hasPublicDirectoryShell = document.querySelector('[data-public-directory-shell]');
   var startDemoHustleButton = document.querySelector('[data-start-demo-hustle]');
-  if (!hasInstitutionStatus && !hasCourtTable && !hasProofExplorer && !hasMarketplacePanel && !hasSideHustlePanel && !hasCommonwealthPanel) {
+  var isPublicHomepage = Boolean(document.body && document.body.classList.contains('page-home'));
+  if (!hasInstitutionStatus && !hasCourtTable && !hasProofExplorer && !hasMarketplacePanel && !hasSideHustlePanel && !hasCommonwealthPanel && !hasPublicDirectoryShell) {
     return;
   }
 
@@ -1703,124 +1708,15 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     );
   }
 
-  async function refreshLivingInstitutionSurface() {
-    var statusPayload = {};
-    var runtimePayload = {};
-    var rulesPayload = {};
-    var proposalsPayload = {};
-    var kernelBundle = {};
-    var marketplacePayload = {};
-    var moatLockPayload = {};
-    renderSideHustlePanel(statusPayload, marketplacePayload);
-    try {
-      statusPayload = await fetchJson('/api/status');
-    } catch (error) {
-      setAll('[data-inst-updated-at]', 'Institution status unavailable: ' + String(error && error.message || 'unknown_error'));
-      return;
-    }
-    try {
-      runtimePayload = await fetchJson('/api/runtime-proof');
-    } catch (_error) {
-      runtimePayload = {};
-    }
-    try {
-      rulesPayload = await fetchJson('/api/court/rules');
-    } catch (_error) {
-      rulesPayload = {};
-    }
-    try {
-      proposalsPayload = await fetchJson('/api/court/proposals');
-    } catch (_error) {
-      proposalsPayload = {};
-    }
-    try {
-      kernelBundle = await fetchJson('/api/kernel-proof-bundle');
-    } catch (_error) {
-      kernelBundle = {};
-    }
-    try {
-      marketplacePayload = await fetchJson('/api/marketplace');
-    } catch (_error) {
-      marketplacePayload = {};
-    }
-    try {
-      moatLockPayload = await fetchJson('/api/research/moat-lock');
-    } catch (_error) {
-      moatLockPayload = {};
-    }
-
-    renderInstitutionStatus(statusPayload, runtimePayload);
-    renderCourtRules(rulesPayload);
-    renderCourtProposals(proposalsPayload);
-    renderProofExplorer(statusPayload, kernelBundle);
-    renderMarketplacePanel(statusPayload, marketplacePayload);
-    renderSideHustlePanel(statusPayload, marketplacePayload);
-    renderCommonwealthPanel(statusPayload, moatLockPayload);
-    setAll('[data-court-updated-at]', 'Court voting chamber updated ' + new Date().toLocaleString() + '.');
+  function setPublicDirectoryStatus(message) {
+    setAll('[data-public-directory-updated-at]', message);
   }
 
-  bindSideHustleAction();
-  bindInstitutionCreateForm();
-  refreshLivingInstitutionSurface();
-  window.setInterval(refreshLivingInstitutionSurface, 20000);
-  window.setInterval(loadInstitutionBrowser, 60000);
-
-  function bindInstitutionCreateForm() {
-    var form = document.getElementById('create-institution-form');
-    var statusEl = document.getElementById('institution-create-status');
-    if (!form || !statusEl) {
-      return;
-    }
-    form.addEventListener('submit', async function (event) {
-      event.preventDefault();
-      var nameInput = document.getElementById('institution-name');
-      var ownerInput = document.getElementById('institution-owner');
-      var planSelect = document.getElementById('institution-plan');
-      if (!nameInput || !ownerInput || !planSelect) {
-        return;
-      }
-      var name = nameInput.value.trim();
-      var ownerId = ownerInput.value.trim();
-      var plan = planSelect.value;
-      if (!name || !ownerId) {
-        statusEl.textContent = 'Name and Owner ID are required.';
-        return;
-      }
-      statusEl.textContent = 'Creating institution...';
-      var submitButton = form.querySelector('button[type="submit"]');
-      if (submitButton) {
-        submitButton.disabled = true;
-      }
-      try {
-        var response = await fetch('/api/institution/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: name, owner_id: ownerId, plan: plan })
-        });
-        var data = await response.json();
-        if (!response.ok) {
-          statusEl.textContent = 'Failed: ' + (data.error || 'HTTP ' + response.status);
-        } else {
-          var orgId = data.institution && data.institution.id ? data.institution.id : 'unknown';
-          var slug = data.institution && data.institution.slug ? data.institution.slug : 'unknown';
-          statusEl.textContent = 'Created! Institution ID: ' + orgId + ' · Slug: ' + slug;
-          nameInput.value = '';
-          ownerInput.value = '';
-          planSelect.value = 'free';
-          refreshLivingInstitutionSurface();
-          loadInstitutionBrowser();
-        }
-      } catch (err) {
-        statusEl.textContent = 'Error: ' + err.message;
-      } finally {
-        if (submitButton) {
-          submitButton.disabled = false;
-        }
-      }
-    });
+  if (!isPublicHomepage) {
+    bindSideHustleAction();
   }
 
-  /* ── Institution Browser: tabs + data loading ─────────────────────── */
+  /* ── Institution Browser: public-only directory ─────────────────────── */
   function renderInstitutionCard(inst, showRole) {
     var planColors = { free: '#888', starter: '#4CAF50', pro: '#2196F3', enterprise: '#FF9800' };
     var planColor = planColors[inst.plan] || '#888';
@@ -1839,120 +1735,31 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     '</div>';
   }
 
-  /* ── Institution Selector ─────────────────────────────────────── */
-  var _activeInstitutionId = '';
-
-  function populateInstitutionSelector(publicItems, myItems) {
-    var dropdown = document.getElementById('institution-selector-dropdown');
-    var roleTag = document.getElementById('institution-selector-role');
-    if (!dropdown) { return; }
-    var allItems = [];
-    var seen = new Set();
-    myItems.forEach(function (inst) {
-      if (!seen.has(inst.id)) { seen.add(inst.id); allItems.push(inst); }
-    });
-    publicItems.forEach(function (inst) {
-      if (!seen.has(inst.id)) { seen.add(inst.id); allItems.push(inst); }
-    });
-    if (allItems.length === 0) {
-      dropdown.innerHTML = '<option value="">No institutions available</option>';
-      return;
-    }
-    dropdown.innerHTML = allItems.map(function (inst) {
-      var label = inst.name + (inst.role ? ' (' + inst.role + ')' : '') + ' · ' + (inst.plan || 'free');
-      return '<option value="' + inst.id + '">' + label + '</option>';
-    }).join('');
-    if (!_activeInstitutionId && allItems.length > 0) {
-      _activeInstitutionId = allItems[0].id;
-    }
-    if (_activeInstitutionId) {
-      dropdown.value = _activeInstitutionId;
-      var active = allItems.find(function (i) { return i.id === _activeInstitutionId; });
-      if (active && active.role && roleTag) {
-        roleTag.textContent = active.role;
-        roleTag.style.display = '';
-      }
-    }
-    dropdown.onchange = function () {
-      _activeInstitutionId = dropdown.value;
-      var selected = allItems.find(function (i) { return i.id === _activeInstitutionId; });
-      if (selected) {
-        if (roleTag) {
-          if (selected.role) { roleTag.textContent = selected.role; roleTag.style.display = ''; }
-          else { roleTag.style.display = 'none'; }
-        }
-        setAll('[data-inst-updated-at]', 'Institution directory selection updated ' + new Date().toLocaleString() + '. Live status remains workspace-bound.');
-      }
-    };
-  }
-
   function loadInstitutionBrowser() {
     var publicList = document.getElementById('public-institutions-list');
-    var myList = document.getElementById('my-institutions-list');
-    var publicItemsCache = [];
-    var myItemsCache = [];
+    if (!publicList) {
+      return;
+    }
 
-    var publicPromise = window.__meridianFetchJsonWithTimeout('/api/institutions/public', 8000)
+    window.__meridianFetchJsonWithTimeout('/api/institutions/public', 8000)
       .then(function (data) {
-        publicItemsCache = data.institutions || [];
-        if (publicList) {
-          if (publicItemsCache.length === 0) {
-            publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">No public institutions yet. Create one above.</p>';
-          } else {
-            publicList.innerHTML = publicItemsCache.map(function (inst) { return renderInstitutionCard(inst, false); }).join('');
-          }
+        var publicItems = data.institutions || [];
+        if (publicItems.length === 0) {
+          publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">No public institutions shared yet.</p>';
+        } else {
+          publicList.innerHTML = publicItems.map(function (inst) { return renderInstitutionCard(inst, false); }).join('');
         }
-        return publicItemsCache;
+        setPublicDirectoryStatus('Public directory updated ' + new Date().toLocaleString() + '. Personal memberships require explicit sign-in.');
       })
-      .catch(function () {
-        if (publicList) { publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load public institutions.</p>'; }
-        return [];
+      .catch(function (error) {
+        publicList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load public institutions.</p>';
+        setPublicDirectoryStatus('Public directory unavailable: ' + String(error && error.message || 'unknown_error'));
       });
-
-    var myPromise = window.__meridianFetchJsonWithTimeout('/api/institutions/mine', 8000)
-      .then(function (data) {
-        myItemsCache = data.institutions || [];
-        if (myList) {
-          if (myItemsCache.length === 0) {
-            myList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">You are not a member of any institutions yet.</p>';
-          } else {
-            myList.innerHTML = myItemsCache.map(function (inst) { return renderInstitutionCard(inst, true); }).join('');
-          }
-        }
-        return myItemsCache;
-      })
-      .catch(function () {
-        if (myList) { myList.innerHTML = '<p style="opacity:0.6;grid-column:1/-1;">Could not load your institutions.</p>'; }
-        return [];
-      });
-
-    Promise.all([publicPromise, myPromise]).then(function (results) {
-      populateInstitutionSelector(results[0], results[1]);
-    });
   }
 
-  function bindInstitutionTabs() {
-    var tabs = document.querySelectorAll('.inst-tab');
-    tabs.forEach(function (tab) {
-      tab.addEventListener('click', function () {
-        var target = tab.getAttribute('data-tab');
-        tabs.forEach(function (t) {
-          t.classList.remove('active');
-          t.style.borderBottomColor = 'transparent';
-          t.style.color = 'rgba(255,255,255,0.6)';
-        });
-        tab.classList.add('active');
-        tab.style.borderBottomColor = '#4CAF50';
-        tab.style.color = 'white';
-        document.querySelectorAll('.inst-tab-content').forEach(function (c) { c.style.display = 'none'; });
-        var panel = document.getElementById('inst-tab-' + target);
-        if (panel) { panel.style.display = 'block'; }
-      });
-    });
+  if (!isPublicHomepage) {
+    loadInstitutionBrowser();
   }
-
-  bindInstitutionTabs();
-  loadInstitutionBrowser();
 
   /* ── Federated Proof Marketplace ──────────────────────────────── */
   function loadFederatedCatalog() {
@@ -1960,6 +1767,9 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     var countEl = document.querySelector('[data-fed-offering-count]');
     var priceEl = document.querySelector('[data-fed-avg-price]');
     var instEl = document.querySelector('[data-fed-inst-count]');
+    if (!listEl && !countEl && !priceEl && !instEl) {
+      return;
+    }
 
     window.__meridianFetchJsonWithTimeout('/api/federation/marketplace/catalog', 8000)
       .then(function (data) {
@@ -1995,5 +1805,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       });
   }
 
-  loadFederatedCatalog();
+  if (!isPublicHomepage) {
+    loadFederatedCatalog();
+  }
 })();

@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 MERIDIAN_KERNEL_PATH="${MERIDIAN_KERNEL_PATH:-$MERIDIAN_ROOT/kernel}"
 LOOM_ROOT="${LOOM_ROOT:-$MERIDIAN_ROOT/runtime/default}"
-MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-local_foundry}"
+MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-}"
 AGENT_NAME="${1:-My Assistant}"
 RUN_NOW="${MERIDIAN_RUN_AGENT_NOW:-0}"
 LOOM_BIN="${LOOM_BIN:-$MERIDIAN_ROOT/loom/target/release/loom}"
@@ -34,6 +34,11 @@ fi
 
 if [ ! -d "$MERIDIAN_KERNEL_PATH" ]; then
   echo "[new-first-agent] Missing kernel path: $MERIDIAN_KERNEL_PATH"
+  exit 1
+fi
+
+if [ -z "$MERIDIAN_ORG_ID" ]; then
+  echo "[new-first-agent] MERIDIAN_ORG_ID is required. Complete onboarding first or set an explicit institution id." >&2
   exit 1
 fi
 

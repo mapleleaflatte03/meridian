@@ -4,10 +4,11 @@ set -euo pipefail
 REPO_URL="${MERIDIAN_REPO_URL:-https://github.com/mapleleaflatte03/meridian.git}"
 TARGET_DIR="${MERIDIAN_INSTALL_DIR:-$HOME/meridian}"
 MERIDIAN_VERIFY_ONBOARDING="${MERIDIAN_VERIFY_ONBOARDING:-1}"
+MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE:-user}"
 
 if [ -f "./scripts/bootstrap_full.sh" ] && [ -d "./loom" ] && [ -d "./kernel" ] && [ -d "./intelligence" ]; then
   echo "[install-full] Running from existing Meridian monorepo: $(pwd)"
-  ./scripts/bootstrap_full.sh
+  MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE}" ./scripts/bootstrap_full.sh
   if [ "${MERIDIAN_VERIFY_ONBOARDING}" = "1" ]; then
     echo "[install-full] Verifying onboarding-ready contract..."
     ./scripts/acceptance_onboarding_ready_lane.sh
@@ -28,8 +29,8 @@ git fetch origin main --quiet
 git checkout main --quiet
 git pull --ff-only --quiet
 
-echo "[install-full] Running bootstrap"
-./scripts/bootstrap_full.sh
+echo "[install-full] Running bootstrap (${MERIDIAN_INSTALL_MODE} mode)"
+MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE}" ./scripts/bootstrap_full.sh
 
 if [ "${MERIDIAN_VERIFY_ONBOARDING}" = "1" ]; then
   echo "[install-full] Verifying onboarding-ready contract..."
@@ -55,6 +56,7 @@ print(f"  treasury_balance_usd: {payload.get('treasury_balance_usd')}")
 print(f"  treasury_reserve_floor_usd: {payload.get('treasury_reserve_floor_usd')}")
 PY
 fi
-echo "If needed: MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh"
+echo "Install modes: user (default clean-slate), demo, maintainer"
+echo "If needed: MERIDIAN_INSTALL_MODE=demo ./scripts/bootstrap_full.sh"
 echo "Manual controls: ./scripts/dev-up.sh and ./scripts/dev-down.sh"
-echo "First agent helper: ./scripts/new-first-agent.sh \"My Assistant\""
+echo "First agent helper: MERIDIAN_ORG_ID=<your-org-id> ./scripts/new-first-agent.sh \"My Assistant\""

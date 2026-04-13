@@ -108,77 +108,28 @@
   </div>
 
   <section id="institution-status" class="reveal">
-    <h2>Institution Status Bar</h2>
-    <p class="section-intro compact-copy">Live institution posture from <code>/api/status</code>. This status bar is the baseline operator view: treasury, court, agents, and latest sanction posture.</p>
+    <h2>Local onboarding and demo boundaries</h2>
+    <p class="section-intro compact-copy">The public homepage stays on public-safe surfaces. Your local institution, operator workspace, and personal membership live behind explicit onboarding or sign-in flows.</p>
 
-    <div class="institution-onboarding-form" style="margin-bottom: 2rem; padding: 1.5rem; background: rgba(255,255,255,0.05); border-radius: 8px;">
-      <h3 style="margin-top: 0;">Create New Institution</h3>
-      <p style="margin-bottom: 1rem; opacity: 0.8;">Provision a new institution with isolated treasury, court, and PoGE context.</p>
-      <form id="create-institution-form" style="display: flex; flex-direction: column; gap: 1rem;">
-        <div style="display: flex; gap: 1rem;">
-          <input type="text" id="institution-name" placeholder="Institution name" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
-          <input type="text" id="institution-owner" placeholder="Owner ID" required style="flex: 1; padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;" />
-          <select id="institution-plan" style="padding: 0.5rem; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.3); color: white; border-radius: 4px;">
-            <option value="free">Free</option>
-            <option value="starter">Starter</option>
-            <option value="pro">Pro</option>
-            <option value="enterprise">Enterprise</option>
-          </select>
-        </div>
-        <button type="submit" style="padding: 0.75rem; background: #4CAF50; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: 600;">Create Institution</button>
-        <div id="institution-create-status" style="min-height: 1.5rem; opacity: 0.9;"></div>
-      </form>
-    </div>
-
-    <div class="institution-selector" id="institution-selector" style="margin-bottom: 1.5rem; display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: rgba(255,255,255,0.04); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
-      <span style="font-size: 0.8rem; opacity: 0.6; white-space: nowrap;">Institution Directory</span>
-      <select id="institution-selector-dropdown" aria-describedby="institution-selector-note" style="flex: 1; padding: 0.4rem 0.75rem; background: rgba(0,0,0,0.4); color: white; border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; font-size: 0.9rem; cursor: pointer;">
-        <option value="">Loading institutions...</option>
-      </select>
-      <span id="institution-selector-role" style="font-size: 0.75rem; padding: 2px 8px; background: rgba(76,175,80,0.15); border-radius: 3px; color: #4CAF50; white-space: nowrap; display: none;"></span>
-    </div>
-    <p id="institution-selector-note" class="note" style="margin-top: -0.75rem; margin-bottom: 1.5rem;">Directory selection previews institution membership only. Live status remains bound to the current workspace context.</p>
-
-    <div class="institution-browser" style="margin-bottom: 2rem;">
-      <div class="inst-tabs" style="display: flex; gap: 0; border-bottom: 2px solid rgba(255,255,255,0.15); margin-bottom: 1rem;">
-        <button class="inst-tab active" data-tab="public" style="padding: 0.75rem 1.5rem; background: none; border: none; color: white; cursor: pointer; border-bottom: 2px solid #4CAF50; margin-bottom: -2px; font-weight: 600;">Explore Public</button>
-        <button class="inst-tab" data-tab="mine" style="padding: 0.75rem 1.5rem; background: none; border: none; color: rgba(255,255,255,0.6); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px;">My Institutions</button>
-      </div>
-      <div id="inst-tab-public" class="inst-tab-content">
-        <div id="public-institutions-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
-          <p style="opacity: 0.6; grid-column: 1/-1;">Loading public institutions...</p>
-        </div>
-      </div>
-      <div id="inst-tab-mine" class="inst-tab-content" style="display: none;">
-        <div id="my-institutions-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem;">
-          <p style="opacity: 0.6; grid-column: 1/-1;">Loading your institutions...</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="institution-status-grid" data-institution-status>
-      <article class="status-chip">
-        <span class="status-label">Treasury balance</span>
-        <strong data-inst-treasury-balance>--</strong>
-        <p data-inst-treasury-note>Loading treasury data...</p>
+    <div class="feature-grid">
+      <article class="feature-card">
+        <h3>User mode</h3>
+        <p>Default install is clean-slate. No institution is seeded for you. Create your first local institution during onboarding, then start your local stack.</p>
       </article>
-      <article class="status-chip">
-        <span class="status-label">Court health</span>
-        <strong data-inst-court-health>--</strong>
-        <p data-inst-court-note>Loading court data...</p>
+      <article class="feature-card">
+        <h3>Demo mode</h3>
+        <p>Pre-seeded demo behavior remains available only through explicit opt-in install mode selection.</p>
       </article>
-      <article class="status-chip">
-        <span class="status-label">Active agents</span>
-        <strong data-inst-agent-count>--</strong>
-        <p data-inst-agent-note>Loading agent data...</p>
-      </article>
-      <article class="status-chip">
-        <span class="status-label">Last sanction</span>
-        <strong data-inst-last-sanction>--</strong>
-        <p data-inst-sanction-note>Loading sanctions data...</p>
+      <article class="feature-card">
+        <h3>Maintainer mode</h3>
+        <p>Maintainer/operator seeded flows remain available only through explicit opt-in mode selection.</p>
       </article>
     </div>
-    <p class="note" data-inst-updated-at>Institution status refreshes every 20 seconds.</p>
+
+    <div class="card small">
+      <p><strong>Public institution directory</strong></p>
+      <p class="dim small">Browse shared institutions from your local stack after onboarding and starting the operator workspace. The public homepage does not auto-request any private or operator API.</p>
+    </div>
   </section>
 
   <section id="non-goals" class="reveal">
