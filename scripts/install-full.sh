@@ -58,5 +58,7 @@ PY
 fi
 echo "Install modes: user (default clean-slate), demo, maintainer"
 echo "If needed: MERIDIAN_INSTALL_MODE=demo ./scripts/bootstrap_full.sh"
+echo ""
+echo "First-run onboarding: $TARGET_DIR/scripts/onboard.sh"
 echo "Manual controls: ./scripts/dev-up.sh and ./scripts/dev-down.sh"
-echo "First agent helper: MERIDIAN_ORG_ID=<your-org-id> ./scripts/new-first-agent.sh \"My Assistant\""
+echo "Advanced: MERIDIAN_ORG_ID=<your-org-id> ./scripts/new-first-agent.sh \"My Assistant\""

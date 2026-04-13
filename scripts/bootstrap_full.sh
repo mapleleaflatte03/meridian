@@ -465,12 +465,11 @@ echo "[bootstrap] Bootstrap complete."
 echo
 if [ "${MERIDIAN_INSTALL_MODE}" = "user" ]; then
   echo "Next steps:"
-  echo "1) Complete onboarding to create your first institution."
+  echo "1) Run onboarding to create your first institution and agent:"
+  echo "   \"$MERIDIAN_ROOT/scripts/onboard.sh\""
   echo "2) Start the local stack after onboarding: \"$MERIDIAN_ROOT/scripts/dev-up.sh\""
   echo "3) Stop the local stack when needed: \"$MERIDIAN_ROOT/scripts/dev-down.sh\""
-  echo "4) Provision your first agent with explicit institution context:"
-  echo "   MERIDIAN_ORG_ID=<your-org-id> \"$MERIDIAN_ROOT/scripts/new-first-agent.sh\" \"My Assistant\""
-  echo "5) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
+  echo "4) Loom binary: \"$MERIDIAN_LOOM_ROOT/target/release/loom\""
 else
   echo "Next steps:"
   echo "1) export MERIDIAN_ROOT=\"$MERIDIAN_ROOT\""
