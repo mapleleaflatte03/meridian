@@ -3,9 +3,8 @@
 </p>
 
 <p align="center">
-  <strong>Meridian — Loom-first governed agent runtime portal</strong><br>
-  Loom is the flagship local runtime product, Kernel is the runtime-neutral governance core, and the Meridian apps are first-party proof workloads.<br>
-  The live host keeps that hierarchy explicit instead of collapsing it into one vague category claim.
+  <strong>Meridian — Run AI agents locally with built-in governance</strong><br>
+  Loom is the product you install and use. Kernel is the built-in governance engine. Intelligence is the interface layer that makes governance visible.
 </p>
 
 <p align="center">
@@ -32,22 +31,16 @@
 
 # Meridian Intelligence
 
-This repo is the public Meridian portal plus the first-party Meridian apps that run on Loom + Kernel. It is not the governance kernel, and it is not the runtime itself. The product front door is now Loom.
+This directory contains the interface layer: dashboards, proof surfaces, workflow galleries, and operator tooling that make Loom's governance visible. It is not the runtime (that's `loom/`) or the governance engine (that's `kernel/`).
 
-## Launch Positioning
+## Positioning
 
-Meridian currently presents a Loom-first hierarchy around four ideas:
+- **Loom** is the product: the local agent runtime you install and use.
+- **Kernel** is the built-in governance engine: authority, treasury, court, and sanctions.
+- **Intelligence** is the interface: dashboards, proof surfaces, workflows, and public APIs.
+- **Meridian** is the overall system/brand that ties them together.
 
-- Meridian Loom as the flagship local runtime product.
-- Meridian Kernel as the runtime-neutral governance core.
-- Meridian Intelligence plus bounded Trust Ops as first-party workloads that prove the runtime under real pressure.
-- A truthful host boundary that separates verified live routes from future deployment claims.
-
-Operational positioning shorthand:
-
-- Claw-family stacks: broad personal-assistant autonomy surfaces.
-- Meridian Loom: governed runtime execution for organizations that need
-  receipts, warrants, court/authority policy, and treasury-gated labor.
+Why Loom over other agent runtimes: other stacks give you agent autonomy; Loom gives you autonomy plus built-in proof that your agents followed the rules.
 
 ## 1-Command Install
 

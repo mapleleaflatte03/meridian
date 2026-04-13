@@ -1,88 +1,89 @@
 # Meridian
 
 <p align="center">
-  <img src="intelligence/company/www/assets/meridian_lockup.svg" alt="Meridian — Open Research Platform for Verifiable AI Commonwealth" width="720">
+  <img src="intelligence/company/www/assets/meridian_lockup.svg" alt="Meridian — Governed AI Agent Platform" width="720">
 </p>
 
 <p align="center">
-  <strong>Meridian — Open Research Platform for Verifiable AI Commonwealth</strong><br>
-  Loom runs the local runtime. Kernel enforces governance. Intelligence exposes public proof/workflow surfaces.
+  <strong>Meridian — Run AI agents locally with built-in governance and verifiable proof.</strong><br>
+  Install Loom. Create an agent. Every action gets a receipt.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/ci.yml?branch=main&style=flat-square" alt="CI status">
   <img src="https://img.shields.io/badge/license-MIT-475569?style=flat-square" alt="MIT">
   <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="GitHub stars">
-  <img src="https://img.shields.io/badge/focus-open%20research-0f766e?style=flat-square" alt="Open research">
+  <img src="https://img.shields.io/badge/product-Loom-0f766e?style=flat-square" alt="Loom">
   <img src="https://img.shields.io/badge/runtime-local%20first-1f6feb?style=flat-square" alt="Local-first runtime">
-  <img src="https://img.shields.io/badge/migrated%20from-OpenClaw%20%2F%20OpenFang%20%2F%20ZeroClaw%20%2F%20Paperclip-ff6b35?style=flat-square" alt="Migrated from Claw ecosystem">
+  <img src="https://img.shields.io/badge/governance-built%20in-111827?style=flat-square" alt="Built-in governance">
 </p>
 
 <p align="center">
   <a href="https://app.welliam.codes">Website</a> ·
-  <a href="https://app.welliam.codes/proofs">Proofs</a> ·
-  <a href="https://app.welliam.codes/workflows">Workflows</a> ·
+  <a href="https://app.welliam.codes/loom">Loom</a> ·
+  <a href="https://app.welliam.codes/pilot">Get Started</a> ·
+  <a href="https://app.welliam.codes/compare">Compare</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
-  <a href="ROADMAP.md">Roadmap</a> ·
-  <a href="docs/RESEARCH_HUB.md">Research Hub</a>
+  <a href="ROADMAP.md">Roadmap</a>
 </p>
 
-## What Meridian Is
+## What You Get
 
-Meridian is a governance-first stack for local AI agent systems:
-
-- `loom/` — sovereign local runtime + PoGE execution layer (Rust)
-- `kernel/` — constitutional governance core (Institution, Agent, Authority, Treasury, Court + 3-ledger economy)
-- `intelligence/` — workflows, public surfaces, gateway, and operator tooling
-
-License scope:
-- monorepo root: MIT ([`LICENSE`](LICENSE))
-- `kernel/`: Apache-2.0 ([`kernel/LICENSE`](kernel/LICENSE))
-- `loom/` and `intelligence/`: MIT ([`loom/LICENSE`](loom/LICENSE), [`intelligence/LICENSE`](intelligence/LICENSE))
-
-Canonical source is this monorepo.
-
-Legacy repositories are archived mirrors:
-
-- `meridian-loom` -> `meridian/loom`
-- `meridian-kernel` -> `meridian/kernel`
-- `meridian-intelligence` -> `meridian/intelligence`
-
-Migration details: [`docs/REPO_MIGRATION_MAP.md`](docs/REPO_MIGRATION_MAP.md)
-Mirror archive status: [`docs/MIRROR_ARCHIVE_STATUS.md`](docs/MIRROR_ARCHIVE_STATUS.md)
-Mirror policy check: `./scripts/check_mirror_archive_policy.sh`
-
-## Non-Goals (Locked)
-
-- no paywall gate for core runtime/governance usage
-- no mandatory commercial checkout path in onboarding
-- no closed-source governance module hidden from community review
-
-## Install Full Stack (One Command)
+**Loom** is the local AI agent runtime at the center of Meridian. Install in one command, create a governed agent, and run it locally with memory, channels, skills, and verifiable proof receipts.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-After install:
+Then create your first agent:
 
 ```bash
 cd ~/meridian
-./scripts/dev-up.sh
+./scripts/new-first-agent.sh "My Assistant"
 ```
 
-By default bootstrap initializes institution state, treasury baseline, and court rule set, then runs local smoke checks for:
+## Why Loom
 
-- `/api/institution/template`
-- `/api/treasury`
-- `/api/status` + runtime proof readiness
-- onboarding-ready contract verification (`MERIDIAN_VERIFY_ONBOARDING=1` by default)
+Other local agent runtimes give you autonomy. Loom gives you autonomy plus:
 
-Ready-to-run definition and gate:
-- [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
-- `./scripts/acceptance_onboarding_ready_lane.sh`
-- first agent helper: `./scripts/new-first-agent.sh "My Assistant"`
-- claim-to-evidence matrix row: [`kernel/docs/PROOF_MATRIX.md`](kernel/docs/PROOF_MATRIX.md) ("One-command onboarding readiness contract is executable")
+- **Verifiable receipts** — every agent action produces a PoGE proof receipt you can inspect.
+- **Budget controls** — Treasury enforces reserve floors, spend limits, and payout boundaries.
+- **Authority gates** — high-risk actions require explicit warrants and approval paths.
+- **Court rules** — violations, sanctions, appeals, and remediation are tracked with auditable history.
+- **Local-first** — execution and state stay on your machine. No cloud dependency.
+
+## Architecture
+
+```
+Meridian (platform)
+├── loom/        — Local agent runtime: sessions, channels, memory, skills, proof (Rust)
+├── kernel/      — Governance engine: Institution, Authority, Treasury, Court (Python)
+└── intelligence/ — Interface layer: dashboards, proofs, workflows, operator tooling (Python)
+```
+
+- `loom/` is what runs your agents.
+- `kernel/` is what keeps them accountable.
+- `intelligence/` is what makes governance visible.
+
+## Quick Start
+
+After install:
+
+```bash
+# Start the local stack
+./scripts/dev-up.sh
+
+# Create a governed agent
+./scripts/new-first-agent.sh "My Assistant"
+
+# Check system status
+curl http://127.0.0.1:8266/api/status
+
+# See proof receipts
+open http://127.0.0.1:8266/proofs
+```
+
+Ready-to-run gate: [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
 
 ## Quick Visuals
 
@@ -96,7 +97,7 @@ Live surfaces:
 ![Proofs](docs/assets/proofs-desktop.png)
 ![Workflows](docs/assets/workflows-desktop.png)
 
-## Local Dev Commands
+## Dev Commands
 
 ```bash
 # Start/stop local workspace + gateway
@@ -105,56 +106,57 @@ Live surfaces:
 
 # Supervisor (auto-restart 18901/19001/8266)
 ./scripts/dev-supervisor.sh status
-MERIDIAN_SUPERVISOR_ENABLE=0 ./scripts/dev-up.sh
-
-# Optional persistent user service (survives shell exit)
-./scripts/install-supervisor-service.sh
-systemctl --user status meridian-runtime-supervisor.service --no-pager
-./scripts/uninstall-supervisor-service.sh
 
 # Bootstrap only (without auto-start)
 MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
-
-# Create first governed agent quickly
-./scripts/new-first-agent.sh "My Assistant"
 
 # Loom tests
 cargo test --manifest-path loom/Cargo.toml --workspace
 
 # Kernel tests
-cd kernel
-python3 -m unittest discover -s kernel/tests -p 'test_*.py'
-python3 -m unittest discover -s economy/tests -p 'test_*.py'
+cd kernel && python3 -m unittest discover -s kernel/tests -p 'test_*.py'
 
 # Intelligence tests
-cd ../intelligence
-python3 -m unittest -v test_gateway_brain_router.py
-
-# Research capture artifacts
-cd ..
-./scripts/research_capture_baseline.sh
-./scripts/research_capture_case_study.sh sanction_remediation_loop
+cd intelligence && python3 -m unittest -v test_gateway_brain_router.py
 ```
 
-## Open-Source Boundary
+## Governance and Trust
 
-Meridian is open-source and contribution-first. Hosted credentials, external publishing identities, and managed operations remain explicit operational boundaries.
+Loom's built-in governance is what makes it different from other agent runtimes. Under the hood:
 
-See:
+- **Kernel** provides five governance primitives (Institution, Agent, Authority, Treasury, Court) and a 3-ledger economy (REP, AUTH, CASH).
+- **PoGE receipts** give you verifiable proof of every execution boundary.
+- **Runtime proof routes** expose governance state through inspectable APIs.
 
-- [`intelligence/company/www/OPEN_SOURCE_BOUNDARY.html`](intelligence/company/www/OPEN_SOURCE_BOUNDARY.html)
-- [`docs/RESEARCH_HUB.md`](docs/RESEARCH_HUB.md)
+For deep governance documentation:
+- [Why Meridian](https://app.welliam.codes/why) — architecture rationale
+- [Proofs](https://app.welliam.codes/proofs) — live proof posture dashboard
+- [Workflows](https://app.welliam.codes/workflows) — operator workflow gallery
+- [Research Hub](docs/RESEARCH_HUB.md) — RFCs, benchmarks, case studies
+
+## Non-Goals (Locked)
+
+- No paywall gate for core runtime/governance usage
+- No mandatory commercial checkout path in onboarding
+- No closed-source governance module hidden from community review
+
+## Licenses
+
+- Monorepo root: MIT ([`LICENSE`](LICENSE))
+- `kernel/`: Apache-2.0 ([`kernel/LICENSE`](kernel/LICENSE))
+- `loom/` and `intelligence/`: MIT
+
+Canonical source is this monorepo. Legacy repos (`meridian-loom`, `meridian-kernel`, `meridian-intelligence`) are archived mirrors. See [`docs/REPO_MIGRATION_MAP.md`](docs/REPO_MIGRATION_MAP.md).
 
 ## Contribute
 
-- Contribution guide: [`CONTRIBUTING.md`](CONTRIBUTING.md)
-- Issue templates: [`.github/ISSUE_TEMPLATE`](.github/ISSUE_TEMPLATE)
-- Community map: [`docs/COMMUNITY_MAP.md`](docs/COMMUNITY_MAP.md)
-- Roadmap: [`ROADMAP.md`](ROADMAP.md)
-- Research artifacts: [`docs/research/README.md`](docs/research/README.md)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- [Issue templates](.github/ISSUE_TEMPLATE)
+- [Roadmap](ROADMAP.md)
+- [Community map](docs/COMMUNITY_MAP.md)
 
-Optional support:
+Optional support: [GitHub Sponsors](https://github.com/sponsors/mapleleaflatte03) · [Sustainability policy](docs/SUSTAINABILITY.md)
 
-- GitHub Sponsors: https://github.com/sponsors/mapleleaflatte03
-- Patreon: https://www.patreon.com/
-- Sustainability policy: [`docs/SUSTAINABILITY.md`](docs/SUSTAINABILITY.md)
+---
+
+*Meridian positioning contract: [`docs/MESSAGE_CONTRACT.md`](docs/MESSAGE_CONTRACT.md)*
