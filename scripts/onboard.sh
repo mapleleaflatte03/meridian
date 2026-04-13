@@ -28,6 +28,9 @@ export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 PLATFORM_DIR="${MERIDIAN_ROOT}/intelligence/company/meridian_platform"
 LOOM_BIN="${LOOM_BIN:-$MERIDIAN_ROOT/loom/target/release/loom}"
 KERNEL_PATH="${MERIDIAN_ROOT}/kernel"
+LOOM_CONFIG_BASE="${XDG_CONFIG_HOME:-${HOME}/.config}"
+LOOM_CONFIG_ROOT="${LOOM_CONFIG_BASE}/meridian-loom"
+LOOM_AGENT_CONFIG_DIR="${LOOM_CONFIG_ROOT}/agents"
 
 NON_INTERACTIVE=0
 for arg in "$@"; do
@@ -104,7 +107,8 @@ echo "  First agent:   $AGENT_NAME (role: $AGENT_ROLE)"
 echo "  Demo pack:     $IMPORT_DEMO"
 echo "  Governance:    $ENABLE_GOV"
 echo "  Data root:     $MERIDIAN_ROOT/runtime"
-echo "  Config root:   $MERIDIAN_ROOT/intelligence"
+echo "  Config root:   $LOOM_CONFIG_ROOT"
+echo "  Agent configs: $LOOM_AGENT_CONFIG_DIR"
 echo "----------------------------------------------------------------"
 
 if [ "$NON_INTERACTIVE" = "0" ]; then
@@ -254,6 +258,8 @@ echo "    - Institution data:  $MERIDIAN_ROOT/intelligence/"
 echo "    - Runtime state:     $MERIDIAN_ROOT/runtime/"
 echo "    - Kernel governance: $MERIDIAN_ROOT/kernel/"
 echo "    - Loom agents:       $MERIDIAN_ROOT/runtime/default/"
+echo "    - Loom config:       $LOOM_CONFIG_ROOT/"
+echo "    - Agent configs:     $LOOM_AGENT_CONFIG_DIR/"
 echo ""
 echo "  What is the public demo site:"
 echo "    - https://app.welliam.codes is a public showcase."
