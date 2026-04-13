@@ -4,7 +4,7 @@
 
 - Monorepo as canonical source; archived mirrors stay read-only.
 - Redirect policy enforced for issue/PR/discussion routing.
-- Public wording locked to open-source + research-first boundary.
+- Public wording locked to open-source + Loom-first product boundary.
 
 ## Phase B — Onboarding Contract
 

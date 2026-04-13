@@ -1,6 +1,6 @@
 # Contributing to Meridian
 
-Meridian is an open research platform for governed local AI agents. This repository is canonical; archived mirrors are read-only.
+Meridian is the governed AI agent platform: Loom runs your agents locally, Kernel enforces governance, and Intelligence makes it visible. This repository is canonical; archived mirrors are read-only.
 
 ## Fast Path (First PR)
 
