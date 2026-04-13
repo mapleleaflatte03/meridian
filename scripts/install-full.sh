@@ -10,6 +10,8 @@ if [ -f "./scripts/bootstrap_full.sh" ] && [ -d "./loom" ] && [ -d "./kernel" ] 
   echo "[install-full] Running from existing Meridian monorepo: $(pwd)"
   MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE}" ./scripts/bootstrap_full.sh
   if [ "${MERIDIAN_VERIFY_ONBOARDING}" = "1" ]; then
+    echo "[install-full] Verifying clean-slate user-mode contract..."
+    ./scripts/acceptance_clean_slate_user_mode_lane.sh
     echo "[install-full] Verifying onboarding-ready contract..."
     ./scripts/acceptance_onboarding_ready_lane.sh
   fi
@@ -33,6 +35,8 @@ echo "[install-full] Running bootstrap (${MERIDIAN_INSTALL_MODE} mode)"
 MERIDIAN_INSTALL_MODE="${MERIDIAN_INSTALL_MODE}" ./scripts/bootstrap_full.sh
 
 if [ "${MERIDIAN_VERIFY_ONBOARDING}" = "1" ]; then
+  echo "[install-full] Verifying clean-slate user-mode contract..."
+  ./scripts/acceptance_clean_slate_user_mode_lane.sh
   echo "[install-full] Verifying onboarding-ready contract..."
   ./scripts/acceptance_onboarding_ready_lane.sh
 fi

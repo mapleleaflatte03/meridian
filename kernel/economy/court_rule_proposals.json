@@ -1793,8 +1793,76 @@
       "rule_id": null,
       "rule_version": null,
       "proof_ref": null
+    },
+    {
+      "id": "prop_f0e42b7b",
+      "org_id": "org_bc3c63f1",
+      "title": "onboarding-court-20260411183453",
+      "description": "",
+      "rule_text": "onboarding_ready_lane=true",
+      "proposed_by": "user_meridian_5322393870",
+      "status": "activated",
+      "votes": {
+        "user_meridian_5322393870": {
+          "voter_id": "user_meridian_5322393870",
+          "vote": "for",
+          "justification": "acceptance lane requires activation lifecycle smoke",
+          "cast_at": "2026-04-11T18:35:40Z"
+        }
+      },
+      "action_ids": [],
+      "created_at": "2026-04-11T18:35:34Z",
+      "tallied_at": "2026-04-11T18:35:44Z",
+      "activated_at": "2026-04-11T18:35:49Z",
+      "tally_result": {
+        "total_votes": 1,
+        "for": 1,
+        "against": 0,
+        "abstain": 0,
+        "quorum_required": 1,
+        "quorum_met": true,
+        "approved": true,
+        "proof_ref": "court_tally:prop_f0e42b7b:2026-04-11T18:35:44Z"
+      },
+      "rule_id": "rule_f950b296",
+      "rule_version": 13,
+      "proof_ref": "court_rule_activation:prop_f0e42b7b:v13"
+    },
+    {
+      "id": "prop_9326f7ec",
+      "org_id": "org_bc3c63f1",
+      "title": "onboarding-court-20260413191910",
+      "description": "",
+      "rule_text": "onboarding_ready_lane=true",
+      "proposed_by": "user_meridian_5322393870",
+      "status": "activated",
+      "votes": {
+        "user_meridian_5322393870": {
+          "voter_id": "user_meridian_5322393870",
+          "vote": "for",
+          "justification": "acceptance lane requires activation lifecycle smoke",
+          "cast_at": "2026-04-13T19:19:36Z"
+        }
+      },
+      "action_ids": [],
+      "created_at": "2026-04-13T19:19:28Z",
+      "tallied_at": "2026-04-13T19:19:38Z",
+      "activated_at": "2026-04-13T19:19:43Z",
+      "tally_result": {
+        "total_votes": 1,
+        "for": 1,
+        "against": 0,
+        "abstain": 0,
+        "quorum_required": 1,
+        "quorum_met": true,
+        "approved": true,
+        "proof_ref": "court_tally:prop_9326f7ec:2026-04-13T19:19:38Z"
+      },
+      "rule_id": "rule_22f64a28",
+      "rule_version": 14,
+      "proof_ref": "court_rule_activation:prop_9326f7ec:v14"
     }
   ],
-  "count": 89,
-  "updatedAt": "2026-04-10T07:49:55Z"
+  "count": 91,
+  "updatedAt": "2026-04-13T19:19:43Z"
 }

@@ -69,6 +69,516 @@
       "settled_at": "2026-04-11T08:24:34Z",
       "dispute_id": null,
       "assigned_by": "dashboard_operator"
+    },
+    "bid_9eeb0a58": {
+      "id": "bid_9eeb0a58",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413163127",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "8f7f8f8476f77841607a88db868e311ace3dec2fdf83d218eacff5e20306f287",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:31:27Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_77397871": {
+      "id": "bid_77397871",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413163420",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "b9902ea6cf3aac1ee67791ad8644851ace73123b4663b4871295c2e8a3734c12",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:34:20Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_79813287": {
+      "id": "bid_79813287",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413164139",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "c7da9d2ba9a8f89412b565fda46dd439461f76f476bc5f16733a307a563b3c3a",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:41:39Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_781cecf5": {
+      "id": "bid_781cecf5",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413164535",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "9000def4c59ee0c34ef8363cc022b5b97b475adfdbaf215ca80886056d8a8249",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:45:35Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_07810a77": {
+      "id": "bid_07810a77",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413164735",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "72c3151b6194d30b04c3e1846818ce86609e21aed56694c2688e529fd8fae75c",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:47:35Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_9851de6b": {
+      "id": "bid_9851de6b",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413165321",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "061ee168ec6e6389e8d35d369e0b21bd5a9f62038f8b5a878beffe74ccef23a1",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:53:21Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_afef008e": {
+      "id": "bid_afef008e",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413165553",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "b620b73614962ff0bb8d390fcc1c73fa8a3dfda6030e552d9c7cdd681dd42188",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T16:55:53Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_e13986b1": {
+      "id": "bid_e13986b1",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413172352",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "ee59b429c7583739308c6dbc4862820a3b4c11945cb9467599c60b2468b8ee98",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T17:23:52Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_8c4e20b6": {
+      "id": "bid_8c4e20b6",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413172732",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "2b45673fc7eb13a23efb607b594c425c0841b9c778f0c423c038e9f21109d024",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T17:27:32Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_b437b534": {
+      "id": "bid_b437b534",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413174125",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "7af026544be0cdc89f1c90d6b5f361734e2cd6d466446bd4cf1ecab168364e95",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T17:41:25Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_04622b66": {
+      "id": "bid_04622b66",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413174505",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "1bef927dee7315d4a589a7b944c7cbf6f6535d048507e86388a9bcf9d8871b13",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T17:45:05Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_b2c0ae19": {
+      "id": "bid_b2c0ae19",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413175642",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "92fec59a9c86d155a885ea7ac9c8ce7469eb9ef52687db534489d136ed958849",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T17:56:42Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_a677db17": {
+      "id": "bid_a677db17",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413180626",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "068bb28926f8dbf023886dd1b7fea21e032a2641593f75bd0c6c0ce20f22da49",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:06:26Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_c9e0ca9a": {
+      "id": "bid_c9e0ca9a",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413181427",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "272d605c8aa3b21f99fc3d9fd110692d9270a0877f87aecc81c84690da4dd0ba",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:14:27Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_6c8bd7be": {
+      "id": "bid_6c8bd7be",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413181943",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "d5db31abe59bf1dc6d2801b2265d5f85fe4f80b18911d6fd28cfc4d8af797860",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:19:43Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_632668ce": {
+      "id": "bid_632668ce",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413182628",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "7786c1aea3179313762f4116ae239805e29ddbfe12fdf2fad4db21d7253a19c8",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:26:28Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_a4ba6b27": {
+      "id": "bid_a4ba6b27",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413183535",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "ca8a49847c423ca8dde26e02c8b4c96bdbf6d2ced531b058433164ff09c516e3",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:35:35Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_9e9b0d8c": {
+      "id": "bid_9e9b0d8c",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413183729",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "f3970091778e706cd4b35105f8416e315e3897606ecbb95bc7dcb017890a5ab5",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:37:29Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_3de85546": {
+      "id": "bid_3de85546",
+      "agent_id": "agent_leviathann",
+      "task_description": "debug-20260413184005",
+      "amount_usd": 0.01,
+      "status": "assigned",
+      "receipt_hash": "6fa675d64774e878f9260dd8390ed5b4039bf261f9d7aeed69f442ab4bae641e",
+      "action_ids": [],
+      "created_at": "2026-04-13T18:40:05Z",
+      "assigned_at": "2026-04-13T18:40:20Z",
+      "settled_at": null,
+      "dispute_id": null,
+      "assigned_by": "user_meridian_5322393870"
+    },
+    "bid_fe2aaebc": {
+      "id": "bid_fe2aaebc",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413184210",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "461a6b7d837616d4ab1c5a0c676c5eb046099967fa0165f834b943c11edc4243",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:42:10Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_806d984d": {
+      "id": "bid_806d984d",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413184922",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "e286b0fd4c2ddca332190fdcc3decb1d8445387323a683367edd313071c671c4",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:49:22Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_608061ed": {
+      "id": "bid_608061ed",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413185601",
+      "amount_usd": 0.05,
+      "status": "open",
+      "receipt_hash": "6f71efbbdf1e134c3362fc4b7cdc7963889bdac5181907cc30083043dfbb1545",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T18:56:01Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_822d515a": {
+      "id": "bid_822d515a",
+      "agent_id": "agent_leviathann",
+      "task_description": "test-20260413185803",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "779c11e1c23c6c4c5bae4ffd89ae366a24eb0d371341904b51148005e5e77d80",
+      "action_ids": [],
+      "created_at": "2026-04-13T18:58:03Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_d55f4a20": {
+      "id": "bid_d55f4a20",
+      "agent_id": "agent_leviathann",
+      "task_description": "test2-20260413190009",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "507c47d9c78fa491cd5a6cb67de1f3bf4730b491bbb73d74257084247ec4baac",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:00:09Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_9ae792fc": {
+      "id": "bid_9ae792fc",
+      "agent_id": "agent_leviathann",
+      "task_description": "direct-20260413190056",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "427927625bf52b8756bc9421c2606d125c98494593ebe37c757757d954767bb7",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:00:56Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_260f817d": {
+      "id": "bid_260f817d",
+      "agent_id": "agent_leviathann",
+      "task_description": "debug3-20260413190307",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "f4f63efdf08884e8f678351ef70910f14c05b2fdec3f72686cb5729ef1ec1927",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:03:07Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_c4035e04": {
+      "id": "bid_c4035e04",
+      "agent_id": "agent_leviathann",
+      "task_description": "fg-20260413190435",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "cc263fd42c1daac982e4829f2c140708a57fe66ccb9815926bf9b3c14820b1d4",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:04:38Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_f0e69ca1": {
+      "id": "bid_f0e69ca1",
+      "agent_id": "agent_leviathann",
+      "task_description": "fg2-20260413190616",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "0d83108229e0406842ed0a8b2226636f39a9e157c80eca7009f9c014176da57b",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:06:16Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_09f11ff2": {
+      "id": "bid_09f11ff2",
+      "agent_id": "agent_leviathann",
+      "task_description": "fg3-20260413190711",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "bbecd8e52b86c39f313569c571344c3056b68ab3b26fef4c2a2fba908d2cea3d",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:07:11Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_9126e0b8": {
+      "id": "bid_9126e0b8",
+      "agent_id": "agent_leviathann",
+      "task_description": "fg4-20260413190834",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "6a59b68e8fecbba6e265b2ba713aa9143546f08e1bea2737d2dd4b8fc7379359",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:08:34Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_cc194af9": {
+      "id": "bid_cc194af9",
+      "agent_id": "agent_leviathann",
+      "task_description": "fg5-20260413190913",
+      "amount_usd": 0.01,
+      "status": "open",
+      "receipt_hash": "0062dfa3d7fad81eff64c83cc703115ece1067f060cd705c041abe214a68fc43",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:09:13Z",
+      "assigned_at": null,
+      "settled_at": null,
+      "dispute_id": null
+    },
+    "bid_c4858ebf": {
+      "id": "bid_c4858ebf",
+      "agent_id": "agent_leviathann",
+      "task_description": "fix-20260413191200",
+      "amount_usd": 0.01,
+      "status": "assigned",
+      "receipt_hash": "37ddf51a8a7669fe2db8c4cab7fff578902baf6accac5cb67eb52cefaf66b44f",
+      "action_ids": [],
+      "created_at": "2026-04-13T19:12:00Z",
+      "assigned_at": "2026-04-13T19:12:00Z",
+      "settled_at": null,
+      "dispute_id": null,
+      "assigned_by": "user_meridian_5322393870"
+    },
+    "bid_cf1a36e9": {
+      "id": "bid_cf1a36e9",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413191424",
+      "amount_usd": 0.05,
+      "status": "disputed",
+      "receipt_hash": "9c45aa462536578cab696365c86a487e7e68b461247acfecfd083ad395164c51",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T19:14:24Z",
+      "assigned_at": "2026-04-13T19:14:26Z",
+      "settled_at": "2026-04-13T19:14:27Z",
+      "dispute_id": "dsp_7f8705af",
+      "assigned_by": "user_meridian_5322393870"
+    },
+    "bid_8a13d94b": {
+      "id": "bid_8a13d94b",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413191647",
+      "amount_usd": 0.05,
+      "status": "cancelled",
+      "receipt_hash": "17c4a0f12d58e31c06ca58857d08ea925d6634e33ef01e2b8d5fc9c367cd2283",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T19:16:47Z",
+      "assigned_at": "2026-04-13T19:16:47Z",
+      "settled_at": "2026-04-13T19:16:51Z",
+      "dispute_id": "dsp_c269c414",
+      "assigned_by": "user_meridian_5322393870",
+      "cancel_reason": "dispute_refund"
+    },
+    "bid_cd6b09aa": {
+      "id": "bid_cd6b09aa",
+      "agent_id": "agent_leviathann",
+      "task_description": "onboarding-ready-20260413191910",
+      "amount_usd": 0.05,
+      "status": "cancelled",
+      "receipt_hash": "ef62f5846f572cc805619ebf5ee59380833c461b829b759c732dee8f478fbed5",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T19:19:10Z",
+      "assigned_at": "2026-04-13T19:19:12Z",
+      "settled_at": "2026-04-13T19:19:16Z",
+      "dispute_id": "dsp_1ac9bca8",
+      "assigned_by": "user_meridian_5322393870",
+      "cancel_reason": "dispute_refund"
     }
   },
   "assignments": {
@@ -116,6 +626,51 @@
       "reservation_id": null,
       "created_at": "2026-04-11T08:24:27Z",
       "status": "assigned"
+    },
+    "asgn_7b259eea": {
+      "id": "asgn_7b259eea",
+      "bid_id": "bid_3de85546",
+      "agent_id": "agent_leviathann",
+      "assigned_by": "user_meridian_5322393870",
+      "reservation_id": "bud_6bdc199ac54d",
+      "created_at": "2026-04-13T18:40:20Z",
+      "status": "assigned"
+    },
+    "asgn_19600471": {
+      "id": "asgn_19600471",
+      "bid_id": "bid_c4858ebf",
+      "agent_id": "agent_leviathann",
+      "assigned_by": "user_meridian_5322393870",
+      "reservation_id": null,
+      "created_at": "2026-04-13T19:12:00Z",
+      "status": "assigned"
+    },
+    "asgn_74126bc6": {
+      "id": "asgn_74126bc6",
+      "bid_id": "bid_cf1a36e9",
+      "agent_id": "agent_leviathann",
+      "assigned_by": "user_meridian_5322393870",
+      "reservation_id": "bud_4e5776e464a9",
+      "created_at": "2026-04-13T19:14:26Z",
+      "status": "assigned"
+    },
+    "asgn_6abbcd02": {
+      "id": "asgn_6abbcd02",
+      "bid_id": "bid_8a13d94b",
+      "agent_id": "agent_leviathann",
+      "assigned_by": "user_meridian_5322393870",
+      "reservation_id": "bud_d0855bd8042a",
+      "created_at": "2026-04-13T19:16:47Z",
+      "status": "assigned"
+    },
+    "asgn_46e9be3d": {
+      "id": "asgn_46e9be3d",
+      "bid_id": "bid_cd6b09aa",
+      "agent_id": "agent_leviathann",
+      "assigned_by": "user_meridian_5322393870",
+      "reservation_id": "bud_eb0dc75f23cd",
+      "created_at": "2026-04-13T19:19:12Z",
+      "status": "assigned"
     }
   },
   "settlements": {
@@ -156,8 +711,124 @@
       "action_ids": [],
       "created_at": "2026-04-11T08:24:34Z",
       "status": "settled"
+    },
+    "stl_b54c7ea7": {
+      "id": "stl_b54c7ea7",
+      "bid_id": "bid_cf1a36e9",
+      "agent_id": "agent_leviathann",
+      "amount_usd": 0.05,
+      "split": {
+        "worker_usd": 0.045,
+        "royalty_usd": 0.005,
+        "total_usd": 0.05
+      },
+      "royalty_share": 0.1,
+      "proof_receipt": "proof_onboarding_20260413191424",
+      "settlement_receipt": "a5d3c8fbecdabfc457416632841050b3f3f4f739fb1b1553634fb424f4664263",
+      "settled_by": "user_meridian_5322393870",
+      "reservation_id": "bud_4e5776e464a9",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T19:14:27Z",
+      "status": "settled"
+    },
+    "stl_30fa0070": {
+      "id": "stl_30fa0070",
+      "bid_id": "bid_8a13d94b",
+      "agent_id": "agent_leviathann",
+      "amount_usd": 0.05,
+      "split": {
+        "worker_usd": 0.045,
+        "royalty_usd": 0.005,
+        "total_usd": 0.05
+      },
+      "royalty_share": 0.1,
+      "proof_receipt": "proof_onboarding_20260413191647",
+      "settlement_receipt": "031f2beabb3db0b5637dfe2d4f848fe4d849751c26b43ccc9e8e9340d1a9515c",
+      "settled_by": "user_meridian_5322393870",
+      "reservation_id": "bud_d0855bd8042a",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T19:16:51Z",
+      "status": "refunded",
+      "dispute_id": "dsp_c269c414",
+      "court_decision_ref": "court_acceptance_refund_20260413191647"
+    },
+    "stl_465df7f3": {
+      "id": "stl_465df7f3",
+      "bid_id": "bid_cd6b09aa",
+      "agent_id": "agent_leviathann",
+      "amount_usd": 0.05,
+      "split": {
+        "worker_usd": 0.045,
+        "royalty_usd": 0.005,
+        "total_usd": 0.05
+      },
+      "royalty_share": 0.1,
+      "proof_receipt": "proof_onboarding_20260413191910",
+      "settlement_receipt": "17794e621e3b59b72077b04a603a5d75ef89efc3e0bf1270de655bd857e4ce6b",
+      "settled_by": "user_meridian_5322393870",
+      "reservation_id": "bud_eb0dc75f23cd",
+      "action_ids": [
+        "acceptance_onboarding_marketplace"
+      ],
+      "created_at": "2026-04-13T19:19:16Z",
+      "status": "refunded",
+      "dispute_id": "dsp_1ac9bca8",
+      "court_decision_ref": "court_acceptance_refund_20260413191910"
     }
   },
-  "disputes": {},
-  "updatedAt": "2026-04-11T08:24:34Z"
+  "disputes": {
+    "dsp_7f8705af": {
+      "id": "dsp_7f8705af",
+      "bid_id": "bid_cf1a36e9",
+      "status": "open",
+      "opened_by": "user_meridian_5322393870",
+      "reason": "acceptance_dispute_lifecycle",
+      "decision": "stay",
+      "resolved_by": null,
+      "court_decision_ref": "court_acceptance_stay_20260413191424",
+      "action_ids": [
+        "acceptance_onboarding_marketplace_dispute"
+      ],
+      "created_at": "2026-04-13T19:14:28Z",
+      "resolved_at": null,
+      "note": ""
+    },
+    "dsp_c269c414": {
+      "id": "dsp_c269c414",
+      "bid_id": "bid_8a13d94b",
+      "status": "resolved",
+      "opened_by": "user_meridian_5322393870",
+      "reason": "acceptance_dispute_lifecycle",
+      "decision": "refund",
+      "resolved_by": "user_meridian_5322393870",
+      "court_decision_ref": "court_acceptance_refund_20260413191647",
+      "action_ids": [
+        "acceptance_onboarding_marketplace_dispute"
+      ],
+      "created_at": "2026-04-13T19:16:56Z",
+      "resolved_at": "2026-04-13T19:16:58Z",
+      "note": ""
+    },
+    "dsp_1ac9bca8": {
+      "id": "dsp_1ac9bca8",
+      "bid_id": "bid_cd6b09aa",
+      "status": "resolved",
+      "opened_by": "user_meridian_5322393870",
+      "reason": "acceptance_dispute_lifecycle",
+      "decision": "refund",
+      "resolved_by": "user_meridian_5322393870",
+      "court_decision_ref": "court_acceptance_refund_20260413191910",
+      "action_ids": [
+        "acceptance_onboarding_marketplace_dispute"
+      ],
+      "created_at": "2026-04-13T19:19:17Z",
+      "resolved_at": "2026-04-13T19:19:25Z",
+      "note": ""
+    }
+  },
+  "updatedAt": "2026-04-13T19:19:25Z"
 }

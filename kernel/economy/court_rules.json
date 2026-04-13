@@ -1,5 +1,5 @@
 {
-  "ruleset_version": 12,
+  "ruleset_version": 14,
   "rules": [
     {
       "id": "rule_eba4c5d7",
@@ -156,8 +156,34 @@
       "rule_version": 12,
       "proof_ref": "court_rule_activation:prop_5fbc063b:v12",
       "status": "active"
+    },
+    {
+      "id": "rule_f950b296",
+      "org_id": "org_bc3c63f1",
+      "proposal_id": "prop_f0e42b7b",
+      "title": "onboarding-court-20260411183453",
+      "rule_text": "onboarding_ready_lane=true",
+      "activated_at": "2026-04-11T18:35:49Z",
+      "activated_by": "user_meridian_5322393870",
+      "action_ids": [],
+      "rule_version": 13,
+      "proof_ref": "court_rule_activation:prop_f0e42b7b:v13",
+      "status": "active"
+    },
+    {
+      "id": "rule_22f64a28",
+      "org_id": "org_bc3c63f1",
+      "proposal_id": "prop_9326f7ec",
+      "title": "onboarding-court-20260413191910",
+      "rule_text": "onboarding_ready_lane=true",
+      "activated_at": "2026-04-13T19:19:43Z",
+      "activated_by": "user_meridian_5322393870",
+      "action_ids": [],
+      "rule_version": 14,
+      "proof_ref": "court_rule_activation:prop_9326f7ec:v14",
+      "status": "active"
     }
   ],
-  "count": 12,
-  "updatedAt": "2026-04-10T07:49:55Z"
+  "count": 14,
+  "updatedAt": "2026-04-13T19:19:43Z"
 }

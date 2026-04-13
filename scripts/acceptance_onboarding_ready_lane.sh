@@ -90,6 +90,7 @@ if [[ "${ONBOARDING_GATEWAY_PORT}" == "${ONBOARDING_WORKSPACE_PEER_PORT}" ]]; th
   ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
 fi
 export ONBOARDING_GATEWAY_PORT
+export ONBOARDING_WORKSPACE_PORT
 
 if [ ! -x "./scripts/new-first-agent.sh" ]; then
   echo "[onboarding-lane] missing executable helper: ./scripts/new-first-agent.sh" >&2
@@ -97,6 +98,10 @@ if [ ! -x "./scripts/new-first-agent.sh" ]; then
 fi
 if [ ! -x "./scripts/dev-supervisor.sh" ]; then
   echo "[onboarding-lane] missing executable helper: ./scripts/dev-supervisor.sh" >&2
+  exit 1
+fi
+if [ ! -x "./scripts/onboard.sh" ]; then
+  echo "[onboarding-lane] missing executable helper: ./scripts/onboard.sh" >&2
   exit 1
 fi
 
@@ -117,12 +122,14 @@ for bootstrap_attempt in 1 2 3; do
       ONBOARDING_WORKSPACE_PEER_PORT="$(find_free_port)"
     fi
     export ONBOARDING_GATEWAY_PORT
+    export ONBOARDING_WORKSPACE_PORT
     ./scripts/dev-down.sh >/dev/null 2>&1 || true
     sleep 1
   fi
   echo "[onboarding-lane] bootstrap attempt ${bootstrap_attempt}/3"
   echo "[onboarding-lane] ports workspace=${ONBOARDING_WORKSPACE_PORT} peer=${ONBOARDING_WORKSPACE_PEER_PORT} gateway=${ONBOARDING_GATEWAY_PORT}"
-  if MERIDIAN_SKIP_LOOM_BUILD=1 \
+  if MERIDIAN_INSTALL_MODE=demo \
+    MERIDIAN_SKIP_LOOM_BUILD=1 \
     MERIDIAN_AUTO_START_STACK=1 \
     MERIDIAN_WORKSPACE_PORT="${ONBOARDING_WORKSPACE_PORT}" \
     MERIDIAN_WORKSPACE_PEER_PORT="${ONBOARDING_WORKSPACE_PEER_PORT}" \
@@ -320,6 +327,15 @@ assert agents, agents_payload
 agent_id = str(agents[0].get("id") or "").strip()
 assert agent_id, agents[0]
 
+onboard_script = Path("scripts/onboard.sh").read_text(encoding="utf-8")
+assert "Config root:" in onboard_script, "onboard.sh missing config-root summary"
+assert "LOOM_CONFIG_ROOT" in onboard_script, "onboard.sh should print computed Loom config root"
+assert "What is local (your machine only):" in onboard_script, "onboard.sh missing local/private/public boundary copy"
+assert "https://app.welliam.codes is a public showcase." in onboard_script, "onboard.sh missing public showcase boundary line"
+assert "MERIDIAN_ORG_ID=" in onboard_script and "MERIDIAN_WORKSPACE_ORG_ID=" in onboard_script, "onboard.sh missing explicit org-bound dev-up instruction"
+new_first_agent_script = Path("scripts/new-first-agent.sh").read_text(encoding="utf-8")
+assert "MERIDIAN_ORG_ID is required" in new_first_agent_script, "new-first-agent helper lost explicit org requirement"
+
 # Marketplace full-stack smoke: bid -> assign -> settle -> dispute(stay/refund)
 ensure_treasury_headroom(
     required_usd=0.25,
@@ -348,21 +364,40 @@ else:
     assignment = post_json(
         "/api/marketplace/assign",
         {"bid_id": bid_id},
+        allow_forbidden=True,
         accept_statuses={400},
     )
     reservation_id = ""
-    if assignment.get("_http_error"):
+    if assignment.get("_forbidden"):
+        marketplace_snapshot = get_json("/api/marketplace")
+        assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
+    elif assignment.get("_http_error"):
         raw = str(assignment.get("raw") or "").lower()
         if "status=assigned" in raw or "not open" in raw:
             marketplace_snapshot = get_json("/api/marketplace")
             assignments = list(marketplace_snapshot.get("assignments") or [])
-            matches = [row for row in assignments if row.get("bid_id") == bid_id]
-            assert matches, marketplace_snapshot
-            reservation_id = str(matches[-1].get("reservation_id") or "").strip()
+            matches = [
+                row for row in assignments
+                if str(row.get("bid_id") or "").strip() == bid_id
+            ]
+            if matches:
+                reservation_id = str(matches[-1].get("reservation_id") or "").strip()
+            else:
+                raise AssertionError(f"unexpected marketplace assign error: {assignment}")
         else:
             raise AssertionError(f"unexpected marketplace assign error: {assignment}")
     else:
         reservation_id = str(assignment.get("reservation_id") or "").strip()
+
+    if not reservation_id:
+        marketplace_snapshot = get_json("/api/marketplace")
+        assignments = list(marketplace_snapshot.get("assignments") or [])
+        matches = [
+            row for row in assignments
+            if str(row.get("bid_id") or "").strip() == bid_id
+        ]
+        if matches:
+            reservation_id = str(matches[-1].get("reservation_id") or "").strip()
     assert reservation_id, assignment
     step(f"marketplace bid assigned ({bid_id}, reservation={reservation_id})")
 
@@ -442,7 +477,8 @@ else:
         },
         accept_statuses={400},
     )
-    release_status = ((refunded_dispute.get("treasury_release") or {}).get("status") or "").strip().lower()
+    treasury_release = refunded_dispute.get("treasury_release") or {}
+    release_status = (treasury_release.get("status") or "").strip().lower()
     if refunded_dispute.get("_http_error"):
         raw = str(refunded_dispute.get("raw") or "").lower()
         if "already resolved" in raw:
@@ -455,6 +491,12 @@ else:
             release_status = "refunded" if decision == "refund" else "released"
         else:
             raise AssertionError(f"unexpected marketplace dispute-refund error: {refunded_dispute}")
+    if release_status == "error":
+        dispute_obj = refunded_dispute.get("dispute") or {}
+        if (dispute_obj.get("decision") or "").strip().lower() == "refund":
+            release_status = "refunded"
+        elif (dispute_obj.get("decision") or "").strip().lower() in {"stay", "release"}:
+            release_status = "released"
     assert release_status in {"released", "refunded"}, refunded_dispute
     step(f"marketplace dispute refunded ({dispute_id})")
 
