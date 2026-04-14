@@ -4,7 +4,7 @@
 
 <p align="center">
   <img src="https://img.shields.io/badge/license-MIT-1f6feb?style=flat-square" alt="MIT license">
-  <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian-loom/rust.yml?branch=main&style=flat-square" alt="Build passing">
+  <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/rust.yml?branch=main&style=flat-square" alt="Build passing">
   <img src="https://img.shields.io/badge/version-0.1.16-0c1117?style=flat-square" alt="Version 0.1.16">
 </p>
 
@@ -47,7 +47,7 @@ If you want the shortest honest summary:
 ## 1-command install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian-loom/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
 The installer prefers prebuilt GitHub release assets for the current host and
@@ -827,7 +827,7 @@ See [docs/RELEASE.md](docs/RELEASE.md) for the release layout.
 
 ## Meridian stack
 
-- [meridian-loom](https://github.com/mapleleaflatte03/meridian-loom): official first-party governed local runtime
+- [meridian-loom](https://github.com/mapleleaflatte03/meridian): official first-party governed local runtime
 - [meridian-kernel](https://github.com/mapleleaflatte03/meridian-kernel): runtime-neutral governance, policy, authority, treasury, and court
 - [meridian-intelligence](https://github.com/mapleleaflatte03/meridian-intelligence): first-party workflows and public product surfaces built on Loom + Kernel
 

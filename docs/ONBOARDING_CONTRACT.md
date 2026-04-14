@@ -12,6 +12,60 @@ curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scri
 
 must produce a local state where a new user can immediately inspect governance/runtime surfaces without manual patching.
 
+## Guided Onboarding Path
+
+The authoritative first-run onboarding script:
+
+```bash
+./scripts/onboard.sh                   # interactive guided mode
+./scripts/onboard.sh --non-interactive # use defaults / env vars
+```
+
+This is the recommended path for all new users. It creates the user's own institution and first agent without importing maintainer or demo data.
+
+Alternative shortcut (skips guided setup):
+
+```bash
+./scripts/new-first-agent.sh "My Assistant"
+```
+
+## User-Customized Fields
+
+Fields collected during guided onboarding. Each can be overridden by setting the corresponding environment variable before running `onboard.sh --non-interactive`.
+
+| Field | Env var | Default | Description |
+| --- | --- | --- | --- |
+| Institution name | `MERIDIAN_INST_NAME` | `"My Workspace"` | Display name for the institution |
+| Owner user ID | `MERIDIAN_OWNER_ID` | auto-generated UUID | Identifier for the owning user |
+| Plan tier | `MERIDIAN_INST_PLAN` | `free` | One of: `free`, `starter`, `pro`, `enterprise` |
+| First agent name | `MERIDIAN_AGENT_NAME` | `"Assistant"` | Display name of the first provisioned agent |
+| First agent role | `MERIDIAN_AGENT_ROLE` | `manager` | One of: `manager`, `analyst`, `executor`, `writer` |
+| Import demo pack | `MERIDIAN_IMPORT_DEMO_PACK` | `no` | Set to `yes` to seed pre-built demo data |
+| Enable governance | `MERIDIAN_ENABLE_GOVERNANCE` | `yes` | Set to `no` to disable governance gates |
+
+## Install Modes
+
+| Mode | Description |
+| --- | --- |
+| **User** (default) | Clean-slate install. Creates the user's own institution and first agent. No demo or maintainer state. |
+| **Demo** | Like user mode, but also imports a pre-seeded demo data pack (`MERIDIAN_IMPORT_DEMO_PACK=yes`). |
+| **Maintainer** | Operator-level install. Uses existing operator credentials and state. Not for new-user onboarding. |
+
+## Data Roots
+
+| What is created | Location |
+| --- | --- |
+| Onboarding state (`onboard_state.json`) | `$MERIDIAN_ROOT/runtime/` |
+| Kernel governance state (org, capsule, treasury) | `$MERIDIAN_ROOT/kernel/` |
+| Loom CLI configuration | `~/.config/meridian-loom/` |
+| Agent configs | `~/.config/meridian-loom/agents/` |
+
+## What Is NOT Created
+
+- No remote accounts or cloud registrations
+- No data on `app.welliam.codes` or any hosted service
+- No demo or maintainer state (unless explicitly opted in via `MERIDIAN_IMPORT_DEMO_PACK=yes`)
+
 ## Required Outcomes
 
 1. Kernel state initialized (institution exists).

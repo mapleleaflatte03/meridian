@@ -80,10 +80,22 @@ cd meridian</code></pre>
     <p class="dim mt-sm">This command clones or reuses the monorepo, initializes Kernel state, and builds the Loom CLI in release mode.</p>
   </div>
 
-  <h2>3. Bring up local stack (workspace + gateway)</h2>
+  <h2>3. Run first-time onboarding</h2>
+  <div class="card">
+<pre><code>./scripts/onboard.sh</code></pre>
+    <p class="dim mt-sm">Guided flow that creates your institution, first agent, and local workspace config. Everything stays on your machine. No data is uploaded anywhere.</p>
+    <ul class="rule-list mt-sm">
+      <li>Sets: institution name, plan, first agent name and role</li>
+      <li>Demo data import: opt-in only (default: no)</li>
+      <li>Governance gates: on by default</li>
+      <li>Non-interactive: <code>MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" ./scripts/onboard.sh --non-interactive</code></li>
+    </ul>
+  </div>
+
+  <h2>4. Bring up local stack (workspace + gateway)</h2>
   <div class="card">
 <pre><code>./scripts/dev-up.sh</code></pre>
-    <p class="dim mt-sm"><code>install-full.sh</code> already runs this by default. Use it directly when you restart your machine or stop local services.</p>
+    <p class="dim mt-sm">Run this after onboarding to start workspace services.</p>
     <ul class="rule-list mt-sm">
       <li>Local API status: <code>http://127.0.0.1:8266/api/status</code></li>
       <li>Local institution template: <code>http://127.0.0.1:8266/api/institution/template</code></li>
@@ -94,7 +106,7 @@ cd meridian</code></pre>
     </ul>
   </div>
 
-  <h2>4. Create and run your first agent</h2>
+  <h2>5. Create and run your first agent (alternative)</h2>
   <div class="card">
 <pre><code>cd ~/meridian
 ./scripts/new-first-agent.sh "My Assistant"
@@ -102,9 +114,10 @@ cd meridian</code></pre>
 # Optional: run immediately
 MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre>
     <p class="dim mt-sm">Use the helper for the shortest path. It initializes Kernel state, provisions the agent, and prints the exact run command.</p>
+    <p class="dim mt-sm">Shortcut alternative to <code>onboard.sh</code> for users who want to skip the guided setup and provision an agent directly.</p>
   </div>
 
-  <h2>5. Contribute back</h2>
+  <h2>6. Contribute back</h2>
   <div class="card">
     <p>If you find gaps, contribute tests/docs/patches:</p>
     <ul class="rule-list">

@@ -21,3 +21,35 @@
 **/*.lock
 **/output/
 **/runtime/
+
+# kernel/economy runtime-generated state (see docs/STATE_CLASSIFICATION.md)
+# These files are mutated by running the system and must never be committed.
+kernel/economy/marketplace.json
+kernel/economy/court_rule_proposals.json
+kernel/economy/court_rules.json
+kernel/economy/court_votes.json
+kernel/economy/memory_graph.json
+kernel/economy/contributors.json
+kernel/economy/maintainers.json
+kernel/economy/payout_proposals.json
+kernel/economy/treasury_accounts.json
+kernel/economy/wallets.json
+kernel/economy/authority_queue.json
+kernel/economy/federation_inbox.json
+kernel/economy/funding_sources.json
+kernel/economy/payment_events.log
+kernel/economy/payment_monitor_state.json
+kernel/economy/payout_plan_preview_queue.json
+kernel/economy/revenue.json
+kernel/economy/runtime_budget_reservations.json
+kernel/economy/settlement_adapters.json
+kernel/economy/subscriptions.json
+kernel/economy/subscriptions.json.bak
+kernel/economy/transactions.jsonl
+kernel/economy/owner_ledger.json
+
+# loom runtime directories (see docs/STATE_CLASSIFICATION.md)
+loom/agents/
+loom/context/
+loom/providers/
+loom/state/

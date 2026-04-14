@@ -35,12 +35,14 @@
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-Then create your first agent:
+Then run first-time onboarding:
 
 ```bash
 cd ~/meridian
-./scripts/new-first-agent.sh "My Assistant"
+./scripts/onboard.sh
 ```
+
+This guided flow creates your institution, first agent, and local workspace config. Everything stays on your machine.
 
 ## Why Loom
 
@@ -67,20 +69,32 @@ Meridian (platform)
 
 ## Quick Start
 
-After install:
+After install, run the guided onboarding:
 
 ```bash
+# Create your institution and first agent (interactive)
+./scripts/onboard.sh
+
 # Start the local stack
 ./scripts/dev-up.sh
-
-# Create a governed agent
-./scripts/new-first-agent.sh "My Assistant"
 
 # Check system status
 curl http://127.0.0.1:8266/api/status
 
 # See proof receipts
 open http://127.0.0.1:8266/proofs
+```
+
+For non-interactive / CI usage:
+
+```bash
+MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" ./scripts/onboard.sh --non-interactive
+```
+
+Shortcut (skip guided onboarding):
+
+```bash
+./scripts/new-first-agent.sh "My Assistant"
 ```
 
 Ready-to-run gate: [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
