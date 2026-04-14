@@ -91,12 +91,6 @@ For non-interactive / CI usage:
 MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" ./scripts/onboard.sh --non-interactive
 ```
 
-Shortcut (skip guided onboarding):
-
-```bash
-./scripts/new-first-agent.sh "My Assistant"
-```
-
 Ready-to-run gate: [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
 
 ## Quick Visuals
