@@ -245,7 +245,7 @@ PUBLIC_PROOF_FALLBACK_MAX_AGE_SECONDS = max(
 )
 sys.path.insert(0, PLATFORM_DIR)
 
-from organizations import (load_orgs, set_charter, set_policy_defaults, DEFAULT_POLICY_DEFAULTS,
+from organizations import (load_orgs, get_org, set_charter, set_policy_defaults, DEFAULT_POLICY_DEFAULTS,
                            transition_lifecycle as org_transition_lifecycle,
                            list_public_institutions, list_user_institutions)
 from hands import list_hand_templates, provision_hand, provision_all_hands
@@ -1162,24 +1162,32 @@ def _get_founding_org():
 
 
 def _resolve_workspace_context(*, allow_inactive=False):
-    """Bind this live workspace process to the founding Meridian institution."""
+    """Bind this live workspace process to the configured local institution."""
     founding_org_id, founding_org = _get_founding_org()
     configured_org_id = WORKSPACE_ORG_ID
     cred_user, cred_password, credential_org_id, _credential_user_id = _load_workspace_credentials()
     credential_scope_active = bool(cred_user and cred_password and credential_org_id)
-    if configured_org_id and configured_org_id != founding_org_id:
+    if configured_org_id and credential_scope_active and credential_org_id != configured_org_id:
         raise RuntimeError(
-            f"Live workspace only supports founding org '{founding_org_id}', got '{configured_org_id}'"
+            f"Live workspace credentials must scope to configured org '{configured_org_id}', got '{credential_org_id}'"
         )
-    if credential_scope_active and credential_org_id != founding_org_id:
-        raise RuntimeError(
-            f"Live workspace credentials must scope to founding org '{founding_org_id}', got '{credential_org_id}'"
-        )
-    context_source = 'configured_org' if configured_org_id else 'founding_default'
+
+    target_org_id = configured_org_id or (credential_org_id if credential_scope_active else None) or founding_org_id
+    target_org = get_org(target_org_id) if target_org_id else None
+    if not target_org_id or not target_org:
+        raise RuntimeError(f"Configured institution not found: {target_org_id}")
+
+    if configured_org_id:
+        context_source = 'configured_org'
+    elif credential_scope_active:
+        context_source = 'credential_org'
+    else:
+        context_source = 'founding_default'
+
     if allow_inactive:
         ctx = InstitutionContext(
-            founding_org_id,
-            founding_org,
+            target_org_id,
+            target_org,
             context_source,
             WORKSPACE_BOUNDARY,
         )
@@ -1187,8 +1195,8 @@ def _resolve_workspace_context(*, allow_inactive=False):
             raise RuntimeError('No institution admitted to this context')
     else:
         ctx = InstitutionContext.bind(
-            founding_org_id,
-            founding_org,
+            target_org_id,
+            target_org,
             context_source,
             WORKSPACE_BOUNDARY,
         )

@@ -140,6 +140,59 @@ def _write_json(path, payload):
         json.dump(payload, f, indent=2)
 
 
+def _default_ledger_payload():
+    return {
+        'version': 1,
+        'schema': 'meridian-kernel-economy-v1',
+        'updatedAt': '',
+        'agents': {},
+        'treasury': {
+            'cash_usd': 0.0,
+            'reserve_floor_usd': 50.0,
+            'total_revenue_usd': 0.0,
+            'support_received_usd': 0.0,
+            'owner_capital_contributed_usd': 0.0,
+            'expenses_recorded_usd': 0.0,
+            'owner_draws_usd': 0.0,
+        },
+        'bonus_pool': {
+            'available_usd': 0.0,
+        },
+        'epoch': {
+            'number': 0,
+            'started_at': '',
+            'auth_decay_per_epoch': 5,
+        },
+        'transactions': [],
+    }
+
+
+def _normalize_ledger_payload(payload):
+    if not isinstance(payload, dict):
+        return _default_ledger_payload()
+    if isinstance(payload.get('treasury'), dict):
+        normalized = _default_ledger_payload()
+        normalized.update(payload)
+        normalized['treasury'] = {
+            **normalized['treasury'],
+            **payload.get('treasury', {}),
+        }
+        return normalized
+
+    legacy_balance = float(payload.get('balance_usd', 0.0) or 0.0)
+    normalized = _default_ledger_payload()
+    normalized.update(payload)
+    normalized['schema'] = 'meridian-kernel-economy-v1'
+    normalized['treasury'] = {
+        **normalized['treasury'],
+        'cash_usd': legacy_balance,
+    }
+    normalized['transactions'] = payload.get('transactions', [])
+    normalized.pop('balance_usd', None)
+    normalized.pop('reserved_usd', None)
+    return normalized
+
+
 def _merge_revenue_state(current, target_data):
     """Heal a split-brain revenue alias in the single-org live runtime.
 
@@ -221,12 +274,14 @@ def ensure_treasury_aliases(org_id=None):
         transactions_path = capsule_path(resolved_org_id, 'transactions.jsonl')
 
         # Initialize empty files if they don't exist
-        if not os.path.exists(ledger_path):
-            _write_json(ledger_path, {
-                'balance_usd': 0.0,
-                'reserved_usd': 0.0,
-                'transactions': [],
-            })
+        if os.path.exists(ledger_path):
+            with open(ledger_path) as f:
+                ledger_payload = json.load(f)
+            normalized_ledger = _normalize_ledger_payload(ledger_payload)
+            if normalized_ledger != ledger_payload:
+                _write_json(ledger_path, normalized_ledger)
+        else:
+            _write_json(ledger_path, _default_ledger_payload())
         if not os.path.exists(revenue_path):
             _write_json(revenue_path, {
                 'total_revenue_usd': 0.0,

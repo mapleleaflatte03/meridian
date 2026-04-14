@@ -197,6 +197,12 @@ class TestInstitutionBootstrap(unittest.TestCase):
             self.assertTrue(os.path.exists(aliases['revenue']))
             self.assertTrue(os.path.exists(aliases['transactions']))
 
+            with open(aliases['ledger']) as f:
+                ledger = json.load(f)
+            self.assertEqual(ledger['schema'], 'meridian-kernel-economy-v1')
+            self.assertEqual(ledger['treasury']['cash_usd'], 0.0)
+            self.assertEqual(ledger['treasury']['reserve_floor_usd'], 50.0)
+
 
 if __name__ == '__main__':
     unittest.main()

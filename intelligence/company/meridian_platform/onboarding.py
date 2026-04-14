@@ -8,7 +8,7 @@ import json
 import os
 
 from organizations import create_org, get_org
-from capsule import ensure_capsule, ensure_treasury_aliases
+from capsule import ensure_capsule, ensure_treasury_aliases, _normalize_ledger_payload
 
 
 def provision_institution(name, owner_id, plan='free'):
@@ -33,15 +33,18 @@ def provision_institution(name, owner_id, plan='free'):
     # Initialize treasury structure
     treasury_aliases = ensure_treasury_aliases(org_id)
 
-    # Initialize empty ledger if not exists
+    # Initialize or normalize ledger
     ledger_path = treasury_aliases['ledger']
     if not os.path.exists(ledger_path) or os.path.getsize(ledger_path) == 0:
         with open(ledger_path, 'w') as f:
-            json.dump({
-                'balance_usd': 0.0,
-                'reserved_usd': 0.0,
-                'transactions': [],
-            }, f, indent=2)
+            json.dump(_normalize_ledger_payload({}), f, indent=2)
+    else:
+        with open(ledger_path) as f:
+            ledger_payload = json.load(f)
+        normalized_ledger = _normalize_ledger_payload(ledger_payload)
+        if normalized_ledger != ledger_payload:
+            with open(ledger_path, 'w') as f:
+                json.dump(normalized_ledger, f, indent=2)
 
     # Initialize empty revenue if not exists
     revenue_path = treasury_aliases['revenue']

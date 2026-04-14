@@ -3,11 +3,11 @@
 Phase machine for the live Meridian deployment.
 
 Institution scope:
-  Founding-institution-only evaluator.  Reads from capsule-aliased ledger
-  and revenue files that resolve to economy/ledger.json and economy/revenue.json
-  for the founding org.  The _resolve_org_id() guard rejects any non-founding
-  org_id at runtime.  Multi-institution phase evaluation would require the
-  OSS kernel's phase_machine.py which accepts org_id for capsule resolution.
+  Single-institution evaluator for the org bound to the running local process.
+  Reads capsule-aliased ledger and revenue files and accepts an explicit org_id
+  when provided by the caller.  Process-level admission/boundary enforcement is
+  handled by workspace/runtime context; this module only resolves the target org
+  for state evaluation.
 
 Evaluates the institution's current maturity against the same phase model as
 the public kernel, but against live economy state and deployment-specific
@@ -70,12 +70,10 @@ def _default_org_id():
 
 
 def _resolve_org_id(org_id=None):
-    founding_org_id = _default_org_id()
-    if org_id and founding_org_id and org_id != founding_org_id:
-        raise ValueError(
-            f'Live phase machine only supports founding org {founding_org_id}, got {org_id}'
-        )
-    return org_id or founding_org_id
+    """Resolve the institution whose state should be evaluated."""
+    if org_id:
+        return org_id
+    return _default_org_id()
 
 
 # -- Phase checks (mirrors kernel/phase_machine.py with deployment context) ---

@@ -73,8 +73,9 @@ class TestOnboardingAPI(unittest.TestCase):
             # Ledger should have initial structure
             with open(treasury['ledger']) as f:
                 ledger = json.load(f)
-            self.assertEqual(ledger['balance_usd'], 0.0)
-            self.assertEqual(ledger['reserved_usd'], 0.0)
+            self.assertEqual(ledger['schema'], 'meridian-kernel-economy-v1')
+            self.assertEqual(ledger['treasury']['cash_usd'], 0.0)
+            self.assertEqual(ledger['treasury']['reserve_floor_usd'], 50.0)
             self.assertIsInstance(ledger['transactions'], list)
 
             # Revenue should have initial structure
@@ -83,6 +84,24 @@ class TestOnboardingAPI(unittest.TestCase):
             self.assertEqual(revenue['total_revenue_usd'], 0.0)
             self.assertIsInstance(revenue['clients'], dict)
             self.assertIsInstance(revenue['orders'], dict)
+
+    def test_normalize_ledger_payload_converts_legacy_flat_shape(self):
+        """Unit test: _normalize_ledger_payload migrates flat balance_usd to nested treasury."""
+        from capsule import _normalize_ledger_payload
+
+        legacy = {
+            'balance_usd': 10.0,
+            'reserved_usd': 0.0,
+            'transactions': [],
+        }
+        normalized = _normalize_ledger_payload(legacy)
+
+        self.assertIn('treasury', normalized)
+        self.assertEqual(normalized['treasury']['cash_usd'], 10.0)
+        self.assertEqual(normalized['schema'], 'meridian-kernel-economy-v1')
+        self.assertNotIn('balance_usd', normalized)
+        self.assertNotIn('reserved_usd', normalized)
+        self.assertIsInstance(normalized['transactions'], list)
 
 
 if __name__ == '__main__':

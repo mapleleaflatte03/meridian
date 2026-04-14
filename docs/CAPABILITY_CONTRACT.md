@@ -29,14 +29,18 @@ Capabilities that exist in code or server state but lack documented install path
 |-----------|----------|-----|
 | Agent memory service | `loom-core/memory_service` | No user-facing memory management CLI/UI |
 | Channel system | `loom-core/channels` | Channel config not part of onboarding |
-| WASM sandbox execution | `loom-shadow/wasm_host` | No user docs for WASM agent extensions |
+| WASM sandbox execution | `loom-shadow` / `loom-core/wasm_host` | No user docs for WASM agent extensions |
+| Recurring heartbeat scheduler | `loom-core/recurring`, `loom-core/recurring_executor` | Implemented in Rust; no end-user schedule management docs or UI |
 | Side hustle / autonomous work loops | `intelligence/.../side_hustle.py` | API exists but not in onboarding or public docs |
 | Federation inbox | `kernel/economy/federation_inbox.json` | Multi-institution federation not user-documented |
 | Revenue/subscription tracking | `kernel/economy/revenue.py`, `subscriptions.json` | Internal operator tooling only |
 | Authority warrant queue | `kernel/economy/authority_queue.json` | Queue exists but no user-facing approval UI |
 | Payout proposals | `kernel/economy/payout_proposals.json` | Contributor payout not user-documented |
-| Agent profiles (aegis, atlas, forge, etc.) | `loom/agents/` | Pre-built agents not in onboarding path |
-| Commonwealth research features | `intelligence/.../commonwealth.py` | Research module, not general-purpose |
+| Agent profiles (aegis, atlas, forge, etc.) | `loom/agents/` | Pre-built agents registered in `registry.json` but not in onboarding path |
+| Extension install/validate/remove | `loom extension` CLI commands | Local extension contracts work; no community discovery or registry |
+| Commonwealth research features | `intelligence/.../commonwealth.py` | Research/federation module; not general-purpose |
+| Capsule system | `kernel/kernel/capsule.py` | Org-scoped state isolation works; not documented for end users |
+| Operator provisioning scripts | `ops_provision_hot_wallet.py`, economy ops scripts | Operator-facing tooling with no user docs |
 
 ## Tier 3 — Missing / Required for Replacement-Grade Parity
 
@@ -44,19 +48,19 @@ Capabilities needed for Meridian to serve as a full replacement for Claw-family 
 
 | Capability | Why Needed | Status |
 |-----------|-----------|--------|
-| Browser/action automation | Claw-family systems interact with browser; Loom doesn't yet | Not implemented |
-| Persistent background scheduler | Cron-style recurring agent jobs without manual restart | Partial (supervisor exists, no scheduler) |
-| Multi-agent orchestration UI | Visual/CLI orchestration of multiple agents | Not implemented (registry exists) |
-| Plugin/extension marketplace | Discover and install community agent extensions | Not implemented |
-| Research/retrieval pipelines | Web search, document retrieval, RAG-style workflows | Brain router exists, no pipeline orchestration |
-| Interactive chat interface | Terminal or web chat with governed agent | Not implemented |
-| Migration tooling from Claw | Import Claw configs/agents into Meridian | `migrate-from-claw.sh` exists, untested |
+| Browser/action automation | Claw-family systems interact with the browser; Loom has a `builtin:browser.navigate` WASM stub but no real browser execution backend | Stub only — not implemented end-to-end |
+| Persistent background scheduler (cron-style) | Recurring executor and heartbeat infrastructure exist in Rust but there is no user-facing cron scheduler for arbitrary agent jobs without manual restart | Partial (recurring infra exists, no user-facing scheduler surface) |
+| Multi-agent orchestration UI | Visual or CLI orchestration of multiple agents across roles; registry and team_topology exist but no orchestration workflow is exposed | Not implemented (registry + topology exist, no orchestration surface) |
+| Plugin/extension marketplace | Discover and install community agent extensions; local `loom extension` commands exist but there is no remote registry or discovery | Not implemented (local extension install only) |
+| Research/retrieval pipelines | Web search, document retrieval, RAG-style workflows; brain router exists but no pipeline orchestration layer | Brain router exists, no pipeline orchestration |
+| Interactive chat interface | Terminal or web chat with a governed agent; `commands_surface: message+interactive` appears in connect profiles but is not a shipped user surface | Not implemented |
+| Migration tooling from Claw | Import Claw configs/agents into Meridian | `migrate-from-claw.sh` exists, untested and undocumented |
 | Cross-device sync | Sync agent state across machines | Not implemented (local-first by design) |
 | Hosted/cloud option | Optional remote execution for teams | Not implemented (local-first by design) |
 
 ## Governance Wrapping
 
-Every Tier 1 and Tier 2 capability operates within Meridian's governance contract:
+Every Tier 1 and Tier 2 capability above operates within Meridian's governance contract:
 
 | Governance Layer | What It Covers |
 |-----------------|----------------|

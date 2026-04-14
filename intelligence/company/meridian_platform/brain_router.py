@@ -243,6 +243,25 @@ def resolve_manager_plan(*, runtime_env: dict[str, str] | None = None, model_hin
     }
 
 
+def _run_claude_cli_default(*, command: list[str], env_vars: dict[str, str], timeout: int) -> dict[str, Any]:
+    """Run claude CLI which outputs to stdout (no -o file flag)."""
+    completed = subprocess.run(
+        command,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+        env=env_vars,
+    )
+    output_text = (completed.stdout or "").strip()
+    return {
+        "returncode": completed.returncode,
+        "stdout": output_text,
+        "stderr": (completed.stderr or "").strip(),
+        "output_text": output_text,
+    }
+
+
 def _run_cli_default(*, command: list[str], env_vars: dict[str, str], timeout: int) -> dict[str, Any]:
     output_path = None
     try:
@@ -314,22 +333,30 @@ def execute_manager(
             f"User request:\n{user_prompt.strip()}\n\n"
             "Return only the final answer for the user."
         )
-        command = [
-            str(plan.get("cli_bin") or "codex"),
-            "exec",
-            "-m",
-            model_name,
-            "--skip-git-repo-check",
-            "--ephemeral",
-            "--color",
-            "never",
-            "-C",
-            "/home/ubuntu",
-            prompt,
-        ]
+        cli_bin = str(plan.get("cli_bin") or "codex")
+        is_claude_cli = os.path.basename(cli_bin) == "claude"
+        if is_claude_cli:
+            command = [cli_bin, "-p", prompt, "--output-format", "text"]
+            if model_name:
+                command.extend(["--model", model_name])
+        else:
+            command = [
+                cli_bin,
+                "exec",
+                "-m",
+                model_name,
+                "--skip-git-repo-check",
+                "--ephemeral",
+                "--color",
+                "never",
+                "-C",
+                "/home/ubuntu",
+                prompt,
+            ]
         env_vars = dict(env)
-        env_vars["HOME"] = str(plan.get("cli_home") or env_vars.get("HOME") or "").strip()
-        cli_runner = run_cli or _run_cli_default
+        if not is_claude_cli:
+            env_vars["HOME"] = str(plan.get("cli_home") or env_vars.get("HOME") or "").strip()
+        cli_runner = run_cli or (_run_claude_cli_default if is_claude_cli else _run_cli_default)
         try:
             cli_result = cli_runner(command=command, env_vars=env_vars, timeout=timeout)
         except Exception as exc:
