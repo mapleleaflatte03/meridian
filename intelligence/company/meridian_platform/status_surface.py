@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+import concurrent.futures
+import copy
 import datetime
 import os
+import threading
+import time
 
 import audit
 from audit import stats as audit_stats
@@ -25,6 +29,15 @@ import alerting
 
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE = os.path.dirname(os.path.dirname(PLATFORM_DIR))
+OBSERVABILITY_SNAPSHOT_CACHE_TTL_SECONDS = float(
+    os.environ.get('MERIDIAN_OBSERVABILITY_SNAPSHOT_CACHE_TTL_SECONDS', '5')
+)
+OBSERVABILITY_SNAPSHOT_CACHE = {}
+OBSERVABILITY_SNAPSHOT_CACHE_LOCK = threading.Lock()
+OBSERVABILITY_SNAPSHOT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=2,
+    thread_name_prefix='meridian_observability_snapshot',
+)
 
 
 def _utc_now():
@@ -346,8 +359,7 @@ def _governance_metrics(org_id):
     }
 
 
-def observability_snapshot(org_id):
-    """Return the file-backed metrics inputs and an explicit SLO status."""
+def _build_observability_snapshot(org_id, *, record_alerts=True):
     audit_summary = audit_stats(org_id)
     audit_events = audit_tail_events(1, org_id=org_id)
     audit_latest = audit_events[-1] if audit_events else {}
@@ -408,7 +420,14 @@ def observability_snapshot(org_id):
         'alerts': [],
     }
     try:
-        alert_run = alerting.record_slo_alerts(slo, org_id=org_id)
+        if record_alerts:
+            alert_run = alerting.record_slo_alerts(slo, org_id=org_id)
+        else:
+            alert_run = {
+                **alert_run,
+                'recording_mode': 'read_only',
+                'state': 'not_recorded_on_status_read',
+            }
         alert_log = alerting.alert_surface_snapshot(org_id)
         alert_queue = alerting.alert_queue_snapshot(org_id)
     except Exception as exc:
@@ -417,6 +436,12 @@ def observability_snapshot(org_id):
         alert_run['error'] = message
         alert_log['error'] = message
         alert_queue['error'] = message
+
+    if not record_alerts:
+        slo = {
+            **slo,
+            'alert_recording_mode': 'read_only',
+        }
 
     return {
         'backend': persistence.get('backend', 'file-backed-jsonl'),
@@ -431,6 +456,155 @@ def observability_snapshot(org_id):
         'alert_log': alert_log,
         'alert_queue': alert_queue,
     }
+
+
+def observability_snapshot(org_id, *, record_alerts=True):
+    """Return the file-backed metrics inputs and an explicit SLO status."""
+    now = time.time()
+    cache_key = f"{str(org_id or '')}:alerts:{'on' if record_alerts else 'off'}"
+    ttl_seconds = max(1.0, OBSERVABILITY_SNAPSHOT_CACHE_TTL_SECONDS)
+    with OBSERVABILITY_SNAPSHOT_CACHE_LOCK:
+        cached_entry = OBSERVABILITY_SNAPSHOT_CACHE.get(cache_key)
+        if not isinstance(cached_entry, dict):
+            cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
+            OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
+        fetched_at = float(cached_entry.get('fetched_at') or 0.0)
+        payload = cached_entry.get('payload')
+        refresh_future = cached_entry.get('refresh_future')
+        if (
+            isinstance(payload, dict)
+            and fetched_at > 0
+            and (now - fetched_at) <= ttl_seconds
+        ):
+            return copy.deepcopy(payload)
+        if not isinstance(payload, dict):
+            pass  # cold start — fall through to synchronous build below
+        elif refresh_future and not refresh_future.done():
+            return copy.deepcopy(payload)
+        else:
+            if not (refresh_future and not refresh_future.done()):
+                refresh_future = OBSERVABILITY_SNAPSHOT_EXECUTOR.submit(
+                    _build_observability_snapshot,
+                    org_id,
+                    record_alerts=record_alerts,
+                )
+                cached_entry['refresh_future'] = refresh_future
+            return copy.deepcopy(payload)
+
+    if not isinstance(payload, dict):
+        snapshot = _build_observability_snapshot(org_id, record_alerts=record_alerts)
+        with OBSERVABILITY_SNAPSHOT_CACHE_LOCK:
+            cached_entry = OBSERVABILITY_SNAPSHOT_CACHE.get(cache_key)
+            if not isinstance(cached_entry, dict):
+                cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
+                OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
+            cached_entry['fetched_at'] = time.time()
+            cached_entry['payload'] = copy.deepcopy(snapshot)
+            cached_entry['refresh_future'] = None
+        return snapshot
+    try:
+        snapshot = refresh_future.result(timeout=0.2)
+    except concurrent.futures.TimeoutError:
+        return {
+            'backend': 'file-backed-jsonl',
+            'db': {},
+            'export': {
+                'route': '/metrics',
+                'content_type': 'text/plain; charset=utf-8',
+            },
+            'metrics': {},
+            'slo': {
+                'policy_name': 'meridian_observability_slo_v1',
+                'status': 'degraded',
+                'issues': ['observability snapshot refresh in progress'],
+                'alert_recording_mode': 'read_only' if not record_alerts else 'active',
+            },
+            'alerting': {
+                'policy_name': 'meridian_observability_slo_v1',
+                'event_count': 0,
+                'delivery_count': 0,
+                'changed_objectives': [],
+                'state': 'refresh_in_progress',
+                'recording_mode': 'read_only' if not record_alerts else 'active',
+            },
+            'alert_log': {
+                'route': '/api/alerts',
+                'queue_route': '/api/alerts/dispatch',
+                'policy_name': 'meridian_observability_slo_v1',
+                'active_count': 0,
+                'events': [],
+                'state': 'refresh_in_progress',
+            },
+            'alert_queue': {
+                'route': '/api/alerts',
+                'dispatch_route': '/api/alerts/dispatch',
+                'policy_name': 'meridian_observability_slo_v1',
+                'active_count': 0,
+                'alerts': [],
+                'queue_count': 0,
+                'pending_delivery_count': 0,
+                'delivered_count': 0,
+                'state': 'refresh_in_progress',
+            },
+        }
+    except Exception as exc:
+        with OBSERVABILITY_SNAPSHOT_CACHE_LOCK:
+            cached_entry = OBSERVABILITY_SNAPSHOT_CACHE.get(cache_key)
+            if isinstance(cached_entry, dict):
+                cached_entry['refresh_future'] = None
+        return {
+            'backend': 'file-backed-jsonl',
+            'db': {},
+            'export': {
+                'route': '/metrics',
+                'content_type': 'text/plain; charset=utf-8',
+            },
+            'metrics': {},
+            'slo': {
+                'policy_name': 'meridian_observability_slo_v1',
+                'status': 'degraded',
+                'issues': [f'observability snapshot refresh failed: {exc}'],
+                'alert_recording_mode': 'read_only' if not record_alerts else 'active',
+            },
+            'alerting': {
+                'policy_name': 'meridian_observability_slo_v1',
+                'event_count': 0,
+                'delivery_count': 0,
+                'changed_objectives': [],
+                'state': 'refresh_failed',
+                'error': str(exc),
+                'recording_mode': 'read_only' if not record_alerts else 'active',
+            },
+            'alert_log': {
+                'route': '/api/alerts',
+                'queue_route': '/api/alerts/dispatch',
+                'policy_name': 'meridian_observability_slo_v1',
+                'active_count': 0,
+                'events': [],
+                'state': 'refresh_failed',
+            },
+            'alert_queue': {
+                'route': '/api/alerts',
+                'dispatch_route': '/api/alerts/dispatch',
+                'policy_name': 'meridian_observability_slo_v1',
+                'active_count': 0,
+                'alerts': [],
+                'queue_count': 0,
+                'pending_delivery_count': 0,
+                'delivered_count': 0,
+                'state': 'refresh_failed',
+            },
+        }
+
+    with OBSERVABILITY_SNAPSHOT_CACHE_LOCK:
+        cached_entry = OBSERVABILITY_SNAPSHOT_CACHE.get(cache_key)
+        if not isinstance(cached_entry, dict):
+            cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
+            OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
+        cached_entry['fetched_at'] = time.time()
+        cached_entry['payload'] = copy.deepcopy(snapshot)
+        cached_entry['refresh_future'] = None
+    return snapshot
 
 
 def observability_metrics_text(org_id):

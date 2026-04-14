@@ -30,6 +30,9 @@ import slo_policy
 
 
 class StatusSurfaceTests(unittest.TestCase):
+    def setUp(self):
+        status_surface.OBSERVABILITY_SNAPSHOT_CACHE.clear()
+
     def test_persistence_snapshot_exposes_concrete_file_backed_seams(self):
         with tempfile.TemporaryDirectory() as tmp:
             orgs_path = os.path.join(tmp, 'organizations.json')
@@ -61,6 +64,45 @@ class StatusSurfaceTests(unittest.TestCase):
         self.assertIn('cases_store.py', seam_owners)
         self.assertIn('pilot_intake.py', seam_owners)
         self.assertIn('subscription_preview_queue.py', seam_owners)
+
+    def test_observability_snapshot_read_only_mode_skips_alert_recording(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            orgs_path = os.path.join(tmp, 'organizations.json')
+            audit_path = os.path.join(tmp, 'audit_log.jsonl')
+            metering_path = os.path.join(tmp, 'metering.jsonl')
+            alert_path = os.path.join(tmp, 'slo_alert_log.jsonl')
+            with open(audit_path, 'w') as f:
+                f.write(json.dumps({
+                    'org_id': 'org_founding',
+                    'agent_id': 'agent_main',
+                    'action': 'status_check',
+                    'outcome': 'success',
+                    'timestamp': '2026-03-25T00:25:00Z',
+                }) + '\n')
+            with open(metering_path, 'w') as f:
+                f.write(json.dumps({
+                    'org_id': 'org_founding',
+                    'agent_id': 'agent_main',
+                    'metric': 'mcp_tool_call',
+                    'quantity': 1,
+                    'unit': 'calls',
+                    'cost_usd': 1.25,
+                    'timestamp': '2026-03-25T00:26:00Z',
+                }) + '\n')
+            with (
+                mock.patch.object(organizations, 'ORGS_FILE', orgs_path),
+                mock.patch.object(audit, 'AUDIT_FILE', audit_path),
+                mock.patch.object(metering, 'METERING_FILE', metering_path),
+                mock.patch.object(alerting, 'ALERT_LOG_FILE', alert_path),
+                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
+                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
+                mock.patch.object(alerting, 'record_slo_alerts', side_effect=AssertionError('should not record')),
+            ):
+                snapshot = status_surface.observability_snapshot('org_founding', record_alerts=False)
+
+        self.assertEqual(snapshot['alerting']['recording_mode'], 'read_only')
+        self.assertEqual(snapshot['alerting']['state'], 'not_recorded_on_status_read')
+        self.assertEqual(snapshot['slo']['alert_recording_mode'], 'read_only')
 
     def test_observability_snapshot_summarizes_file_backed_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -160,6 +202,7 @@ class StatusSurfaceTests(unittest.TestCase):
                 mock.patch.object(metering, 'METERING_FILE', metering_path),
                 mock.patch.object(audit, '_now', return_value='2026-03-25T00:30:00Z'),
                 mock.patch.object(metering, '_now', return_value='2026-03-25T00:30:00Z'),
+                mock.patch.object(audit, '_ASYNC_DB_WRITE_ENABLED', False),
             ):
                 audit.log_event(
                     'org_founding',

@@ -172,6 +172,24 @@ WORKSPACE_CREDENTIALS_FILE = os.environ.get(
     'MERIDIAN_WORKSPACE_CREDENTIALS_FILE',
     '/etc/caddy/.workspace_credentials',
 )
+AGGREGATE_PROOF_STATUS_CACHE_TTL_SECONDS = float(
+    os.environ.get('MERIDIAN_AGGREGATE_PROOF_STATUS_CACHE_TTL_SECONDS', '30')
+)
+RECURSIVE_PROOF_STATUS_CACHE_TTL_SECONDS = float(
+    os.environ.get('MERIDIAN_RECURSIVE_PROOF_STATUS_CACHE_TTL_SECONDS', '30')
+)
+_AGGREGATE_PROOF_STATUS_CACHE = {
+    'fetched_at': 0.0,
+    'payload': None,
+    'refresh_future': None,
+}
+_RECURSIVE_PROOF_STATUS_CACHE = {
+    'fetched_at': 0.0,
+    'payload': None,
+    'refresh_future': None,
+}
+_AGGREGATE_PROOF_STATUS_CACHE_LOCK = threading.Lock()
+_RECURSIVE_PROOF_STATUS_CACHE_LOCK = threading.Lock()
 RUNTIME_HOST_IDENTITY_FILE = os.environ.get(
     'MERIDIAN_RUNTIME_HOST_IDENTITY_FILE',
     os.path.join(PLATFORM_DIR, 'host_identity.json'),
@@ -4499,7 +4517,22 @@ def _dynamic_court_status(org_id: str | None = None) -> dict:
 
 def _aggregate_proof_status():
     """Collect aggregate proof status from the kernel proof bundle."""
-    try:
+    now = time.time()
+    ttl_seconds = max(1.0, AGGREGATE_PROOF_STATUS_CACHE_TTL_SECONDS)
+    with _AGGREGATE_PROOF_STATUS_CACHE_LOCK:
+        cached_payload = _AGGREGATE_PROOF_STATUS_CACHE.get('payload')
+        fetched_at = float(_AGGREGATE_PROOF_STATUS_CACHE.get('fetched_at') or 0.0)
+        refresh_future = _AGGREGATE_PROOF_STATUS_CACHE.get('refresh_future')
+        if (
+            isinstance(cached_payload, dict)
+            and fetched_at > 0
+            and (now - fetched_at) <= ttl_seconds
+        ):
+            return dict(cached_payload)
+        if isinstance(cached_payload, dict) and refresh_future and not refresh_future.done():
+            return dict(cached_payload)
+
+    def _build_payload():
         bundle = _kernel_public_proof_bundle(base_url=None)
         agg = bundle.get('aggregate') or {}
         return {
@@ -4508,7 +4541,30 @@ def _aggregate_proof_status():
             'member_count': int(agg.get('member_count', 0)),
             'integrity_hash': agg.get('integrity_hash'),
         }
+
+    with _AGGREGATE_PROOF_STATUS_CACHE_LOCK:
+        cached_payload = _AGGREGATE_PROOF_STATUS_CACHE.get('payload')
+        refresh_future = _AGGREGATE_PROOF_STATUS_CACHE.get('refresh_future')
+        if not (refresh_future and not refresh_future.done()):
+            refresh_future = _public_kernel_proof_executor.submit(_build_payload)
+            _AGGREGATE_PROOF_STATUS_CACHE['refresh_future'] = refresh_future
+        if isinstance(cached_payload, dict):
+            return dict(cached_payload)
+
+    try:
+        payload = refresh_future.result(timeout=0.2)
+        with _AGGREGATE_PROOF_STATUS_CACHE_LOCK:
+            _AGGREGATE_PROOF_STATUS_CACHE['fetched_at'] = time.time()
+            _AGGREGATE_PROOF_STATUS_CACHE['payload'] = dict(payload)
+            if _AGGREGATE_PROOF_STATUS_CACHE.get('refresh_future') is refresh_future:
+                _AGGREGATE_PROOF_STATUS_CACHE['refresh_future'] = None
+        return payload
+    except concurrent.futures.TimeoutError:
+        return {'topology': 'hypercube', 'bundle_id': None, 'member_count': 0, 'integrity_hash': None}
     except Exception:
+        with _AGGREGATE_PROOF_STATUS_CACHE_LOCK:
+            if _AGGREGATE_PROOF_STATUS_CACHE.get('refresh_future') is refresh_future:
+                _AGGREGATE_PROOF_STATUS_CACHE['refresh_future'] = None
         return {'topology': 'hypercube', 'bundle_id': None, 'member_count': 0, 'integrity_hash': None}
 
 
@@ -4548,10 +4604,25 @@ def _proof_agents_for_org(org_id: str | None):
 
 def _recursive_proof_status():
     """Collect recursive proof chain status from the Loom runtime."""
-    try:
+    now = time.time()
+    ttl_seconds = max(1.0, RECURSIVE_PROOF_STATUS_CACHE_TTL_SECONDS)
+    with _RECURSIVE_PROOF_STATUS_CACHE_LOCK:
+        cached_payload = _RECURSIVE_PROOF_STATUS_CACHE.get('payload')
+        fetched_at = float(_RECURSIVE_PROOF_STATUS_CACHE.get('fetched_at') or 0.0)
+        refresh_future = _RECURSIVE_PROOF_STATUS_CACHE.get('refresh_future')
+        if (
+            isinstance(cached_payload, dict)
+            and fetched_at > 0
+            and (now - fetched_at) <= ttl_seconds
+        ):
+            return dict(cached_payload)
+        if isinstance(cached_payload, dict) and refresh_future and not refresh_future.done():
+            return dict(cached_payload)
+
+    def _build_payload():
         proof_agents = _proof_agents_for_org(WORKSPACE_ORG_ID)
         proof = _collect_runtime_proof_snapshot(
-            include_service_probe=True,
+            include_service_probe=False,
             proof_agents=proof_agents or None,
             bound_org_id=WORKSPACE_ORG_ID,
         )
@@ -4561,7 +4632,30 @@ def _recursive_proof_status():
             'depth': int(rp.get('depth', 0)),
             'root': rp.get('root'),
         }
+
+    with _RECURSIVE_PROOF_STATUS_CACHE_LOCK:
+        cached_payload = _RECURSIVE_PROOF_STATUS_CACHE.get('payload')
+        refresh_future = _RECURSIVE_PROOF_STATUS_CACHE.get('refresh_future')
+        if not (refresh_future and not refresh_future.done()):
+            refresh_future = _public_kernel_proof_executor.submit(_build_payload)
+            _RECURSIVE_PROOF_STATUS_CACHE['refresh_future'] = refresh_future
+        if isinstance(cached_payload, dict):
+            return dict(cached_payload)
+
+    try:
+        payload = refresh_future.result(timeout=0.2)
+        with _RECURSIVE_PROOF_STATUS_CACHE_LOCK:
+            _RECURSIVE_PROOF_STATUS_CACHE['fetched_at'] = time.time()
+            _RECURSIVE_PROOF_STATUS_CACHE['payload'] = dict(payload)
+            if _RECURSIVE_PROOF_STATUS_CACHE.get('refresh_future') is refresh_future:
+                _RECURSIVE_PROOF_STATUS_CACHE['refresh_future'] = None
+        return payload
+    except concurrent.futures.TimeoutError:
+        return {'enabled': False, 'depth': 0, 'root': None}
     except Exception:
+        with _RECURSIVE_PROOF_STATUS_CACHE_LOCK:
+            if _RECURSIVE_PROOF_STATUS_CACHE.get('refresh_future') is refresh_future:
+                _RECURSIVE_PROOF_STATUS_CACHE['refresh_future'] = None
         return {'enabled': False, 'depth': 0, 'root': None}
 
 
@@ -4661,7 +4755,7 @@ def api_status(context_source='configured_default', institution_context=None):
         if d.get('expires_at', '') > _now() and d.get('org_id') in (None, '', org_id)
     ]
 
-    observability = status_surface.observability_snapshot(org_id)
+    observability = status_surface.observability_snapshot(org_id, record_alerts=False)
     alert_queue = observability.get('alert_queue', {}) if isinstance(observability, dict) else {}
     slo = observability.get('slo', {}) if isinstance(observability, dict) else {}
 
