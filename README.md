@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Meridian — Run AI agents locally with built-in governance and verifiable proof.</strong><br>
-  Install Loom. Create an agent. Every action gets a receipt.
+  Install Loom. Run guided onboarding. Start your local stack. Every action gets a receipt.
 </p>
 
 <p align="center">
