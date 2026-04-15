@@ -105,17 +105,19 @@ Live surfaces:
 ![Proofs](docs/assets/proofs-desktop.png)
 ![Workflows](docs/assets/workflows-desktop.png)
 
-## Dev Commands
+## Dev and Maintenance Commands
+
+These are developer/maintenance commands. **First-time users: start with `./scripts/onboard.sh` above, not these.**
 
 ```bash
-# Start/stop local workspace + gateway
+# Start/stop local workspace + gateway (run after onboarding)
 ./scripts/dev-up.sh
 ./scripts/dev-down.sh
 
 # Supervisor (auto-restart 18901/19001/8266)
 ./scripts/dev-supervisor.sh status
 
-# Bootstrap only (without auto-start)
+# Install only (without auto-start stack)
 MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
 
 # Loom tests
