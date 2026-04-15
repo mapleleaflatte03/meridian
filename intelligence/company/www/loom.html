@@ -131,37 +131,37 @@
     <p class="dim small mt-md">This bootstraps Kernel + Intelligence and builds the Loom CLI at <code>$HOME/meridian/loom/target/release/loom</code>.</p>
   </div>
 
-  <h2 class="reveal">Create your first governed local agent</h2>
+  <h2 class="reveal">Canonical first-run path</h2>
   <div class="process-rail reveal">
     <div class="process-step">
       <div class="process-number">01</div>
-      <h3>Initialize Kernel</h3>
-      <p>Run <code>python3 quickstart.py --init-only</code> inside <code>$MERIDIAN_ROOT/kernel</code>.</p>
+      <h3>Run onboarding</h3>
+      <p>Use <code>./scripts/onboard.sh</code> to create your local institution and first governed agent.</p>
     </div>
     <div class="process-step">
       <div class="process-number">02</div>
-      <h3>Provision agent</h3>
-      <p><code>loom new-agent</code> registers the agent and creates the local folder.</p>
+      <h3>Start local stack</h3>
+      <p>Run <code>./scripts/dev-up.sh</code> to start your local workspace and gateway services.</p>
     </div>
     <div class="process-step">
       <div class="process-number">03</div>
-      <h3>Run loop</h3>
-      <p><code>loom run-agent</code> starts the persistent heartbeat-driven local process.</p>
+      <h3>Inspect local proof</h3>
+      <p>Open your local proof and status routes at <code>http://127.0.0.1:8266</code>.</p>
     </div>
     <div class="process-step">
       <div class="process-number">04</div>
-      <h3>Inspect proof</h3>
-      <p>Use <code>loom status</code>, <code>loom channel deliveries</code>, and <code>loom memory search</code>.</p>
+      <h3>Operate agent loops</h3>
+      <p>Use <code>loom run-agent</code>, <code>loom status</code>, and memory tools after onboarding completes.</p>
     </div>
   </div>
 
   <div class="card">
     <pre class="sample-box"><code class="language-bash">cd ~/meridian
-./scripts/new-first-agent.sh "My Assistant"
+./scripts/onboard.sh
 
-# optional immediate run
-MERIDIAN_RUN_AGENT_NOW=1 ./scripts/new-first-agent.sh "My Assistant"</code></pre>
-    <p class="dim small mt-md">This helper initializes kernel state, provisions the agent, and prints run instructions with the resolved slug.</p>
+# non-interactive option
+MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="My Assistant" ./scripts/onboard.sh --non-interactive</code></pre>
+    <p class="dim small mt-md">Guided onboarding is the canonical first-run path. It creates your local institution and first governed agent before you start local services.</p>
   </div>
 
   <h2 class="reveal">What Loom provides today</h2>

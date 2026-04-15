@@ -108,27 +108,27 @@
   </div>
 
   <section id="institution-status" class="reveal">
-    <h2>Local onboarding and demo boundaries</h2>
-    <p class="section-intro compact-copy">The public homepage stays on public-safe surfaces. Your local institution, operator workspace, and personal membership live behind explicit onboarding or sign-in flows.</p>
+    <h2>Public product surface. Local runtime after onboarding.</h2>
+    <p class="section-intro compact-copy">The homepage explains what Meridian is and how to start. Your institution, operator workspace, and private runtime stay on your machine after you complete guided onboarding.</p>
 
     <div class="feature-grid">
       <article class="feature-card">
-        <h3>User mode</h3>
-        <p>Default install is clean-slate. No institution is seeded for you. Create your first local institution during onboarding, then start your local stack.</p>
+        <h3>Public website</h3>
+        <p>This page is the public product surface: install path, product contract, proof examples, and documentation links.</p>
       </article>
       <article class="feature-card">
-        <h3>Demo mode</h3>
-        <p>Pre-seeded demo behavior remains available only through explicit opt-in install mode selection.</p>
+        <h3>Local first run</h3>
+        <p>The normal first-run path is install, run <code>./scripts/onboard.sh</code>, then start your local stack. No institution is silently created before onboarding.</p>
       </article>
       <article class="feature-card">
-        <h3>Maintainer mode</h3>
-        <p>Maintainer/operator seeded flows remain available only through explicit opt-in mode selection.</p>
+        <h3>Private runtime</h3>
+        <p>Your institution data, operator workspace, and personal membership stay local. They are not loaded into the public homepage by default.</p>
       </article>
     </div>
 
     <div class="card small">
-      <p><strong>Public institution directory</strong></p>
-      <p class="dim small">Browse shared institutions from your local stack after onboarding and starting the operator workspace. The public homepage does not auto-request any private or operator API.</p>
+      <p><strong>Public/private boundary</strong></p>
+      <p class="dim small">Use the public site to understand Meridian and start installation. Use your local stack after onboarding for private runtime control surfaces at <code>http://127.0.0.1:8266</code>.</p>
     </div>
   </section>
 
@@ -198,48 +198,34 @@
   </section>
 
   <section id="research-hub" class="reveal">
-    <h2>Research Hub</h2>
-    <p class="section-intro compact-copy">Use these canonical artifacts to study, reproduce, and extend governance for local agent systems.</p>
+    <h2>Canonical docs and proof surfaces</h2>
+    <p class="section-intro compact-copy">Use these public surfaces to verify the product contract, install path, and proof model before you move into your private local runtime.</p>
     <div class="lane-grid">
       <div class="lane-card">
-        <span class="lane-kicker">Architecture</span>
-        <h3>System map</h3>
-        <p>Cross-module view of runtime, governance core, and workspace orchestration.</p>
+        <span class="lane-kicker">Start here</span>
+        <h3>Get Started path</h3>
+        <p>The canonical first-run path is one-command install, guided onboarding, then local stack startup.</p>
         <div class="lane-tags">
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/intelligence/ARCHITECTURE.md" target="_blank" rel="noopener">ARCHITECTURE.md</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/ROADMAP.md" target="_blank" rel="noopener">ROADMAP.md</a>
+          <a class="lane-tag" href="/pilot">/pilot</a>
+          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/ONBOARDING_CONTRACT.md" target="_blank" rel="noopener">ONBOARDING_CONTRACT.md</a>
         </div>
       </div>
       <div class="lane-card">
-        <span class="lane-kicker">Protocol</span>
-        <h3>PoGE surfaces</h3>
-        <p>Runtime proof routes and kernel proof bundles for verifiable execution boundaries.</p>
+        <span class="lane-kicker">Proof</span>
+        <h3>Public demo evidence</h3>
+        <p>Inspect public proof samples and workflow demos without confusing them with your own private local runtime.</p>
         <div class="lane-tags">
           <a class="lane-tag" href="/proofs">Proofs Surface</a>
-          <a class="lane-tag" href="/api/kernel-proof-bundle">Kernel Bundle</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/RESEARCH_HUB.md" target="_blank" rel="noopener">RESEARCH_HUB.md</a>
+          <a class="lane-tag" href="/workflows">Workflows Surface</a>
+          <a class="lane-tag" href="/boundary">Boundary note</a>
         </div>
       </div>
       <div class="lane-card">
-        <span class="lane-kicker">Artifacts</span>
-        <h3>Reproducible research</h3>
-        <p>Open RFCs, benchmark contracts, and governance case studies with command-level reproduction steps.</p>
+        <span class="lane-kicker">Docs</span>
+        <h3>Repo contract</h3>
+        <p>Read the canonical monorepo README and contribution docs that match the live website contract.</p>
         <div class="lane-tags">
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/tree/main/docs/research" target="_blank" rel="noopener">docs/research</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0001-recursive-poge-aggregation.md" target="_blank" rel="noopener">RFC-0001</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0002-hypercube-proof-aggregation.md" target="_blank" rel="noopener">RFC-0002</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0003-dynamic-constitutional-court.md" target="_blank" rel="noopener">RFC-0003</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/RFC-0004-on-device-verifiable-agent-marketplace.md" target="_blank" rel="noopener">RFC-0004</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/research/BENCHMARK-0001-governance-runtime-baseline.md" target="_blank" rel="noopener">BENCHMARK-0001</a>
-        </div>
-      </div>
-      <div class="lane-card">
-        <span class="lane-kicker">Contribution</span>
-        <h3>Open RFC path</h3>
-        <p>Propose governance changes through issues and PRs in the canonical monorepo.</p>
-        <div class="lane-tags">
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/issues/new/choose" target="_blank" rel="noopener">Open Issue</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/pulls" target="_blank" rel="noopener">Pull Requests</a>
+          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">README</a>
           <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a>
         </div>
       </div>
@@ -273,8 +259,8 @@
   </section>
 
   <section class="live-snapshot-section reveal">
-    <h2>Live Runtime Proof Sample</h2>
-    <p class="section-intro compact-copy">Live proof state from the public demo host — not your local stack. After onboarding and running <code>./scripts/dev-up.sh</code>, your own governance dashboard is at <code>http://127.0.0.1:8266</code>.</p>
+    <h2>Public demo proof sample</h2>
+    <p class="section-intro compact-copy">These charts come from the public demo host, not your private local runtime. After onboarding and running <code>./scripts/dev-up.sh</code>, your own local control surfaces live at <code>http://127.0.0.1:8266</code>.</p>
     <div class="live-chart-grid" data-live-snapshot>
       <div class="live-chart-card">
         <span class="lane-kicker">Runtime</span>
