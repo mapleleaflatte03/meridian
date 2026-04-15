@@ -643,7 +643,7 @@ def _normalize_subscriptions(data, org_id=None):
                 record = dict(item)
                 record['draft_id'] = record.get('draft_id') or draft_id
                 drafts[record['draft_id']] = record
-    for draft_id, record in list(drafts.items()):
+    for draft_id, record in drafts.items():
         drafts[draft_id] = _normalize_draft_subscription(record, org_id, existing=record)
     payload['draft_subscriptions'] = drafts
 

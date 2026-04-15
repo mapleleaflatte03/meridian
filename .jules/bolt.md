@@ -1,0 +1,3 @@
+## 2024-04-15 - Unnecessary list(dict.items()) allocations in performance paths
+**Learning:** The Python codebase frequently loops over `list(dictionary.items())` when modifying dictionary values, but does not add or remove keys during the loop. This creates an unnecessary O(N) memory allocation and copy. In loops where the dictionary keys are not changing, `dictionary.items()` should be used directly to iterate efficiently.
+**Action:** Replaced `list(dictionary.items())` with `dictionary.items()` in queue and registry initialization paths where values are mutated but keys remain stable. This reduces memory overhead and improves performance on initialization paths.

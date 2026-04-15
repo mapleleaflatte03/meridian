@@ -125,7 +125,7 @@ def _normalize_store(data, org_id):
                 record = dict(item)
                 record['preview_id'] = record.get('preview_id') or preview_id
                 previews[record['preview_id']] = record
-    for preview_id, record in list(previews.items()):
+    for preview_id, record in previews.items():
         record = dict(record or {})
         record['state'] = _normalize_state(record.get('state') or record.get('preview_state') or '')
         record['preview_state'] = record.get('preview_state') or record['state']
