@@ -226,23 +226,24 @@ class BrainRouterTests(unittest.TestCase):
                 {
                     "route_id": "route_primary",
                     "route_type": "cli_session",
-                    "provider_profile": "claude_local",
+                    "provider_ref": "provider.alpha",
+                    "provider_profile": "provider.alpha",
                     "model": "",
-                    "auth_profile_order": ["claude_local"],
+                    "auth_profile_order": ["auth.alpha"],
                     "fallback_route_ids": [],
                     "approved_by_authority": True,
                     "allowed_by_treasury": True,
                     "disabled": False,
                     "disable_reason": "",
-                    "cli_bin": "claude",
+                    "cli_bin": "alpha-cli",
                     "cli_home": "",
                 }
             ],
             "auth_profiles": {
-                "claude_local": {
-                    "profile_name": "claude_local",
+                "auth.alpha": {
+                    "profile_name": "auth.alpha",
                     "auth_mode": "session_home",
-                    "cli_bin": "claude",
+                    "cli_bin": "alpha-cli",
                     "cli_home": "",
                     "auth_env": "",
                     "key_env_pool": [],
@@ -259,7 +260,7 @@ class BrainRouterTests(unittest.TestCase):
         plan = brain_router.resolve_manager_plan(runtime_env=env, model_hint="")
         self.assertEqual(plan["policy_source"], "institution_policy")
         self.assertEqual(plan["transport_kind"], "cli_session")
-        self.assertEqual(plan["cli_bin"], "claude")
+        self.assertEqual(plan["cli_bin"], "alpha-cli")
 
     def test_resolve_manager_plan_raises_when_policy_missing_route(self):
         env = {
@@ -320,9 +321,10 @@ class BrainRouterTests(unittest.TestCase):
                 {
                     "route_id": "route_primary",
                     "route_type": "cli_session",
-                    "provider_profile": "claude_local",
-                    "model": "claude-opus-4-6",
-                    "auth_profile_order": ["claude_local"],
+                    "provider_ref": "provider.alpha",
+                    "provider_profile": "provider.alpha",
+                    "model": "alpha-model-v1",
+                    "auth_profile_order": ["auth.alpha"],
                     "fallback_route_ids": ["route_backup"],
                     "approved_by_authority": True,
                     "allowed_by_treasury": True,
@@ -333,7 +335,7 @@ class BrainRouterTests(unittest.TestCase):
                     "last_health": "healthy",
                     "last_health_reason": "",
                     "last_failover": {"reason_class": "billing", "reason_detail": "quota exhausted"},
-                    "cli_bin": "claude",
+                    "cli_bin": "alpha-cli",
                     "cli_home": "",
                     "endpoint": "",
                     "auth_env": "",
@@ -343,9 +345,10 @@ class BrainRouterTests(unittest.TestCase):
                 {
                     "route_id": "route_backup",
                     "route_type": "http_json",
-                    "provider_profile": "backup_http",
-                    "model": "backup-model",
-                    "auth_profile_order": ["backup_http"],
+                    "provider_ref": "provider.beta",
+                    "provider_profile": "provider.beta",
+                    "model": "beta-model",
+                    "auth_profile_order": ["auth.beta"],
                     "fallback_route_ids": [],
                     "approved_by_authority": True,
                     "allowed_by_treasury": False,
@@ -365,16 +368,16 @@ class BrainRouterTests(unittest.TestCase):
                 },
             ],
             "auth_profiles": {
-                "claude_local": {
-                    "profile_name": "claude_local",
+                "auth.alpha": {
+                    "profile_name": "auth.alpha",
                     "auth_mode": "session_home",
-                    "cli_bin": "claude",
+                    "cli_bin": "alpha-cli",
                     "cli_home": "",
                     "auth_env": "",
                     "key_env_pool": [],
                 },
-                "backup_http": {
-                    "profile_name": "backup_http",
+                "auth.beta": {
+                    "profile_name": "auth.beta",
                     "auth_mode": "bearer_pool",
                     "cli_bin": "",
                     "cli_home": "",
@@ -406,18 +409,18 @@ class BrainRouterTests(unittest.TestCase):
         self.assertTrue(status["configured"])
         self.assertEqual(status["active_route"]["route_id"], "route_primary")
         self.assertEqual(status["active_route"]["route_type"], "cli_session")
-        self.assertEqual(status["active_route"]["provider_profile"], "claude_local")
-        self.assertEqual(status["active_route"]["model"], "claude-opus-4-6")
-        self.assertEqual(status["active_route"]["auth_profile_order"], ["claude_local"])
+        self.assertEqual(status["active_route"]["provider_profile"], "provider.alpha")
+        self.assertEqual(status["active_route"]["model"], "alpha-model-v1")
+        self.assertEqual(status["active_route"]["auth_profile_order"], ["auth.alpha"])
         self.assertEqual(status["active_route"]["disable_reason"], "")
         self.assertEqual(status["active_route"]["last_failover"]["reason_class"], "billing")
         self.assertTrue(status["active_route"]["approved_by_authority"])
         self.assertTrue(status["active_route"]["allowed_by_treasury"])
         self.assertEqual(status["fallback_chain"][0]["route_id"], "route_backup")
         self.assertEqual(status["selected_plan"]["route_id"], "route_primary")
-        self.assertEqual(status["selected_plan"]["provider_profile"], "claude_local")
-        self.assertEqual(status["selected_plan"]["model"], "claude-opus-4-6")
-        self.assertEqual(status["selected_plan"]["auth_profile"], "claude_local")
+        self.assertEqual(status["selected_plan"]["provider_profile"], "provider.alpha")
+        self.assertEqual(status["selected_plan"]["model"], "alpha-model-v1")
+        self.assertEqual(status["selected_plan"]["auth_profile"], "auth.alpha")
         self.assertEqual(status["selected_plan"]["transport_kind"], "cli_session")
 
     def test_execute_manager_falls_back_to_next_policy_route(self):
@@ -433,45 +436,47 @@ class BrainRouterTests(unittest.TestCase):
                 {
                     "route_id": "route_primary",
                     "route_type": "cli_session",
-                    "provider_profile": "codex_local",
+                    "provider_ref": "provider.primary",
+                    "provider_profile": "provider.primary",
                     "model": "",
-                    "auth_profile_order": ["codex_local"],
+                    "auth_profile_order": ["auth.primary"],
                     "fallback_route_ids": ["route_fallback"],
                     "approved_by_authority": True,
                     "allowed_by_treasury": True,
                     "disabled": False,
                     "disable_reason": "",
-                    "cli_bin": "codex",
-                    "cli_home": "/tmp/codex-home",
+                    "cli_bin": "primary-cli",
+                    "cli_home": "/tmp/primary-home",
                 },
                 {
                     "route_id": "route_fallback",
                     "route_type": "cli_session",
-                    "provider_profile": "claude_local",
+                    "provider_ref": "provider.backup",
+                    "provider_profile": "provider.backup",
                     "model": "",
-                    "auth_profile_order": ["claude_local"],
+                    "auth_profile_order": ["auth.backup"],
                     "fallback_route_ids": [],
                     "approved_by_authority": True,
                     "allowed_by_treasury": True,
                     "disabled": False,
                     "disable_reason": "",
-                    "cli_bin": "claude",
+                    "cli_bin": "backup-cli",
                     "cli_home": "",
                 },
             ],
             "auth_profiles": {
-                "codex_local": {
-                    "profile_name": "codex_local",
+                "auth.primary": {
+                    "profile_name": "auth.primary",
                     "auth_mode": "session_home",
-                    "cli_bin": "codex",
-                    "cli_home": "/tmp/codex-home",
+                    "cli_bin": "primary-cli",
+                    "cli_home": "/tmp/primary-home",
                     "auth_env": "",
                     "key_env_pool": [],
                 },
-                "claude_local": {
-                    "profile_name": "claude_local",
+                "auth.backup": {
+                    "profile_name": "auth.backup",
                     "auth_mode": "session_home",
-                    "cli_bin": "claude",
+                    "cli_bin": "backup-cli",
                     "cli_home": "",
                     "auth_env": "",
                     "key_env_pool": [],
@@ -499,7 +504,7 @@ class BrainRouterTests(unittest.TestCase):
 
         def fake_run_cli(*, command, env_vars, timeout):
             calls.append(command)
-            if command[0] == "codex":
+            if command[0] == "primary-cli":
                 return {
                     "returncode": 1,
                     "stdout": "",
@@ -524,8 +529,8 @@ class BrainRouterTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["output_text"], "fallback success")
         self.assertTrue(any(trace.get("route_failover") for trace in result.get("failover_trace", [])))
-        self.assertEqual(calls[0][0], "codex")
-        self.assertEqual(calls[1][0], "claude")
+        self.assertEqual(calls[0][0], "primary-cli")
+        self.assertEqual(calls[1][0], "backup-cli")
         self.assertTrue(len(health_updates) >= 2)
 
 

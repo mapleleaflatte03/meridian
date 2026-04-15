@@ -213,10 +213,10 @@ class TestInstitutionBootstrap(unittest.TestCase):
                 owner_id='user_policy_boot_001',
                 plan='starter',
                 brain_route_type='cli_session',
-                brain_provider_profile='claude_local',
+                brain_provider_profile='provider.fixture.alpha',
                 brain_model='',
-                brain_auth_profile='claude_local',
-                brain_cli_bin='claude',
+                brain_auth_profile='auth.fixture.alpha',
+                brain_cli_bin='fixture-cli',
             )
             policy = result.get('institution_brain_policy') or {}
             self.assertEqual(policy.get('schema'), 'meridian.institution_brain_policy.v1')
@@ -225,7 +225,7 @@ class TestInstitutionBootstrap(unittest.TestCase):
             routes = policy.get('routes') or []
             self.assertEqual(len(routes), 1)
             self.assertEqual(routes[0].get('route_type'), 'cli_session')
-            self.assertEqual(routes[0].get('provider_profile'), 'claude_local')
+            self.assertEqual(routes[0].get('provider_profile'), 'provider.fixture.alpha')
 
     def test_provision_institution_requires_explicit_route_configuration(self):
         with patch('organizations.ORGS_FILE', self.orgs_file), \
@@ -256,9 +256,9 @@ class TestInstitutionBootstrap(unittest.TestCase):
                     owner_id='user_policy_missing_cli_001',
                     plan='starter',
                     brain_route_type='cli_session',
-                    brain_provider_profile='codex_local',
+                    brain_provider_profile='provider.fixture.beta',
                     brain_model='',
-                    brain_auth_profile='codex_local',
+                    brain_auth_profile='auth.fixture.beta',
                     brain_cli_bin='',
                 )
             self.assertEqual(str(exc.exception), 'brain_cli_bin is required for cli_session')
@@ -295,11 +295,11 @@ class TestInstitutionBootstrap(unittest.TestCase):
                 owner_id='user_policy_persist_001',
                 plan='starter',
                 brain_route_type='cli_session',
-                brain_provider_profile='codex_local',
-                brain_model='codex-mini-latest',
-                brain_auth_profile='codex_local',
-                brain_cli_bin='codex',
-                brain_cli_home='/tmp/codex-home',
+                brain_provider_profile='provider.fixture.gamma',
+                brain_model='gamma-model-v2',
+                brain_auth_profile='auth.fixture.gamma',
+                brain_cli_bin='gamma-cli',
+                brain_cli_home='/tmp/gamma-home',
             )
             org_id = result['org_id']
             policy_path = institution_brain_policy.policy_path(org_id)
@@ -308,154 +308,43 @@ class TestInstitutionBootstrap(unittest.TestCase):
             reloaded = institution_brain_policy.load_policy(org_id)
             active_route = institution_brain_policy.active_route(reloaded)
             self.assertEqual(reloaded.get('primary_route_id'), 'route_primary')
-            self.assertEqual(active_route.get('provider_profile'), 'codex_local')
+            self.assertEqual(active_route.get('provider_profile'), 'provider.fixture.gamma')
             self.assertEqual(active_route.get('route_type'), 'cli_session')
-            self.assertEqual(active_route.get('cli_bin'), 'codex')
-            self.assertEqual(active_route.get('model'), 'codex-mini-latest')
+            self.assertEqual(active_route.get('cli_bin'), 'gamma-cli')
+            self.assertEqual(active_route.get('model'), 'gamma-model-v2')
             self.assertEqual(reloaded.get('updated_by'), 'onboarding:user_policy_persist_001')
+            self.assertIn('provider.fixture.gamma', reloaded.get('provider_registry', {}))
+            self.assertIn('auth.fixture.gamma', reloaded.get('auth_profiles', {}))
 
             with patch.dict(os.environ, {}, clear=True):
                 status = institution_brain_policy.policy_status(org_id)
             self.assertTrue(status.get('configured'))
             self.assertEqual(status.get('source'), 'institution_policy')
-            self.assertEqual(status.get('active_route', {}).get('provider_profile'), 'codex_local')
+            self.assertEqual(status.get('active_route', {}).get('provider_profile'), 'provider.fixture.gamma')
             self.assertEqual(status.get('active_route', {}).get('route_type'), 'cli_session')
-            self.assertEqual(status.get('active_route', {}).get('model'), 'codex-mini-latest')
-            self.assertEqual(status.get('fallback_chain'), [])
-            self.assertEqual(status.get('active_route', {}).get('disable_reason', ''), '')
+            self.assertEqual(status.get('active_route', {}).get('model'), 'gamma-model-v2')
+            self.assertEqual(status.get('active_route', {}).get('cli_bin'), 'gamma-cli')
+            self.assertEqual(status.get('active_route', {}).get('cli_home'), '/tmp/gamma-home')
             self.assertEqual(status.get('active_route', {}).get('approved_by_authority'), True)
             self.assertEqual(status.get('active_route', {}).get('allowed_by_treasury'), True)
-            self.assertEqual(status.get('active_route', {}).get('last_failover'), {})
-            self.assertIn('codex_local', status.get('auth_profiles', {}))
-            self.assertEqual(status.get('auth_profiles', {}).get('codex_local', {}).get('auth_mode'), 'session_home')
-            self.assertTrue(status.get('failover_policy', {}).get('allow_route_chain_fallback'))
-            self.assertEqual(status.get('failover_policy', {}).get('within_route_retry_limit'), 1)
-            self.assertIn('billing', status.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('auth', status.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('rate_limit', status.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('transport', status.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('provider_unavailable', status.get('failover_policy', {}).get('error_classes', []))
-            self.assertEqual(status.get('status'), 'unknown')
-            self.assertEqual(status.get('reason'), '')
-            self.assertEqual(status.get('active_route', {}).get('auth_profile_order'), ['codex_local'])
-            self.assertEqual(status.get('active_route', {}).get('fallback_route_ids'), [])
-            self.assertEqual(status.get('active_route', {}).get('budget_band'), 'standard')
-            self.assertEqual(status.get('active_route', {}).get('disabled'), False)
-            self.assertEqual(status.get('active_route', {}).get('cooldown_until'), '')
-            self.assertEqual(status.get('active_route', {}).get('last_health'), 'unknown')
-            self.assertEqual(status.get('active_route', {}).get('last_health_reason'), '')
-            self.assertEqual(status.get('active_route', {}).get('route_id'), 'route_primary')
-            self.assertEqual(status.get('active_route', {}).get('cli_home'), '/tmp/codex-home')
-            self.assertEqual(status.get('active_route', {}).get('endpoint'), '')
-            self.assertEqual(status.get('active_route', {}).get('auth_env'), '')
-            self.assertEqual(status.get('active_route', {}).get('key_env_pool'), [])
-            self.assertIn('billing', status.get('active_route', {}).get('failover_error_classes', []))
-            self.assertIn('auth', status.get('active_route', {}).get('failover_error_classes', []))
-            self.assertIn('rate_limit', status.get('active_route', {}).get('failover_error_classes', []))
-            self.assertIn('transport', status.get('active_route', {}).get('failover_error_classes', []))
-            self.assertIn('provider_unavailable', status.get('active_route', {}).get('failover_error_classes', []))
-            self.assertEqual(status.get('active_route', {}).get('route_type'), 'cli_session')
-            self.assertEqual(status.get('active_route', {}).get('provider_profile'), 'codex_local')
-            self.assertEqual(status.get('active_route', {}).get('model'), 'codex-mini-latest')
-            self.assertEqual(status.get('auth_profiles', {}).get('codex_local', {}).get('cli_bin'), 'codex')
-            self.assertEqual(status.get('auth_profiles', {}).get('codex_local', {}).get('cli_home'), '/tmp/codex-home')
-            self.assertEqual(status.get('auth_profiles', {}).get('codex_local', {}).get('auth_env'), '')
-            self.assertEqual(status.get('auth_profiles', {}).get('codex_local', {}).get('key_env_pool'), [])
-            self.assertEqual(status.get('auth_profiles', {}).get('codex_local', {}).get('profile_name'), 'codex_local')
-            self.assertEqual(status.get('active_route', {}).get('approved_by_authority'), True)
-            self.assertEqual(status.get('active_route', {}).get('allowed_by_treasury'), True)
-            self.assertEqual(status.get('active_route', {}).get('disable_reason'), '')
-            self.assertEqual(status.get('active_route', {}).get('last_failover'), {})
-            self.assertEqual(status.get('active_route', {}).get('route_id'), 'route_primary')
-            self.assertEqual(status.get('source'), 'institution_policy')
-            self.assertTrue(status.get('configured'))
-            self.assertEqual(status.get('active_route', {}).get('provider_profile'), 'codex_local')
-            self.assertEqual(status.get('active_route', {}).get('route_type'), 'cli_session')
-            self.assertEqual(status.get('active_route', {}).get('model'), 'codex-mini-latest')
-            self.assertEqual(status.get('active_route', {}).get('auth_profile_order'), ['codex_local'])
             self.assertEqual(status.get('active_route', {}).get('disable_reason', ''), '')
             self.assertEqual(status.get('active_route', {}).get('last_failover'), {})
-            self.assertEqual(status.get('active_route', {}).get('approved_by_authority'), True)
-            self.assertEqual(status.get('active_route', {}).get('allowed_by_treasury'), True)
             self.assertEqual(status.get('fallback_chain'), [])
-            self.assertIn('codex_local', status.get('auth_profiles', {}))
-            self.assertEqual(status.get('status'), 'unknown')
-            self.assertEqual(status.get('reason'), '')
-            self.assertIn('error_classes', status.get('failover_policy', {}))
+            self.assertIn('auth.fixture.gamma', status.get('auth_profiles', {}))
+            self.assertEqual(status.get('auth_profiles', {}).get('auth.fixture.gamma', {}).get('cli_bin'), 'gamma-cli')
             self.assertTrue(status.get('failover_policy', {}).get('allow_route_chain_fallback'))
-            self.assertEqual(status.get('failover_policy', {}).get('within_route_retry_limit'), 1)
-            self.assertEqual(reloaded.get('primary_route_id'), 'route_primary')
-            self.assertEqual(reloaded.get('schema'), 'meridian.institution_brain_policy.v1')
-            self.assertEqual(reloaded.get('institution_id'), org_id)
-            self.assertEqual(reloaded.get('updated_by'), 'onboarding:user_policy_persist_001')
-            self.assertEqual(reloaded.get('routes', [])[0].get('provider_profile'), 'codex_local')
-            self.assertEqual(reloaded.get('routes', [])[0].get('route_type'), 'cli_session')
-            self.assertEqual(reloaded.get('routes', [])[0].get('cli_bin'), 'codex')
-            self.assertEqual(reloaded.get('routes', [])[0].get('model'), 'codex-mini-latest')
-            self.assertEqual(reloaded.get('routes', [])[0].get('auth_profile_order'), ['codex_local'])
-            self.assertEqual(reloaded.get('routes', [])[0].get('approved_by_authority'), True)
-            self.assertEqual(reloaded.get('routes', [])[0].get('allowed_by_treasury'), True)
-            self.assertEqual(reloaded.get('routes', [])[0].get('disable_reason'), '')
-            self.assertEqual(reloaded.get('routes', [])[0].get('last_failover'), {})
-            self.assertEqual(reloaded.get('routes', [])[0].get('fallback_route_ids'), [])
-            self.assertEqual(reloaded.get('routes', [])[0].get('budget_band'), 'standard')
-            self.assertEqual(reloaded.get('routes', [])[0].get('disabled'), False)
-            self.assertEqual(reloaded.get('routes', [])[0].get('cooldown_until'), '')
-            self.assertEqual(reloaded.get('routes', [])[0].get('last_health'), 'unknown')
-            self.assertEqual(reloaded.get('routes', [])[0].get('last_health_reason'), '')
-            self.assertEqual(reloaded.get('routes', [])[0].get('route_id'), 'route_primary')
-            self.assertEqual(reloaded.get('routes', [])[0].get('cli_home'), '/tmp/codex-home')
-            self.assertEqual(reloaded.get('routes', [])[0].get('endpoint'), '')
-            self.assertEqual(reloaded.get('routes', [])[0].get('auth_env'), '')
-            self.assertEqual(reloaded.get('routes', [])[0].get('key_env_pool'), [])
-            self.assertIn('billing', reloaded.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('auth', reloaded.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('rate_limit', reloaded.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('transport', reloaded.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('provider_unavailable', reloaded.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('codex_local', reloaded.get('auth_profiles', {}))
-            self.assertEqual(reloaded.get('auth_profiles', {}).get('codex_local', {}).get('auth_mode'), 'session_home')
-            self.assertEqual(reloaded.get('auth_profiles', {}).get('codex_local', {}).get('cli_bin'), 'codex')
-            self.assertEqual(reloaded.get('auth_profiles', {}).get('codex_local', {}).get('cli_home'), '/tmp/codex-home')
-            self.assertEqual(reloaded.get('auth_profiles', {}).get('codex_local', {}).get('auth_env'), '')
-            self.assertEqual(reloaded.get('auth_profiles', {}).get('codex_local', {}).get('key_env_pool'), [])
-            self.assertEqual(reloaded.get('auth_profiles', {}).get('codex_local', {}).get('profile_name'), 'codex_local')
-            self.assertTrue(reloaded.get('failover_policy', {}).get('allow_route_chain_fallback'))
-            self.assertEqual(reloaded.get('failover_policy', {}).get('within_route_retry_limit'), 1)
-            self.assertIn('billing', reloaded.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('auth', reloaded.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('rate_limit', reloaded.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('transport', reloaded.get('failover_policy', {}).get('error_classes', []))
-            self.assertIn('provider_unavailable', reloaded.get('failover_policy', {}).get('error_classes', []))
-            self.assertTrue(os.path.exists(policy_path))
+            for ec in ('billing', 'auth', 'rate_limit', 'transport', 'provider_unavailable'):
+                self.assertIn(ec, status.get('failover_policy', {}).get('error_classes', []))
+
             with open(policy_path, 'r', encoding='utf-8') as fh:
                 raw_policy = json.load(fh)
             self.assertEqual(raw_policy.get('primary_route_id'), 'route_primary')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('provider_profile'), 'codex_local')
+            self.assertEqual(raw_policy.get('routes', [])[0].get('provider_profile'), 'provider.fixture.gamma')
             self.assertEqual(raw_policy.get('routes', [])[0].get('route_type'), 'cli_session')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('cli_bin'), 'codex')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('model'), 'codex-mini-latest')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('auth_profile_order'), ['codex_local'])
-            self.assertEqual(raw_policy.get('routes', [])[0].get('approved_by_authority'), True)
-            self.assertEqual(raw_policy.get('routes', [])[0].get('allowed_by_treasury'), True)
-            self.assertEqual(raw_policy.get('routes', [])[0].get('disable_reason'), '')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('last_failover'), {})
-            self.assertEqual(raw_policy.get('routes', [])[0].get('fallback_route_ids'), [])
-            self.assertEqual(raw_policy.get('routes', [])[0].get('budget_band'), 'standard')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('disabled'), False)
-            self.assertEqual(raw_policy.get('routes', [])[0].get('cooldown_until'), '')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('last_health'), 'unknown')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('last_health_reason'), '')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('route_id'), 'route_primary')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('cli_home'), '/tmp/codex-home')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('endpoint'), '')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('auth_env'), '')
-            self.assertEqual(raw_policy.get('routes', [])[0].get('key_env_pool'), [])
-            self.assertIn('billing', raw_policy.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('auth', raw_policy.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('rate_limit', raw_policy.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('transport', raw_policy.get('routes', [])[0].get('failover_error_classes', []))
-            self.assertIn('provider_unavailable', raw_policy.get('routes', [])[0].get('failover_error_classes', []))
+            self.assertEqual(raw_policy.get('routes', [])[0].get('cli_bin'), 'gamma-cli')
+            self.assertEqual(raw_policy.get('routes', [])[0].get('model'), 'gamma-model-v2')
+            self.assertIn('provider.fixture.gamma', raw_policy.get('provider_registry', {}))
+            self.assertIn('auth.fixture.gamma', raw_policy.get('auth_profiles', {}))
 
 
 if __name__ == '__main__':

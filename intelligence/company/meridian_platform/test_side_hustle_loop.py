@@ -119,11 +119,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Generated blog post about AI governance',
-                'model': 'claude-sonnet-4-6',
-                'provider_profile': 'claude_local',
+                'model': 'fixture-model-v1',
+                'provider_profile': 'provider.fixture.alpha',
                 'policy_source': 'institution_policy',
                 'policy_route_id': 'route_primary',
-                'policy_auth_profile': 'claude_local',
+                'policy_auth_profile': 'provider.fixture.alpha',
             }
             mock_mg.append_node.return_value = ('proof_xyz_blog_post', 1)
 
@@ -146,10 +146,10 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
         self.assertIn('settlement_receipt', result)
         self.assertIn('split', result)
         self.assertEqual(result['split']['total_usd'], 25.0)
-        self.assertEqual(result['provider_profile'], 'claude_local')
+        self.assertEqual(result['provider_profile'], 'provider.fixture.alpha')
         self.assertEqual(result['policy_source'], 'institution_policy')
         self.assertEqual(result['policy_route_id'], 'route_primary')
-        self.assertEqual(result['policy_auth_profile'], 'claude_local')
+        self.assertEqual(result['policy_auth_profile'], 'provider.fixture.alpha')
         self.assertIsInstance(result['failover_trace'], list)
 
     def test_run_side_hustle_blocked_by_court(self):
@@ -204,11 +204,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Freelance task output',
-                'model': 'claude-sonnet-4-6',
-                'provider_profile': 'claude_local',
+                'model': 'fixture-model-v1',
+                'provider_profile': 'provider.fixture.alpha',
                 'policy_source': 'institution_policy',
                 'policy_route_id': 'route_primary',
-                'policy_auth_profile': 'claude_local',
+                'policy_auth_profile': 'provider.fixture.alpha',
             }
             mock_mg.append_node.return_value = ('memory_freelance_777', 3)
 
@@ -256,11 +256,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Generated blog post content about AI governance',
-                'model': 'claude-sonnet-4-6',
-                'provider_profile': 'claude_local',
+                'model': 'fixture-model-v1',
+                'provider_profile': 'provider.fixture.alpha',
                 'policy_source': 'institution_policy',
                 'policy_route_id': 'route_primary',
-                'policy_auth_profile': 'claude_local',
+                'policy_auth_profile': 'provider.fixture.alpha',
             }
 
             # Mock memory_graph.append_node to return hash and depth
@@ -306,11 +306,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Content output',
-                'model': 'claude-sonnet-4-6',
-                'provider_profile': 'claude_local',
+                'model': 'fixture-model-v1',
+                'provider_profile': 'provider.fixture.alpha',
                 'policy_source': 'institution_policy',
                 'policy_route_id': 'route_primary',
-                'policy_auth_profile': 'claude_local',
+                'policy_auth_profile': 'provider.fixture.alpha',
             }
             mock_mg.append_node.return_value = ('memory_xyz789', 10)
 
@@ -342,12 +342,12 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
                 'output_text': '',
                 'error_code': 'all_routes_disabled_by_billing_or_cooldown',
                 'error_metadata': {'org_id': self.org_id, 'route_id': 'route_primary'},
-                'provider_profile': 'codex_local',
+                'provider_profile': 'provider.fixture.beta',
                 'transport_kind': 'cli_session',
                 'auth_mode': 'session_home',
                 'policy_source': 'institution_policy',
                 'policy_route_id': 'route_primary',
-                'policy_auth_profile': 'codex_local',
+                'policy_auth_profile': 'provider.fixture.beta',
                 'failover_trace': [],
             }
             result = run_side_hustle(
@@ -364,11 +364,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             self.assertIn('reason', result)
             self.assertIn('bid_id', result)
             self.assertEqual(result['execution_error_code'], 'all_routes_disabled_by_billing_or_cooldown')
-            self.assertEqual(result['provider_profile'], 'codex_local')
+            self.assertEqual(result['provider_profile'], 'provider.fixture.beta')
             self.assertEqual(result['transport_kind'], 'cli_session')
             self.assertEqual(result['policy_source'], 'institution_policy')
             self.assertEqual(result['policy_route_id'], 'route_primary')
-            self.assertEqual(result['policy_auth_profile'], 'codex_local')
+            self.assertEqual(result['policy_auth_profile'], 'provider.fixture.beta')
             self.assertEqual(result['execution_error_metadata']['org_id'], self.org_id)
             self.assertEqual(result['execution_error_metadata']['route_id'], 'route_primary')
             self.assertIsInstance(result['failover_trace'], list)
