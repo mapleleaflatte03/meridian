@@ -26,6 +26,8 @@ def provision_institution(
     brain_endpoint='',
     brain_auth_env='',
     brain_key_env_pool=None,
+    brain_provider_entry_id='',
+    brain_model_entry_id='',
 ):
     """
     Create a new institution with full isolated bootstrap.
@@ -90,6 +92,12 @@ def provision_institution(
     if brain_route_type == 'http_json' and not str(brain_auth_env or '').strip() and not list(brain_key_env_pool or []):
         raise ValueError('brain_auth_env or brain_key_env_pool is required for http_json')
 
+    provider_entry_id = str(brain_provider_entry_id or brain_provider_profile or '').strip()
+    if not provider_entry_id:
+        raise ValueError('brain_provider_entry_id is required')
+
+    model_entry_id = str(brain_model_entry_id or '').strip()
+
     institution_brain_policy_doc = institution_brain_policy.configure_policy(
         org_id,
         route_type=brain_route_type,
@@ -103,7 +111,26 @@ def provision_institution(
         auth_env=brain_auth_env,
         key_env_pool=list(brain_key_env_pool or []),
         fallback_routes=[],
+        provider_entry_id=provider_entry_id,
+        model_entry_id=model_entry_id,
     )
+
+    provider_registry = institution_brain_policy_doc.get('provider_registry') or {}
+    model_registry = institution_brain_policy_doc.get('model_registry') or {}
+    active_route = next(
+        (
+            route for route in (institution_brain_policy_doc.get('routes') or [])
+            if str(route.get('route_id') or '') == str(institution_brain_policy_doc.get('primary_route_id') or '')
+        ),
+        (institution_brain_policy_doc.get('routes') or [{}])[0] if (institution_brain_policy_doc.get('routes') or []) else {},
+    )
+    active_provider_ref = str(active_route.get('provider_ref') or active_route.get('provider_profile') or '').strip()
+    active_model_ref = str(active_route.get('model_ref') or '').strip() and str(active_route.get('model_ref') or '').strip() or ''
+
+    institution_brain_policy_doc['active_provider'] = dict(provider_registry.get(active_provider_ref) or {})
+    institution_brain_policy_doc['active_model'] = dict(model_registry.get(active_model_ref) or {}) if active_model_ref else {}
+    institution_brain_policy_doc['provider_registry'] = dict(provider_registry)
+    institution_brain_policy_doc['model_registry'] = dict(model_registry)
 
     return {
         'org_id': org_id,

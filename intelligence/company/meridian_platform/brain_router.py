@@ -233,8 +233,13 @@ def _policy_route_to_plan(route: dict[str, Any], policy: dict[str, Any], *, mode
         if token:
             key_pool.append(token)
 
+    provider_ref = str(route.get("provider_ref") or route.get("provider_profile") or auth_profile_name or "").strip() or DEFAULT_MANAGER_PROFILE
+    model_ref = str(route.get("model_ref") or "").strip()
+    provider_registry = dict(policy.get("provider_registry") or {})
+    model_registry = dict(policy.get("model_registry") or {})
+
     return {
-        "profile_name": str(route.get("provider_profile") or auth_profile_name or "").strip() or DEFAULT_MANAGER_PROFILE,
+        "profile_name": provider_ref,
         "transport_kind": transport_kind,
         "endpoint": endpoint,
         "model": model,
@@ -248,6 +253,10 @@ def _policy_route_to_plan(route: dict[str, Any], policy: dict[str, Any], *, mode
         "policy_route_id": str(route.get("route_id") or "").strip(),
         "policy_source": "institution_policy",
         "policy_auth_profile": auth_profile_name,
+        "policy_provider_ref": provider_ref,
+        "policy_model_ref": model_ref,
+        "policy_provider_entry": dict(provider_registry.get(provider_ref) or {}),
+        "policy_model_entry": dict(model_registry.get(model_ref) or {}),
         "policy_fallback_route_ids": list(route.get("fallback_route_ids") or []),
         "policy_disable_reason": str(route.get("disable_reason") or "").strip(),
         "policy_budget_band": str(route.get("budget_band") or "").strip(),
@@ -398,14 +407,14 @@ def _resolve_manager_plan_with_source(*, runtime_env: dict[str, str] | None = No
         str(env.get("MERIDIAN_BRAIN_MANAGER_CLI_BIN") or "").strip()
         or str(manager_doc.get("cli_bin") or "").strip()
         or str(env.get("MERIDIAN_CODEX_BIN") or "").strip()
-        or "codex"
     )
     cli_home = (
         str(env.get("MERIDIAN_BRAIN_MANAGER_CLI_HOME") or "").strip()
         or str(manager_doc.get("cli_home") or "").strip()
         or str(env.get("MERIDIAN_CODEX_HOME") or "").strip()
-        or "/home/ubuntu/.meridian/auth/codex/login-home"
     )
+    if not cli_home:
+        cli_home = str(env.get("HOME") or "").strip() or "/tmp"
     max_tokens = int(
         str(
             env.get("MERIDIAN_BRAIN_MANAGER_MAX_TOKENS")
@@ -440,8 +449,15 @@ def _resolve_manager_plan_with_source(*, runtime_env: dict[str, str] | None = No
         if _legacy_remote_manager_enabled(env):
             transport_kind = "http_json"
             migration_note = "legacy manager provider env mapped to agnostic http_json transport"
+        elif cli_bin:
+            transport_kind = "cli_session"
+        elif endpoint:
+            transport_kind = "http_json"
         else:
-            transport_kind = DEFAULT_MANAGER_TRANSPORT
+            raise RoutePolicyError(
+                "no_active_execution_route_configured",
+                "no active execution route configured",
+            )
     if transport_kind == "http_json":
         if not endpoint and _legacy_remote_manager_enabled(env):
             endpoint = str(env.get("MERIDIAN_MANAGER_XAI_BASE_URL") or "").strip()
@@ -456,9 +472,40 @@ def _resolve_manager_plan_with_source(*, runtime_env: dict[str, str] | None = No
                 migration_note += "; "
             migration_note += "legacy API key pool env mapped to agnostic key pool"
 
+    if transport_kind == "cli_session" and not cli_bin:
+        raise RoutePolicyError(
+            "no_active_execution_route_configured",
+            "no active execution route configured",
+        )
+    if transport_kind == "http_json" and not endpoint:
+        raise RoutePolicyError(
+            "no_active_execution_route_configured",
+            "no active execution route configured",
+        )
+
+    provider_ref = str(manager_doc.get("provider_ref") or profile_name).strip() or DEFAULT_MANAGER_PROFILE
+    model_ref = str(manager_doc.get("model_ref") or "").strip()
+    provider_entry = dict(manager_doc.get("provider_entry") or {})
+    if provider_ref and not provider_entry:
+        provider_entry = {
+            "provider_id": provider_ref,
+            "display_name": provider_ref,
+            "default_route_type": transport_kind,
+            "capabilities": [transport_kind],
+            "metadata": {},
+        }
+    model_entry = dict(manager_doc.get("model_entry") or {})
+    if model_ref and not model_entry:
+        model_entry = {
+            "model_id": model_ref,
+            "provider_id": provider_ref,
+            "model_name": model,
+            "metadata": {},
+        }
+
     auth_mode = "session_home" if transport_kind == "cli_session" else "bearer_pool"
     return {
-        "profile_name": profile_name,
+        "profile_name": provider_ref,
         "transport_kind": transport_kind,
         "endpoint": endpoint,
         "model": model,
@@ -472,6 +519,10 @@ def _resolve_manager_plan_with_source(*, runtime_env: dict[str, str] | None = No
         "policy_source": "override",
         "policy_route_id": "",
         "policy_auth_profile": "",
+        "policy_provider_ref": provider_ref,
+        "policy_model_ref": model_ref,
+        "policy_provider_entry": provider_entry,
+        "policy_model_entry": model_entry,
         "policy_fallback_route_ids": [],
         "policy_disable_reason": "",
         "policy_budget_band": "",
@@ -882,7 +933,11 @@ def manager_policy_status(*, runtime_env: dict[str, str] | None = None, model_hi
 
     base["selected_plan"] = {
         "provider_profile": str(plan.get("profile_name") or DEFAULT_MANAGER_PROFILE).strip() or DEFAULT_MANAGER_PROFILE,
+        "provider_ref": str(plan.get("policy_provider_ref") or "").strip(),
+        "provider_entry": dict(plan.get("policy_provider_entry") or {}),
         "model": str(plan.get("model") or model_hint or "").strip(),
+        "model_ref": str(plan.get("policy_model_ref") or "").strip(),
+        "model_entry": dict(plan.get("policy_model_entry") or {}),
         "transport_kind": str(plan.get("transport_kind") or DEFAULT_MANAGER_TRANSPORT).strip() or DEFAULT_MANAGER_TRANSPORT,
         "auth_mode": str(plan.get("auth_mode") or "none").strip() or "none",
         "source": str(plan.get("policy_source") or base.get("source") or ""),

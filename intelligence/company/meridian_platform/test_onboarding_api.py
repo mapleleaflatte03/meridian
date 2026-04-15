@@ -47,16 +47,28 @@ class TestOnboardingAPI(unittest.TestCase):
                 owner_id='user_test_001',
                 plan='pro',
                 brain_route_type='cli_session',
-                brain_provider_profile='claude_local',
-                brain_model='',
-                brain_auth_profile='claude_local',
-                brain_cli_bin='claude',
+                brain_provider_profile='provider.local.alpha',
+                brain_model='alpha-model',
+                brain_auth_profile='auth.local.alpha',
+                brain_cli_bin='alpha-cli',
+                brain_provider_entry_id='provider.local.alpha',
+                brain_model_entry_id='provider.local.alpha.model.alpha-model',
             )
 
             self.assertIn('institution_brain_policy', result)
             self.assertEqual(result['institution_brain_policy']['primary_route_id'], 'route_primary')
-            self.assertEqual(result['institution_brain_policy']['routes'][0]['provider_profile'], 'claude_local')
+            self.assertEqual(result['institution_brain_policy']['routes'][0]['provider_ref'], 'provider.local.alpha')
+            self.assertEqual(result['institution_brain_policy']['routes'][0]['model_ref'], 'provider.local.alpha.model.alpha-model')
             self.assertEqual(result['institution_brain_policy']['routes'][0]['route_type'], 'cli_session')
+            self.assertEqual(result['institution_brain_policy']['active_provider']['provider_id'], 'provider.local.alpha')
+            self.assertEqual(result['institution_brain_policy']['active_model']['model_id'], 'provider.local.alpha.model.alpha-model')
+            self.assertEqual(result['institution_brain_policy']['active_model']['model_name'], 'alpha-model')
+            self.assertIn('provider.local.alpha', result['institution_brain_policy']['provider_registry'])
+            self.assertIn('provider.local.alpha.model.alpha-model', result['institution_brain_policy']['model_registry'])
+            self.assertIn('auth.local.alpha', result['institution_brain_policy']['auth_profiles'])
+            self.assertEqual(result['institution_brain_policy']['auth_profiles']['auth.local.alpha']['cli_bin'], 'alpha-cli')
+            self.assertEqual(result['institution_brain_policy']['active_provider']['provider_id'], 'provider.local.alpha')
+            self.assertEqual(result['institution_brain_policy']['active_model']['model_id'], 'provider.local.alpha.model.alpha-model')
 
             # Should return complete structure
             self.assertIn('org_id', result)

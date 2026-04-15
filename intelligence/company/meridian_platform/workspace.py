@@ -8688,6 +8688,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 brain_cli_home = str(body.get('brain_cli_home') or '').strip()
                 brain_endpoint = str(body.get('brain_endpoint') or '').strip()
                 brain_auth_env = str(body.get('brain_auth_env') or '').strip()
+                brain_provider_entry_id = str(body.get('brain_provider_entry_id') or brain_provider_profile).strip()
+                brain_model_entry_id = str(body.get('brain_model_entry_id') or '').strip()
                 brain_key_env_pool = body.get('brain_key_env_pool') or []
                 if not isinstance(brain_key_env_pool, list):
                     return self._json({'error': 'brain_key_env_pool must be a list'}, 400)
@@ -8699,6 +8701,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     return self._json({'error': 'brain_route_type is required'}, 400)
                 if not brain_provider_profile:
                     return self._json({'error': 'brain_provider_profile is required'}, 400)
+                if not brain_provider_entry_id:
+                    return self._json({'error': 'brain_provider_entry_id is required'}, 400)
                 if not brain_auth_profile:
                     return self._json({'error': 'brain_auth_profile is required'}, 400)
                 if brain_route_type not in ('cli_session', 'http_json'):
@@ -8723,6 +8727,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     brain_endpoint=brain_endpoint,
                     brain_auth_env=brain_auth_env,
                     brain_key_env_pool=brain_key_env_pool,
+                    brain_provider_entry_id=brain_provider_entry_id,
+                    brain_model_entry_id=brain_model_entry_id,
                 )
                 log_event(
                     org_id,
