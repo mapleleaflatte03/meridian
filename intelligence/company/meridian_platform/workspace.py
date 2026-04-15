@@ -628,6 +628,8 @@ import accounting_service
 import loom_runtime_proof
 import service_state
 import status_surface
+import institution_brain_policy
+import brain_router
 import pilot_intake
 import subscription_preview_queue
 import subscription_service
@@ -4758,6 +4760,13 @@ def api_status(context_source='configured_default', institution_context=None):
     observability = status_surface.observability_snapshot(org_id, record_alerts=False)
     alert_queue = observability.get('alert_queue', {}) if isinstance(observability, dict) else {}
     slo = observability.get('slo', {}) if isinstance(observability, dict) else {}
+    manager_policy_status = brain_router.manager_policy_status(
+        runtime_env={
+            'MERIDIAN_ORG_ID': org_id,
+            'MERIDIAN_WORKSPACE_ORG_ID': org_id,
+        },
+        model_hint='',
+    )
 
     result = {
         'runtime_id': 'loom_native',
@@ -4774,6 +4783,7 @@ def api_status(context_source='configured_default', institution_context=None):
             'request_override': 'exact-match-only',
             'auth': auth_context,
             'permissions': _permission_snapshot(auth_context),
+            'institution_brain_policy_status': manager_policy_status,
         },
         'runtime_core': runtime_core_snapshot(
             inst_ctx,
@@ -8670,12 +8680,50 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 name = str(body.get('name') or '').strip()
                 owner_id = str(body.get('owner_id') or by or '').strip()
                 plan = str(body.get('plan') or 'free').strip() or 'free'
+                brain_route_type = str(body.get('brain_route_type') or '').strip()
+                brain_provider_profile = str(body.get('brain_provider_profile') or '').strip()
+                brain_model = str(body.get('brain_model') or '').strip()
+                brain_auth_profile = str(body.get('brain_auth_profile') or '').strip()
+                brain_cli_bin = str(body.get('brain_cli_bin') or '').strip()
+                brain_cli_home = str(body.get('brain_cli_home') or '').strip()
+                brain_endpoint = str(body.get('brain_endpoint') or '').strip()
+                brain_auth_env = str(body.get('brain_auth_env') or '').strip()
+                brain_key_env_pool = body.get('brain_key_env_pool') or []
+                if not isinstance(brain_key_env_pool, list):
+                    return self._json({'error': 'brain_key_env_pool must be a list'}, 400)
                 if not name:
                     return self._json({'error': 'name is required'}, 400)
                 if not owner_id:
                     return self._json({'error': 'owner_id is required'}, 400)
+                if not brain_route_type:
+                    return self._json({'error': 'brain_route_type is required'}, 400)
+                if not brain_provider_profile:
+                    return self._json({'error': 'brain_provider_profile is required'}, 400)
+                if not brain_auth_profile:
+                    return self._json({'error': 'brain_auth_profile is required'}, 400)
+                if brain_route_type not in ('cli_session', 'http_json'):
+                    return self._json({'error': 'brain_route_type must be cli_session or http_json'}, 400)
+                if brain_route_type == 'cli_session' and not brain_cli_bin:
+                    return self._json({'error': 'brain_cli_bin is required for cli_session'}, 400)
+                if brain_route_type == 'http_json' and not brain_endpoint:
+                    return self._json({'error': 'brain_endpoint is required for http_json'}, 400)
+                if brain_route_type == 'http_json' and not brain_auth_env and not brain_key_env_pool:
+                    return self._json({'error': 'brain_auth_env or brain_key_env_pool is required for http_json'}, 400)
 
-                result = provision_institution(name=name, owner_id=owner_id, plan=plan)
+                result = provision_institution(
+                    name=name,
+                    owner_id=owner_id,
+                    plan=plan,
+                    brain_route_type=brain_route_type,
+                    brain_provider_profile=brain_provider_profile,
+                    brain_model=brain_model,
+                    brain_auth_profile=brain_auth_profile,
+                    brain_cli_bin=brain_cli_bin,
+                    brain_cli_home=brain_cli_home,
+                    brain_endpoint=brain_endpoint,
+                    brain_auth_env=brain_auth_env,
+                    brain_key_env_pool=brain_key_env_pool,
+                )
                 log_event(
                     org_id,
                     by,
@@ -8686,6 +8734,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                         'name': result['org'].get('name', ''),
                         'slug': result['org'].get('slug', ''),
                         'plan': result['org'].get('plan', ''),
+                        'brain_route_type': brain_route_type,
+                        'brain_provider_profile': brain_provider_profile,
+                        'brain_model': brain_model,
+                        'brain_auth_profile': brain_auth_profile,
                     },
                     session_id=_sid,
                 )
@@ -8717,15 +8769,34 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 offering_id = str(body.get('offering_id') or '').strip()
                 provider_org = str(body.get('provider_org_id') or '').strip()
                 task_desc = str(body.get('task_description') or '').strip()
-                if not offering_id or not provider_org:
-                    return self._json({'error': 'offering_id and provider_org_id are required'}, 400)
-                try:
-                    rental = request_marketplace_rental(org_id, offering_id, provider_org, task_desc)
-                except ValueError as e:
-                    return self._json({'error': str(e)}, 400)
-                log_event(org_id, by, 'marketplace_rental_requested', resource=rental['rental_id'],
-                          outcome='success', session_id=_sid)
-                return self._json({'message': 'Rental requested', 'rental': rental}, 201)
+                if not offering_id or not provider_org or not task_desc:
+                    return self._json({'error': 'offering_id, provider_org_id, task_description required'}, 400)
+                request_id, _receipt = rent_marketplace_offering(offering_id, provider_org, task_desc, org_id)
+                log_event(org_id, by, 'marketplace_offering_rented', resource=request_id,
+                          outcome='success', details={'offering_id': offering_id}, session_id=_sid)
+                return self._json({'message': 'Offering rented', 'request_id': request_id}, 201)
+
+            elif path == '/api/marketplace/bids':
+                agent_id = str(body.get('agent_id') or '').strip()
+                task_description = str(body.get('task_description') or '').strip()
+                amount_usd = float(body.get('amount_usd', 0))
+                if not agent_id or not task_description:
+                    return self._json({'error': 'agent_id and task_description are required'}, 400)
+                bid_id, receipt = post_bid(agent_id, task_description, amount_usd, org_id)
+                log_event(org_id, by, 'marketplace_bid_created', resource=bid_id,
+                          outcome='success', details={'amount_usd': amount_usd}, session_id=_sid)
+                return self._json({'message': 'Bid created', 'bid_id': bid_id, 'receipt': receipt}, 201)
+
+            elif path == '/api/marketplace/dispute':
+                bid_id = str(body.get('bid_id') or '').strip()
+                action = str(body.get('action') or 'open').strip()
+                reason = str(body.get('reason') or '').strip()
+                if not bid_id:
+                    return self._json({'error': 'bid_id is required'}, 400)
+                dispute_id = f"disp_{_now().replace(':','').replace('-','')}"
+                log_event(org_id, by, 'marketplace_dispute', resource=dispute_id,
+                          outcome='success', details={'bid_id': bid_id, 'action': action, 'reason': reason}, session_id=_sid)
+                return self._json({'message': 'Dispute recorded', 'dispute_id': dispute_id}, 201)
 
             elif path == '/api/hands/provision':
                 hand_key = str(body.get('hand_key') or '').strip()

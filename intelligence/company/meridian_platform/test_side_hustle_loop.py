@@ -119,7 +119,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Generated blog post about AI governance',
-                'model': 'grok-beta',
+                'model': 'claude-sonnet-4-6',
+                'provider_profile': 'claude_local',
+                'policy_source': 'institution_policy',
+                'policy_route_id': 'route_primary',
+                'policy_auth_profile': 'claude_local',
             }
             mock_mg.append_node.return_value = ('proof_xyz_blog_post', 1)
 
@@ -142,6 +146,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
         self.assertIn('settlement_receipt', result)
         self.assertIn('split', result)
         self.assertEqual(result['split']['total_usd'], 25.0)
+        self.assertEqual(result['provider_profile'], 'claude_local')
+        self.assertEqual(result['policy_source'], 'institution_policy')
+        self.assertEqual(result['policy_route_id'], 'route_primary')
+        self.assertEqual(result['policy_auth_profile'], 'claude_local')
+        self.assertIsInstance(result['failover_trace'], list)
 
     def test_run_side_hustle_blocked_by_court(self):
         """Test that orchestration fails when agent has court violations."""
@@ -195,7 +204,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Freelance task output',
-                'model': 'grok-beta',
+                'model': 'claude-sonnet-4-6',
+                'provider_profile': 'claude_local',
+                'policy_source': 'institution_policy',
+                'policy_route_id': 'route_primary',
+                'policy_auth_profile': 'claude_local',
             }
             mock_mg.append_node.return_value = ('memory_freelance_777', 3)
 
@@ -243,7 +256,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Generated blog post content about AI governance',
-                'model': 'grok-beta',
+                'model': 'claude-sonnet-4-6',
+                'provider_profile': 'claude_local',
+                'policy_source': 'institution_policy',
+                'policy_route_id': 'route_primary',
+                'policy_auth_profile': 'claude_local',
             }
 
             # Mock memory_graph.append_node to return hash and depth
@@ -289,7 +306,11 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             mock_br.execute_manager.return_value = {
                 'ok': True,
                 'output_text': 'Content output',
-                'model': 'grok-beta',
+                'model': 'claude-sonnet-4-6',
+                'provider_profile': 'claude_local',
+                'policy_source': 'institution_policy',
+                'policy_route_id': 'route_primary',
+                'policy_auth_profile': 'claude_local',
             }
             mock_mg.append_node.return_value = ('memory_xyz789', 10)
 
@@ -317,10 +338,18 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
 
             mock_br.execute_manager.return_value = {
                 'ok': False,
-                'stderr': 'key pool exhausted without successful response',
+                'stderr': 'all routes disabled by billing/auth/cooldown',
                 'output_text': '',
+                'error_code': 'all_routes_disabled_by_billing_or_cooldown',
+                'error_metadata': {'org_id': self.org_id, 'route_id': 'route_primary'},
+                'provider_profile': 'codex_local',
+                'transport_kind': 'cli_session',
+                'auth_mode': 'session_home',
+                'policy_source': 'institution_policy',
+                'policy_route_id': 'route_primary',
+                'policy_auth_profile': 'codex_local',
+                'failover_trace': [],
             }
-
             result = run_side_hustle(
                 agent_id=self.agent_id,
                 org_id=self.org_id,
@@ -334,6 +363,15 @@ class AutonomousSideHustleLoopTest(unittest.TestCase):
             self.assertEqual(result['status'], 'execution_failed')
             self.assertIn('reason', result)
             self.assertIn('bid_id', result)
+            self.assertEqual(result['execution_error_code'], 'all_routes_disabled_by_billing_or_cooldown')
+            self.assertEqual(result['provider_profile'], 'codex_local')
+            self.assertEqual(result['transport_kind'], 'cli_session')
+            self.assertEqual(result['policy_source'], 'institution_policy')
+            self.assertEqual(result['policy_route_id'], 'route_primary')
+            self.assertEqual(result['policy_auth_profile'], 'codex_local')
+            self.assertEqual(result['execution_error_metadata']['org_id'], self.org_id)
+            self.assertEqual(result['execution_error_metadata']['route_id'], 'route_primary')
+            self.assertIsInstance(result['failover_trace'], list)
             # memory_graph should NOT have been called
             mock_mg.append_node.assert_not_called()
 

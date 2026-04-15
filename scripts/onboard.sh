@@ -18,6 +18,15 @@ set -euo pipefail
 #   MERIDIAN_AGENT_ROLE       first agent role         (default: manager)
 #   MERIDIAN_IMPORT_DEMO_PACK import demo data         (default: no)
 #   MERIDIAN_ENABLE_GOVERNANCE enable governance gates  (default: yes)
+#   MERIDIAN_BRAIN_ROUTE_TYPE execution route type     (default: cli_session)
+#   MERIDIAN_BRAIN_PROVIDER_PROFILE provider profile   (default: claude_local)
+#   MERIDIAN_BRAIN_MODEL      execution model          (default: empty/provider default)
+#   MERIDIAN_BRAIN_AUTH_PROFILE auth profile name      (default: provider profile)
+#   MERIDIAN_BRAIN_CLI_BIN    cli provider binary      (default: claude for cli_session)
+#   MERIDIAN_BRAIN_CLI_HOME   cli auth home            (default: empty)
+#   MERIDIAN_BRAIN_ENDPOINT   http provider endpoint   (default: prompt only when http_json)
+#   MERIDIAN_BRAIN_AUTH_ENV   http auth env var name   (default: empty)
+#   MERIDIAN_BRAIN_KEY_ENV_POOL comma-separated auth env fallbacks
 #
 # After onboarding, start the local stack:
 #   ./scripts/dev-up.sh
@@ -95,6 +104,78 @@ AGENT_ROLE="$(prompt_or_default MERIDIAN_AGENT_ROLE "First agent role (manager /
 
 IMPORT_DEMO="$(prompt_or_default MERIDIAN_IMPORT_DEMO_PACK "Import demo data pack? (yes / no)" "no")"
 ENABLE_GOV="$(prompt_or_default MERIDIAN_ENABLE_GOVERNANCE "Enable governance gates? (yes / no)" "yes")"
+BRAIN_ROUTE_TYPE="$(prompt_or_default MERIDIAN_BRAIN_ROUTE_TYPE "Execution route type (cli_session / http_json)" "cli_session")"
+BRAIN_PROVIDER_PROFILE="$(prompt_or_default MERIDIAN_BRAIN_PROVIDER_PROFILE "Execution provider profile" "claude_local")"
+BRAIN_MODEL="$(prompt_or_default MERIDIAN_BRAIN_MODEL "Execution model (blank for provider default)" "")"
+BRAIN_AUTH_PROFILE="$(prompt_or_default MERIDIAN_BRAIN_AUTH_PROFILE "Execution auth profile name" "$BRAIN_PROVIDER_PROFILE")"
+BRAIN_CLI_BIN_DEFAULT="claude"
+if [ "$BRAIN_ROUTE_TYPE" = "http_json" ]; then
+  BRAIN_CLI_BIN_DEFAULT=""
+fi
+BRAIN_CLI_BIN="$(prompt_or_default MERIDIAN_BRAIN_CLI_BIN "Execution CLI binary (blank if not using CLI route)" "$BRAIN_CLI_BIN_DEFAULT")"
+BRAIN_CLI_HOME="$(prompt_or_default MERIDIAN_BRAIN_CLI_HOME "Execution CLI auth home (blank if default session)" "")"
+BRAIN_ENDPOINT_DEFAULT=""
+if [ "$BRAIN_ROUTE_TYPE" = "http_json" ]; then
+  BRAIN_ENDPOINT_DEFAULT="https://example.local/v1/chat/completions"
+fi
+BRAIN_ENDPOINT="$(prompt_or_default MERIDIAN_BRAIN_ENDPOINT "Execution HTTP endpoint (blank if not using http_json)" "$BRAIN_ENDPOINT_DEFAULT")"
+BRAIN_AUTH_ENV="$(prompt_or_default MERIDIAN_BRAIN_AUTH_ENV "Execution auth env var for HTTP route (blank if not using http_json)" "")"
+BRAIN_KEY_ENV_POOL="$(prompt_or_default MERIDIAN_BRAIN_KEY_ENV_POOL "Execution auth env fallback pool (comma-separated, optional)" "")"
+
+if [ "$BRAIN_ROUTE_TYPE" != "cli_session" ] && [ "$BRAIN_ROUTE_TYPE" != "http_json" ]; then
+  echo "[onboard] Unsupported execution route type: $BRAIN_ROUTE_TYPE" >&2
+  exit 1
+fi
+if [ "$BRAIN_ROUTE_TYPE" = "cli_session" ] && [ -z "$BRAIN_CLI_BIN" ]; then
+  echo "[onboard] Execution CLI route requires MERIDIAN_BRAIN_CLI_BIN or an explicit CLI binary." >&2
+  exit 1
+fi
+if [ "$BRAIN_ROUTE_TYPE" = "http_json" ] && [ -z "$BRAIN_ENDPOINT" ]; then
+  echo "[onboard] Execution HTTP route requires MERIDIAN_BRAIN_ENDPOINT." >&2
+  exit 1
+fi
+if [ "$BRAIN_ROUTE_TYPE" = "http_json" ] && [ -z "$BRAIN_AUTH_ENV" ] && [ -z "$BRAIN_KEY_ENV_POOL" ]; then
+  echo "[onboard] Execution HTTP route requires MERIDIAN_BRAIN_AUTH_ENV or MERIDIAN_BRAIN_KEY_ENV_POOL." >&2
+  exit 1
+fi
+if [ "$BRAIN_ROUTE_TYPE" = "cli_session" ] && ! command -v "$BRAIN_CLI_BIN" >/dev/null 2>&1; then
+  echo "[onboard] Execution CLI binary not found on PATH: $BRAIN_CLI_BIN" >&2
+  exit 1
+fi
+if [ "$BRAIN_ROUTE_TYPE" = "http_json" ]; then
+  python3 - "$BRAIN_AUTH_ENV" "$BRAIN_KEY_ENV_POOL" <<'PY'
+import os
+import sys
+primary = (sys.argv[1] or '').strip()
+pool = [item.strip() for item in (sys.argv[2] or '').split(',') if item.strip()]
+if primary and os.environ.get(primary, '').strip():
+    raise SystemExit(0)
+for name in pool:
+    if os.environ.get(name, '').strip():
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+  if [ $? -ne 0 ]; then
+    echo "[onboard] No HTTP execution auth secret is currently available in the configured environment variables." >&2
+    exit 1
+  fi
+fi
+if [ "$BRAIN_ROUTE_TYPE" = "cli_session" ]; then
+  "$BRAIN_CLI_BIN" -p "Reply with exactly: MERIDIAN_BRAIN_POLICY_OK" --output-format text >/tmp/meridian_brain_policy_probe.txt 2>/tmp/meridian_brain_policy_probe.err || true
+  if [ "$(tr -d '\r' </tmp/meridian_brain_policy_probe.txt 2>/dev/null | head -1)" != "MERIDIAN_BRAIN_POLICY_OK" ]; then
+    echo "[onboard] Execution CLI route probe failed for $BRAIN_CLI_BIN." >&2
+    cat /tmp/meridian_brain_policy_probe.err >&2 || true
+    exit 1
+  fi
+fi
+BRAIN_KEY_ENV_POOL_JSON="$(python3 - "$BRAIN_KEY_ENV_POOL" <<'PY'
+import json
+import sys
+pool = [item.strip() for item in (sys.argv[1] or '').split(',') if item.strip()]
+print(json.dumps(pool))
+PY
+)"
+BRAIN_POLICY_SUMMARY="${BRAIN_ROUTE_TYPE}:${BRAIN_PROVIDER_PROFILE}:${BRAIN_MODEL:-provider_default}"
 
 echo ""
 echo "----------------------------------------------------------------"
@@ -106,6 +187,7 @@ echo "  Plan:          $INST_PLAN"
 echo "  First agent:   $AGENT_NAME (role: $AGENT_ROLE)"
 echo "  Demo pack:     $IMPORT_DEMO"
 echo "  Governance:    $ENABLE_GOV"
+echo "  Brain route:   $BRAIN_POLICY_SUMMARY"
 echo "  Data root:     $MERIDIAN_ROOT/runtime"
 echo "  Config root:   $LOOM_CONFIG_ROOT"
 echo "  Agent configs: $LOOM_AGENT_CONFIG_DIR"
@@ -124,7 +206,7 @@ echo "[onboard] Creating institution..."
 
 # ── Provision institution via onboarding.py ─────────────────────────────
 
-ONBOARD_RESULT="$(cd "$PLATFORM_DIR" && python3 - "$INST_NAME" "$OWNER_ID" "$INST_PLAN" <<'PY'
+ONBOARD_RESULT="$(cd "$PLATFORM_DIR" && python3 - "$INST_NAME" "$OWNER_ID" "$INST_PLAN" "$BRAIN_ROUTE_TYPE" "$BRAIN_PROVIDER_PROFILE" "$BRAIN_MODEL" "$BRAIN_AUTH_PROFILE" "$BRAIN_CLI_BIN" "$BRAIN_CLI_HOME" "$BRAIN_ENDPOINT" "$BRAIN_AUTH_ENV" "$BRAIN_KEY_ENV_POOL_JSON" <<'PY'
 import sys
 import json
 sys.path.insert(0, '.')
@@ -134,7 +216,30 @@ name = sys.argv[1]
 owner_id = sys.argv[2]
 plan = sys.argv[3]
 
-result = provision_institution(name, owner_id, plan)
+brain_route_type = sys.argv[4]
+brain_provider_profile = sys.argv[5]
+brain_model = sys.argv[6]
+brain_auth_profile = sys.argv[7]
+brain_cli_bin = sys.argv[8]
+brain_cli_home = sys.argv[9]
+brain_endpoint = sys.argv[10]
+brain_auth_env = sys.argv[11]
+brain_key_env_pool = json.loads(sys.argv[12])
+
+result = provision_institution(
+    name,
+    owner_id,
+    plan,
+    brain_route_type=brain_route_type,
+    brain_provider_profile=brain_provider_profile,
+    brain_model=brain_model,
+    brain_auth_profile=brain_auth_profile,
+    brain_cli_bin=brain_cli_bin,
+    brain_cli_home=brain_cli_home,
+    brain_endpoint=brain_endpoint,
+    brain_auth_env=brain_auth_env,
+    brain_key_env_pool=brain_key_env_pool,
+)
 print(json.dumps({
     'org_id': result['org_id'],
     'org_name': result['org'].get('name', ''),
@@ -143,6 +248,7 @@ print(json.dumps({
     'plan': plan,
     'capsule_path': result['capsule_path'],
     'treasury_ledger': result['treasury']['ledger'],
+    'institution_brain_policy': result.get('institution_brain_policy', {}),
 }))
 PY
 )"
@@ -169,6 +275,7 @@ state = {
     'org_slug': result.get('org_slug', ''),
     'owner_id': result['owner_id'],
     'plan': result['plan'],
+    'execution_route': result.get('institution_brain_policy', {}),
     'onboarded_at': __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
     'source': 'onboard.sh',
 }

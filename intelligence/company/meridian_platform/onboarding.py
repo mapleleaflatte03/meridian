@@ -9,9 +9,24 @@ import os
 
 from organizations import create_org, get_org
 from capsule import ensure_capsule, ensure_treasury_aliases, _normalize_ledger_payload
+import institution_brain_policy
 
 
-def provision_institution(name, owner_id, plan='free'):
+def provision_institution(
+    name,
+    owner_id,
+    plan='free',
+    *,
+    brain_route_type='',
+    brain_provider_profile='',
+    brain_model='',
+    brain_auth_profile='',
+    brain_cli_bin='',
+    brain_cli_home='',
+    brain_endpoint='',
+    brain_auth_env='',
+    brain_key_env_pool=None,
+):
     """
     Create a new institution with full isolated bootstrap.
 
@@ -62,6 +77,34 @@ def provision_institution(name, owner_id, plan='free'):
     if not os.path.exists(transactions_path):
         open(transactions_path, 'a').close()
 
+    if not str(brain_route_type or '').strip():
+        raise ValueError('brain_route_type is required')
+    if not str(brain_provider_profile or '').strip():
+        raise ValueError('brain_provider_profile is required')
+    if not str(brain_auth_profile or '').strip():
+        raise ValueError('brain_auth_profile is required')
+    if brain_route_type == 'cli_session' and not str(brain_cli_bin or '').strip():
+        raise ValueError('brain_cli_bin is required for cli_session')
+    if brain_route_type == 'http_json' and not str(brain_endpoint or '').strip():
+        raise ValueError('brain_endpoint is required for http_json')
+    if brain_route_type == 'http_json' and not str(brain_auth_env or '').strip() and not list(brain_key_env_pool or []):
+        raise ValueError('brain_auth_env or brain_key_env_pool is required for http_json')
+
+    institution_brain_policy_doc = institution_brain_policy.configure_policy(
+        org_id,
+        route_type=brain_route_type,
+        provider_profile=brain_provider_profile,
+        model=brain_model,
+        updated_by=f'onboarding:{owner_id}',
+        cli_bin=brain_cli_bin,
+        cli_home=brain_cli_home,
+        endpoint=brain_endpoint,
+        auth_profile_name=brain_auth_profile,
+        auth_env=brain_auth_env,
+        key_env_pool=list(brain_key_env_pool or []),
+        fallback_routes=[],
+    )
+
     return {
         'org_id': org_id,
         'org': org,
@@ -71,4 +114,5 @@ def provision_institution(name, owner_id, plan='free'):
             'revenue': revenue_path,
             'transactions': transactions_path,
         },
+        'institution_brain_policy': institution_brain_policy_doc,
     }

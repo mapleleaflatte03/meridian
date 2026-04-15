@@ -82,7 +82,10 @@ def run_side_hustle(
     assignment_id = assign_bid(bid_id, assigned_by, org_id)
 
     work_execution = brain_router.execute_manager(
-        runtime_env=None,
+        runtime_env={
+            'MERIDIAN_ORG_ID': org_id,
+            'MERIDIAN_WORKSPACE_ORG_ID': org_id,
+        },
         system_prompt='You are Meridian Autonomous Side Hustle worker. Execute the task and return the completed output.',
         user_prompt=task_description,
         model='',
@@ -93,6 +96,15 @@ def run_side_hustle(
         return {
             'status': 'execution_failed',
             'reason': str(work_execution.get('stderr') or 'brain_router execution failed'),
+            'execution_error_code': str(work_execution.get('error_code') or ''),
+            'execution_error_metadata': work_execution.get('error_metadata') or {},
+            'provider_profile': str(work_execution.get('provider_profile') or ''),
+            'transport_kind': str(work_execution.get('transport_kind') or ''),
+            'auth_mode': str(work_execution.get('auth_mode') or ''),
+            'policy_source': str(work_execution.get('policy_source') or ''),
+            'policy_route_id': str(work_execution.get('policy_route_id') or ''),
+            'policy_auth_profile': str(work_execution.get('policy_auth_profile') or ''),
+            'failover_trace': list(work_execution.get('failover_trace') or []),
             'bid_id': bid_id,
             'assignment_id': assignment_id,
         }
@@ -130,6 +142,13 @@ def run_side_hustle(
         'settlement_receipt': settlement_receipt,
         'split': split,
         'work_output': work_output,
+        'provider_profile': str(work_execution.get('provider_profile') or ''),
+        'transport_kind': str(work_execution.get('transport_kind') or ''),
+        'auth_mode': str(work_execution.get('auth_mode') or ''),
+        'policy_source': str(work_execution.get('policy_source') or ''),
+        'policy_route_id': str(work_execution.get('policy_route_id') or ''),
+        'policy_auth_profile': str(work_execution.get('policy_auth_profile') or ''),
+        'failover_trace': list(work_execution.get('failover_trace') or []),
         'memory_hash': memory_hash,
         'memory_depth': memory_depth,
         'proof_chain': {

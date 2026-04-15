@@ -12,9 +12,25 @@ if str(PLATFORM_DIR) not in sys.path:
     sys.path.insert(0, str(PLATFORM_DIR))
 
 import brain_router
+import institution_brain_policy
 
 
 class BrainRouterTests(unittest.TestCase):
+
+    def setUp(self):
+        self._orig_load_policy = institution_brain_policy.load_policy
+        self._orig_active_route = institution_brain_policy.active_route
+        self._orig_resolve_route_chain = institution_brain_policy.resolve_route_chain
+        self._orig_policy_status = institution_brain_policy.policy_status
+        self._orig_update_route_health = institution_brain_policy.update_route_health
+
+    def tearDown(self):
+        institution_brain_policy.load_policy = self._orig_load_policy
+        institution_brain_policy.active_route = self._orig_active_route
+        institution_brain_policy.resolve_route_chain = self._orig_resolve_route_chain
+        institution_brain_policy.policy_status = self._orig_policy_status
+        institution_brain_policy.update_route_health = self._orig_update_route_health
+
     def test_resolve_manager_plan_prefers_agnostic_env_schema(self):
         env = {
             "MERIDIAN_BRAIN_MANAGER_TRANSPORT": "http_json",
@@ -195,6 +211,322 @@ class BrainRouterTests(unittest.TestCase):
         self.assertEqual(meta["transport_kind"], "http_json")
         self.assertEqual(meta["auth_mode"], "bearer_pool")
         self.assertEqual(meta["model"], "reasoner-small")
+        self.assertEqual(meta["source"], "override")
+
+    def test_resolve_manager_plan_prefers_institution_policy_without_override(self):
+        env = {
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_policy",
+            "MERIDIAN_ORG_ID": "org_policy",
+        }
+        policy_doc = {
+            "schema": "meridian.institution_brain_policy.v1",
+            "institution_id": "org_policy",
+            "primary_route_id": "route_primary",
+            "routes": [
+                {
+                    "route_id": "route_primary",
+                    "route_type": "cli_session",
+                    "provider_profile": "claude_local",
+                    "model": "",
+                    "auth_profile_order": ["claude_local"],
+                    "fallback_route_ids": [],
+                    "approved_by_authority": True,
+                    "allowed_by_treasury": True,
+                    "disabled": False,
+                    "disable_reason": "",
+                    "cli_bin": "claude",
+                    "cli_home": "",
+                }
+            ],
+            "auth_profiles": {
+                "claude_local": {
+                    "profile_name": "claude_local",
+                    "auth_mode": "session_home",
+                    "cli_bin": "claude",
+                    "cli_home": "",
+                    "auth_env": "",
+                    "key_env_pool": [],
+                }
+            },
+            "failover_policy": {
+                "error_classes": ["billing", "auth", "rate_limit", "transport", "provider_unavailable"],
+                "within_route_retry_limit": 1,
+                "allow_route_chain_fallback": True,
+            },
+        }
+        institution_brain_policy.load_policy = lambda _org_id: policy_doc
+        institution_brain_policy.active_route = lambda policy: policy["routes"][0]
+        plan = brain_router.resolve_manager_plan(runtime_env=env, model_hint="")
+        self.assertEqual(plan["policy_source"], "institution_policy")
+        self.assertEqual(plan["transport_kind"], "cli_session")
+        self.assertEqual(plan["cli_bin"], "claude")
+
+    def test_resolve_manager_plan_raises_when_policy_missing_route(self):
+        env = {
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_policy_missing",
+            "MERIDIAN_ORG_ID": "org_policy_missing",
+        }
+        institution_brain_policy.load_policy = lambda _org_id: {
+            "schema": "meridian.institution_brain_policy.v1",
+            "institution_id": "org_policy_missing",
+            "primary_route_id": "",
+            "routes": [],
+            "auth_profiles": {},
+            "failover_policy": {},
+        }
+        institution_brain_policy.active_route = lambda _policy: None
+        with self.assertRaises(brain_router.RoutePolicyError) as exc:
+            brain_router.resolve_manager_plan(runtime_env=env, model_hint="")
+        self.assertEqual(exc.exception.code, "no_active_execution_route_configured")
+
+    def test_execute_manager_returns_truthful_error_when_policy_missing_route(self):
+        env = {
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_policy_missing",
+            "MERIDIAN_ORG_ID": "org_policy_missing",
+        }
+        institution_brain_policy.load_policy = lambda _org_id: {
+            "schema": "meridian.institution_brain_policy.v1",
+            "institution_id": "org_policy_missing",
+            "primary_route_id": "",
+            "routes": [],
+            "auth_profiles": {},
+            "failover_policy": {},
+        }
+        institution_brain_policy.active_route = lambda _policy: None
+
+        result = brain_router.execute_manager(
+            runtime_env=env,
+            system_prompt="system",
+            user_prompt="user",
+            model="",
+            timeout=5,
+        )
+
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["error_code"], "no_active_execution_route_configured")
+        self.assertEqual(result["stderr"], "no active execution route configured")
+        self.assertEqual(result["error_metadata"]["org_id"], "org_policy_missing")
+
+    def test_manager_policy_status_exposes_required_surface_fields(self):
+        env = {
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_status",
+            "MERIDIAN_ORG_ID": "org_status",
+        }
+        policy_doc = {
+            "schema": "meridian.institution_brain_policy.v1",
+            "institution_id": "org_status",
+            "primary_route_id": "route_primary",
+            "routes": [
+                {
+                    "route_id": "route_primary",
+                    "route_type": "cli_session",
+                    "provider_profile": "claude_local",
+                    "model": "claude-opus-4-6",
+                    "auth_profile_order": ["claude_local"],
+                    "fallback_route_ids": ["route_backup"],
+                    "approved_by_authority": True,
+                    "allowed_by_treasury": True,
+                    "budget_band": "standard",
+                    "disabled": False,
+                    "disable_reason": "",
+                    "cooldown_until": "",
+                    "last_health": "healthy",
+                    "last_health_reason": "",
+                    "last_failover": {"reason_class": "billing", "reason_detail": "quota exhausted"},
+                    "cli_bin": "claude",
+                    "cli_home": "",
+                    "endpoint": "",
+                    "auth_env": "",
+                    "key_env_pool": [],
+                    "failover_error_classes": ["billing", "auth"],
+                },
+                {
+                    "route_id": "route_backup",
+                    "route_type": "http_json",
+                    "provider_profile": "backup_http",
+                    "model": "backup-model",
+                    "auth_profile_order": ["backup_http"],
+                    "fallback_route_ids": [],
+                    "approved_by_authority": True,
+                    "allowed_by_treasury": False,
+                    "budget_band": "restricted",
+                    "disabled": True,
+                    "disable_reason": "billing block",
+                    "cooldown_until": "",
+                    "last_health": "blocked",
+                    "last_health_reason": "billing block",
+                    "last_failover": {},
+                    "cli_bin": "",
+                    "cli_home": "",
+                    "endpoint": "https://router.example/v1/chat/completions",
+                    "auth_env": "BACKUP_KEY",
+                    "key_env_pool": ["BACKUP_KEY"],
+                    "failover_error_classes": ["billing"],
+                },
+            ],
+            "auth_profiles": {
+                "claude_local": {
+                    "profile_name": "claude_local",
+                    "auth_mode": "session_home",
+                    "cli_bin": "claude",
+                    "cli_home": "",
+                    "auth_env": "",
+                    "key_env_pool": [],
+                },
+                "backup_http": {
+                    "profile_name": "backup_http",
+                    "auth_mode": "bearer_pool",
+                    "cli_bin": "",
+                    "cli_home": "",
+                    "auth_env": "BACKUP_KEY",
+                    "key_env_pool": ["BACKUP_KEY"],
+                },
+            },
+            "failover_policy": {
+                "error_classes": ["billing", "auth", "rate_limit", "transport", "provider_unavailable"],
+                "within_route_retry_limit": 1,
+                "allow_route_chain_fallback": True,
+            },
+        }
+        institution_brain_policy.load_policy = lambda _org_id: policy_doc
+        institution_brain_policy.policy_status = lambda _org_id, runtime_env=None: {
+            "configured": True,
+            "source": "institution_policy",
+            "status": "healthy",
+            "reason": "",
+            "active_route": policy_doc["routes"][0],
+            "fallback_chain": [policy_doc["routes"][1]],
+            "auth_profiles": policy_doc["auth_profiles"],
+            "failover_policy": policy_doc["failover_policy"],
+        }
+        institution_brain_policy.active_route = lambda policy: policy["routes"][0]
+
+        status = brain_router.manager_policy_status(runtime_env=env, model_hint="")
+
+        self.assertTrue(status["configured"])
+        self.assertEqual(status["active_route"]["route_id"], "route_primary")
+        self.assertEqual(status["active_route"]["route_type"], "cli_session")
+        self.assertEqual(status["active_route"]["provider_profile"], "claude_local")
+        self.assertEqual(status["active_route"]["model"], "claude-opus-4-6")
+        self.assertEqual(status["active_route"]["auth_profile_order"], ["claude_local"])
+        self.assertEqual(status["active_route"]["disable_reason"], "")
+        self.assertEqual(status["active_route"]["last_failover"]["reason_class"], "billing")
+        self.assertTrue(status["active_route"]["approved_by_authority"])
+        self.assertTrue(status["active_route"]["allowed_by_treasury"])
+        self.assertEqual(status["fallback_chain"][0]["route_id"], "route_backup")
+        self.assertEqual(status["selected_plan"]["route_id"], "route_primary")
+        self.assertEqual(status["selected_plan"]["provider_profile"], "claude_local")
+        self.assertEqual(status["selected_plan"]["model"], "claude-opus-4-6")
+        self.assertEqual(status["selected_plan"]["auth_profile"], "claude_local")
+        self.assertEqual(status["selected_plan"]["transport_kind"], "cli_session")
+
+    def test_execute_manager_falls_back_to_next_policy_route(self):
+        env = {
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_policy_fallback",
+            "MERIDIAN_ORG_ID": "org_policy_fallback",
+        }
+        policy_doc = {
+            "schema": "meridian.institution_brain_policy.v1",
+            "institution_id": "org_policy_fallback",
+            "primary_route_id": "route_primary",
+            "routes": [
+                {
+                    "route_id": "route_primary",
+                    "route_type": "cli_session",
+                    "provider_profile": "codex_local",
+                    "model": "",
+                    "auth_profile_order": ["codex_local"],
+                    "fallback_route_ids": ["route_fallback"],
+                    "approved_by_authority": True,
+                    "allowed_by_treasury": True,
+                    "disabled": False,
+                    "disable_reason": "",
+                    "cli_bin": "codex",
+                    "cli_home": "/tmp/codex-home",
+                },
+                {
+                    "route_id": "route_fallback",
+                    "route_type": "cli_session",
+                    "provider_profile": "claude_local",
+                    "model": "",
+                    "auth_profile_order": ["claude_local"],
+                    "fallback_route_ids": [],
+                    "approved_by_authority": True,
+                    "allowed_by_treasury": True,
+                    "disabled": False,
+                    "disable_reason": "",
+                    "cli_bin": "claude",
+                    "cli_home": "",
+                },
+            ],
+            "auth_profiles": {
+                "codex_local": {
+                    "profile_name": "codex_local",
+                    "auth_mode": "session_home",
+                    "cli_bin": "codex",
+                    "cli_home": "/tmp/codex-home",
+                    "auth_env": "",
+                    "key_env_pool": [],
+                },
+                "claude_local": {
+                    "profile_name": "claude_local",
+                    "auth_mode": "session_home",
+                    "cli_bin": "claude",
+                    "cli_home": "",
+                    "auth_env": "",
+                    "key_env_pool": [],
+                },
+            },
+            "failover_policy": {
+                "error_classes": ["billing", "auth", "rate_limit", "transport", "provider_unavailable"],
+                "within_route_retry_limit": 1,
+                "allow_route_chain_fallback": True,
+            },
+        }
+        institution_brain_policy.load_policy = lambda _org_id: policy_doc
+        institution_brain_policy.active_route = lambda policy: policy["routes"][0]
+        institution_brain_policy.resolve_route_chain = lambda policy: policy["routes"]
+
+        health_updates = []
+
+        def fake_update_route_health(org_id, **kwargs):
+            health_updates.append((org_id, kwargs))
+            return {}
+
+        institution_brain_policy.update_route_health = fake_update_route_health
+
+        calls = []
+
+        def fake_run_cli(*, command, env_vars, timeout):
+            calls.append(command)
+            if command[0] == "codex":
+                return {
+                    "returncode": 1,
+                    "stdout": "",
+                    "stderr": "402 payment required deactivated workspace",
+                    "output_text": "",
+                }
+            return {
+                "returncode": 0,
+                "stdout": "fallback success",
+                "stderr": "",
+                "output_text": "fallback success",
+            }
+
+        result = brain_router.execute_manager(
+            runtime_env=env,
+            system_prompt="system",
+            user_prompt="user",
+            model="",
+            timeout=5,
+            run_cli=fake_run_cli,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["output_text"], "fallback success")
+        self.assertTrue(any(trace.get("route_failover") for trace in result.get("failover_trace", [])))
+        self.assertEqual(calls[0][0], "codex")
+        self.assertEqual(calls[1][0], "claude")
+        self.assertTrue(len(health_updates) >= 2)
 
 
 if __name__ == "__main__":

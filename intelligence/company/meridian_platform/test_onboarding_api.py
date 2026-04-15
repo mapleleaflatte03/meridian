@@ -45,8 +45,18 @@ class TestOnboardingAPI(unittest.TestCase):
             result = provision_institution(
                 name='Test Institution',
                 owner_id='user_test_001',
-                plan='pro'
+                plan='pro',
+                brain_route_type='cli_session',
+                brain_provider_profile='claude_local',
+                brain_model='',
+                brain_auth_profile='claude_local',
+                brain_cli_bin='claude',
             )
+
+            self.assertIn('institution_brain_policy', result)
+            self.assertEqual(result['institution_brain_policy']['primary_route_id'], 'route_primary')
+            self.assertEqual(result['institution_brain_policy']['routes'][0]['provider_profile'], 'claude_local')
+            self.assertEqual(result['institution_brain_policy']['routes'][0]['route_type'], 'cli_session')
 
             # Should return complete structure
             self.assertIn('org_id', result)
