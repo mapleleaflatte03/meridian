@@ -1,6 +1,15 @@
 # Contributing to Meridian
 
-Meridian is the governed AI agent platform: Loom runs your agents locally, Kernel enforces governance, and Intelligence makes it visible. This repository is canonical; archived mirrors are read-only.
+Meridian is one product with two modes: Core for daily-use local agent work, Team for governed execution depth. Loom is the runtime engine, Kernel enforces governance, and Intelligence makes it visible. This repository is canonical; archived mirrors are read-only.
+
+## Evaluator / Switcher Starter Path
+
+Coming from a Claw-family stack (Claude Code, Codex, Aider)?
+
+1. Read the [migration guide](docs/MIGRATION_FROM_CLAW.md) for concept mapping
+2. Run `./scripts/benchmark_meridian.sh --with-comparisons` to see cold-start and RSS differences
+3. Try the [example packs](examples/) to exercise Core and Team workflows
+4. Open an issue or discussion with your migration experience
 
 ## Fast Path (First PR)
 
@@ -68,6 +77,10 @@ python3 -m unittest -v test_gateway_brain_router.py
 - Issues: https://github.com/mapleleaflatte03/meridian/issues/new/choose
 - Discussions: https://github.com/mapleleaflatte03/meridian/discussions
 - Roadmap: [`ROADMAP.md`](ROADMAP.md)
+- Migration guide: [`docs/MIGRATION_FROM_CLAW.md`](docs/MIGRATION_FROM_CLAW.md)
+- Release cadence: [`docs/RELEASE_CADENCE.md`](docs/RELEASE_CADENCE.md)
+- Benchmark lane: `./scripts/benchmark_meridian.sh`
+- Example packs: [`examples/`](examples/)
 - Research hub: [`docs/RESEARCH_HUB.md`](docs/RESEARCH_HUB.md)
 - Community map: [`docs/COMMUNITY_MAP.md`](docs/COMMUNITY_MAP.md)
 - Project governance: [`docs/PROJECT_GOVERNANCE.md`](docs/PROJECT_GOVERNANCE.md)

@@ -192,6 +192,13 @@ For deep governance documentation:
 - [Workflows](https://app.welliam.codes/workflows) — operator workflow gallery
 - [Research Hub](docs/RESEARCH_HUB.md) — RFCs, benchmarks, case studies
 
+## Benchmark, Migrate, Evaluate
+
+- **Benchmark lane**: `./scripts/benchmark_meridian.sh --with-comparisons` — reproducible cold-start and RSS comparison against detected Claw-family CLIs
+- **Migration guide**: [`docs/MIGRATION_FROM_CLAW.md`](docs/MIGRATION_FROM_CLAW.md) — concept mapping from OpenClaw / OpenFang / ZeroClaw
+- **Example packs**: [`examples/`](examples/) — Core daily loop, scheduled check, Team governed execution, benchmark comparison
+- **Release cadence**: [`docs/RELEASE_CADENCE.md`](docs/RELEASE_CADENCE.md) — tag-driven release model and verification
+
 ## Non-Goals (Locked)
 
 - No paywall gate for core runtime/governance usage
