@@ -531,6 +531,10 @@ else
     echo "    \"$LOOM_BIN\" run-agent \"$AGENT_SLUG\""
     echo ""
   fi
+  echo "  Public demo surfaces (not your local runtime):"
+  echo "    https://app.welliam.codes is a public showcase."
+  echo "    https://app.welliam.codes/proofs"
+  echo "    https://app.welliam.codes/workflows"
 fi
 
 echo "    Your onboarding state: $ONBOARD_STATE_DIR/onboard_state.json"
