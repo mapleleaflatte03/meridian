@@ -42,11 +42,33 @@ LOOM_CONFIG_ROOT="${LOOM_CONFIG_BASE}/meridian-loom"
 LOOM_AGENT_CONFIG_DIR="${LOOM_CONFIG_ROOT}/agents"
 
 NON_INTERACTIVE=0
+CORE_MODE=0
 for arg in "$@"; do
   case "$arg" in
     --non-interactive) NON_INTERACTIVE=1 ;;
+    --mode)            ;;  # consumed with next arg
+    --mode=core|core)  CORE_MODE=1; NON_INTERACTIVE=1 ;;
   esac
 done
+# Handle "--mode core" as two separate args
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "--mode" ] && [ "$arg" = "core" ]; then
+    CORE_MODE=1; NON_INTERACTIVE=1
+  fi
+  prev="$arg"
+done
+
+# Core mode: apply sensible defaults so users don't face governance choices
+if [ "$CORE_MODE" = "1" ]; then
+  export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
+  export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
+  export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
+  export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-cli_session}"
+  export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
+  export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
+  export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+fi
 
 prompt_or_default() {
   local var_name="$1"
@@ -75,11 +97,24 @@ generate_owner_id() {
 
 echo ""
 echo "================================================================"
-echo "  Meridian — First-Run Onboarding"
-echo "================================================================"
-echo ""
-echo "  This guided flow creates your first local institution and"
-echo "  first agent. Everything stays on your machine."
+if [ "$CORE_MODE" = "1" ]; then
+  echo "  Meridian Core — Quick Setup"
+  echo "================================================================"
+  echo ""
+  echo "  Core mode: sensible defaults applied, no governance choices."
+  echo "  Gives you a working local agent runtime in under a minute."
+  echo ""
+  echo "  After setup, run daily tasks with:"
+  echo "    ./scripts/core.sh help"
+else
+  echo "  Meridian — First-Run Onboarding"
+  echo "================================================================"
+  echo ""
+  echo "  This guided flow creates your first local institution and"
+  echo "  first agent. Everything stays on your machine."
+  echo ""
+  echo "  Quick path: ./scripts/onboard.sh --mode core  (sensible defaults)"
+fi
 echo ""
 echo "  What this creates:"
 echo "    - your own institution (organization + capsule + treasury)"
@@ -377,16 +412,21 @@ echo "  What requires sign-in:"
 echo "    - The local workspace API requires credentials after dev-up."
 echo "    - The trust-ops page on the public site requires separate auth."
 echo ""
-echo "  Next steps:"
-echo "    1) Start your local stack:"
-echo "       MERIDIAN_ORG_ID=$ORG_ID MERIDIAN_WORKSPACE_ORG_ID=$ORG_ID ./scripts/dev-up.sh"
+echo "  Daily-use tasks (Meridian Core):"
+echo "    ./scripts/core.sh browse https://example.com"
+echo "    ./scripts/core.sh research \"echo hello\""
+echo "    ./scripts/core.sh remember my_note \"something to remember\""
+echo "    ./scripts/core.sh recall my_note"
+echo "    ./scripts/core.sh inspect"
+echo "    ./scripts/core.sh help"
 echo ""
-echo "    2) Access your local workspace:"
-echo "       http://127.0.0.1:8266/api/status"
+echo "  Local workspace (after dev-up):"
+echo "    MERIDIAN_ORG_ID=$ORG_ID MERIDIAN_WORKSPACE_ORG_ID=$ORG_ID ./scripts/dev-up.sh"
+echo "    http://127.0.0.1:8266/api/status"
 echo ""
 if [ "$AGENT_CREATED" = "1" ]; then
-  echo "    3) Run your agent:"
-  echo "       \"$LOOM_BIN\" run-agent \"$AGENT_SLUG\""
+  echo "  Run your agent:"
+  echo "    \"$LOOM_BIN\" run-agent \"$AGENT_SLUG\""
   echo ""
 fi
 echo "    Your onboarding state: $ONBOARD_STATE_DIR/onboard_state.json"

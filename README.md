@@ -29,20 +29,30 @@
 
 ## What You Get
 
-**Loom** is the local AI agent runtime at the center of Meridian. Install in one command, create a governed agent, and run it locally with memory, channels, skills, and verifiable proof receipts.
+**Meridian Core** is the daily-use local agent runtime: browser tasks, research, memory, scheduled automation, and agent loops — all with verifiable proof receipts on your machine. **Meridian Team** adds the full governed multi-agent layer.
+
+Install in one command:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-Then run first-time onboarding:
+Set up Core in one step:
 
 ```bash
 cd ~/meridian
-./scripts/onboard.sh
+./scripts/onboard.sh --mode core
 ```
 
-This guided flow creates your institution, first agent, and local workspace config. Everything stays on your machine.
+Then run daily tasks immediately:
+
+```bash
+./scripts/core.sh browse https://example.com
+./scripts/core.sh research "echo hello world"
+./scripts/core.sh remember my_note "something useful"
+./scripts/core.sh recall my_note
+./scripts/core.sh inspect
+```
 
 ## Why Loom
 

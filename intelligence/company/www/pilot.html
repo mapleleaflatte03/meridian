@@ -50,8 +50,8 @@
         <span class="eyebrow-dot"></span>
         <span>Get started with Loom</span>
       </div>
-      <h1>Install Loom, run onboarding, and use it locally in minutes.</h1>
-      <p class="subtitle">One command installs the full Meridian stack: Loom runtime, Kernel governance, and workspace services. Then run guided onboarding to create your local institution and first agent before starting your local stack.</p>
+      <h1>Install Meridian Core and start running agents in minutes.</h1>
+      <p class="subtitle">One command installs the full stack. Then run onboarding with <code>--mode core</code> for quick setup, or the interactive flow for full Team configuration. Core gives you browser tasks, research, memory, and scheduling without governance deep-dive.</p>
     </div>
     <aside class="page-rail">
       <div class="rail-kicker">Scope</div>
@@ -82,25 +82,28 @@ cd meridian</code></pre>
 
   <h2>3. Run first-time onboarding</h2>
   <div class="card">
+    <p><strong>Core mode (recommended for most users):</strong></p>
+<pre><code>./scripts/onboard.sh --mode core</code></pre>
+    <p class="dim mt-sm">Quick setup with sensible defaults. No governance choices required. Creates your institution and first agent, then shows you how to run daily tasks with <code>./scripts/core.sh</code>.</p>
+    <p class="mt-sm"><strong>Interactive mode (full Team configuration):</strong></p>
 <pre><code>./scripts/onboard.sh</code></pre>
-    <p class="dim mt-sm">Guided flow that creates your institution, first agent, and local workspace config. Everything stays on your machine. No data is uploaded anywhere.</p>
+    <p class="dim mt-sm">Guided flow with full configuration choices for plan, governance, and execution route.</p>
     <ul class="rule-list mt-sm">
-      <li>Sets: institution name, plan, first agent name and role</li>
-      <li>Demo data import: opt-in only (default: no)</li>
-      <li>Governance gates: on by default</li>
       <li>Non-interactive: <code>MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" ./scripts/onboard.sh --non-interactive</code></li>
+      <li>Everything stays on your machine. No data is uploaded anywhere.</li>
     </ul>
   </div>
 
-  <h2>4. Explore public proof surfaces</h2>
+  <h2>4. Run daily tasks with Core</h2>
   <div class="card">
-    <p>After onboarding, explore the public surfaces to see what a governed runtime looks like in production:</p>
-    <ul class="rule-list mt-sm">
-      <li>Open <a href="/proofs">/proofs</a> for runtime proof posture.</li>
-      <li>Open <a href="/workflows">/workflows</a> for live workflow showcase.</li>
-      <li>Open <a href="/boundary">/boundary</a> for current claim boundary.</li>
-      <li>Open <a href="/demo">/demo</a> for a full workflow walkthrough.</li>
-    </ul>
+    <p>After Core onboarding, run tasks immediately:</p>
+<pre><code>./scripts/core.sh browse https://example.com
+./scripts/core.sh research "echo hello"
+./scripts/core.sh remember my_note "something to save"
+./scripts/core.sh recall my_note
+./scripts/core.sh schedule daily_check 86400
+./scripts/core.sh inspect</code></pre>
+    <p class="dim mt-sm">Or explore the public proof surfaces: <a href="/proofs">/proofs</a> · <a href="/workflows">/workflows</a> · <a href="/demo">/demo</a></p>
   </div>
 
   <h2>5. Contribute back</h2>
