@@ -29,7 +29,11 @@
 
 ## What You Get
 
-**Meridian Core** is the daily-use local agent runtime: browser tasks, research, memory, scheduled automation, and agent loops — all with verifiable proof receipts on your machine. **Meridian Team** adds the full governed multi-agent layer.
+One product. One install. Two modes.
+
+**Meridian Core** — daily-use local agent runtime: browser tasks, research, memory, scheduled automation, and agent loops. No governance expertise required to start.
+
+**Meridian Team** — Core plus governance depth: institution treasury, court rules, warrants, authority gates, and full audit surfaces.
 
 Install in one command:
 
@@ -37,14 +41,24 @@ Install in one command:
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-Set up Core in one step:
+Then choose your mode in onboarding:
 
 ```bash
 cd ~/meridian
+
+# Core mode (recommended for most users):
 ./scripts/onboard.sh --mode core
+
+# Team mode (Core + governance depth):
+./scripts/onboard.sh --mode team
+
+# Or run interactively and choose at the prompt:
+./scripts/onboard.sh
 ```
 
-Then run daily tasks immediately:
+The selected mode is persisted in `runtime/onboard_state.json`.
+
+After Core setup, run daily tasks:
 
 ```bash
 ./scripts/core.sh browse https://example.com
@@ -53,6 +67,8 @@ Then run daily tasks immediately:
 ./scripts/core.sh recall my_note
 ./scripts/core.sh inspect
 ```
+
+After Team setup, Core tasks work the same — plus governance surfaces via `dev-up.sh`.
 
 ## Why Loom
 

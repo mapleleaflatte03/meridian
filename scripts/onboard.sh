@@ -3,33 +3,37 @@ set -euo pipefail
 
 # ── Meridian First-Run Onboarding ──────────────────────────────────────────
 #
-# This is the authoritative path for creating your first local institution
-# and first agent after a clean-slate install.
+# One product. One install. Choose your mode in this script.
 #
 # Usage:
-#   ./scripts/onboard.sh                   # interactive guided mode
-#   ./scripts/onboard.sh --non-interactive # use defaults / env vars
+#   ./scripts/onboard.sh                    # interactive guided mode
+#   ./scripts/onboard.sh --mode core        # Core: quick daily-use setup
+#   ./scripts/onboard.sh --mode team        # Team: Core + governance depth
+#   ./scripts/onboard.sh --non-interactive  # use env var defaults
+#
+# Mode selection:
+#   Meridian Core  — daily-use local agent runtime (browser, research, memory,
+#                    scheduling, agent loops). No governance expertise required.
+#   Meridian Team  — Core plus governance depth (institution treasury, court
+#                    rules, warrants, authority gates, audit surfaces).
 #
 # Environment overrides (for scripted / CI use):
-#   MERIDIAN_INST_NAME        institution name         (default: prompt)
-#   MERIDIAN_OWNER_ID         owner user id            (default: auto-generated)
-#   MERIDIAN_INST_PLAN        plan tier                (default: free)
-#   MERIDIAN_AGENT_NAME       first agent name         (default: prompt)
-#   MERIDIAN_AGENT_ROLE       first agent role         (default: manager)
-#   MERIDIAN_IMPORT_DEMO_PACK import demo data         (default: no)
-#   MERIDIAN_ENABLE_GOVERNANCE enable governance gates  (default: yes)
-#   MERIDIAN_BRAIN_ROUTE_TYPE execution route type     (default: cli_session)
-#   MERIDIAN_BRAIN_PROVIDER_PROFILE provider profile   (default: claude_local)
-#   MERIDIAN_BRAIN_MODEL      execution model          (default: empty/provider default)
-#   MERIDIAN_BRAIN_AUTH_PROFILE auth profile name      (default: provider profile)
-#   MERIDIAN_BRAIN_CLI_BIN    cli provider binary      (default: claude for cli_session)
-#   MERIDIAN_BRAIN_CLI_HOME   cli auth home            (default: empty)
-#   MERIDIAN_BRAIN_ENDPOINT   http provider endpoint   (default: prompt only when http_json)
-#   MERIDIAN_BRAIN_AUTH_ENV   http auth env var name   (default: empty)
+#   MERIDIAN_MODE             mode: core | team          (default: interactive prompt)
+#   MERIDIAN_INST_NAME        institution name           (default: prompt)
+#   MERIDIAN_OWNER_ID         owner user id              (default: auto-generated)
+#   MERIDIAN_AGENT_NAME       first agent name           (default: prompt)
+#   MERIDIAN_AGENT_ROLE       first agent role           (default: manager)
+#   MERIDIAN_IMPORT_DEMO_PACK import demo data           (default: no)
+#   MERIDIAN_ENABLE_GOVERNANCE enable governance gates   (default: yes)
+#   MERIDIAN_BRAIN_ROUTE_TYPE execution route type       (default: cli_session)
+#   MERIDIAN_BRAIN_CLI_BIN    cli provider binary        (default: claude)
+#   MERIDIAN_BRAIN_PROVIDER_PROFILE provider profile     (default: claude_local)
+#   MERIDIAN_BRAIN_MODEL      execution model            (default: empty)
+#   MERIDIAN_BRAIN_AUTH_PROFILE auth profile name        (default: provider profile)
+#   MERIDIAN_BRAIN_CLI_HOME   cli auth home              (default: empty)
+#   MERIDIAN_BRAIN_ENDPOINT   http provider endpoint     (default: empty)
+#   MERIDIAN_BRAIN_AUTH_ENV   http auth env var name     (default: empty)
 #   MERIDIAN_BRAIN_KEY_ENV_POOL comma-separated auth env fallbacks
-#
-# After onboarding, start the local stack:
-#   ./scripts/dev-up.sh
 # ──────────────────────────────────────────────────────────────────────────
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -43,24 +47,33 @@ LOOM_AGENT_CONFIG_DIR="${LOOM_CONFIG_ROOT}/agents"
 
 NON_INTERACTIVE=0
 CORE_MODE=0
+TEAM_MODE=0
+
+# Parse flags
+prev_arg=""
 for arg in "$@"; do
   case "$arg" in
     --non-interactive) NON_INTERACTIVE=1 ;;
-    --mode)            ;;  # consumed with next arg
-    --mode=core|core)  CORE_MODE=1; NON_INTERACTIVE=1 ;;
+    --mode=core)       CORE_MODE=1 ;;
+    --mode=team)       TEAM_MODE=1 ;;
   esac
-done
-# Handle "--mode core" as two separate args
-prev=""
-for arg in "$@"; do
-  if [ "$prev" = "--mode" ] && [ "$arg" = "core" ]; then
-    CORE_MODE=1; NON_INTERACTIVE=1
+  if [ "$prev_arg" = "--mode" ]; then
+    case "$arg" in
+      core) CORE_MODE=1 ;;
+      team) TEAM_MODE=1 ;;
+    esac
   fi
-  prev="$arg"
+  prev_arg="$arg"
 done
 
-# Core mode: apply sensible defaults so users don't face governance choices
+# Env var override
+if [ "${MERIDIAN_MODE:-}" = "core" ]; then CORE_MODE=1; fi
+if [ "${MERIDIAN_MODE:-}" = "team" ]; then TEAM_MODE=1; fi
+
+# Apply Core defaults (skips governance prompts, auto-selects execution)
 if [ "$CORE_MODE" = "1" ]; then
+  NON_INTERACTIVE=1
+  export MERIDIAN_MODE="core"
   export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
   export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
   export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
@@ -68,6 +81,14 @@ if [ "$CORE_MODE" = "1" ]; then
   export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
   export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
   export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+fi
+
+# Apply Team defaults (same clean-slate start, governance depth exposed)
+if [ "$TEAM_MODE" = "1" ]; then
+  export MERIDIAN_MODE="team"
+  export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-team}"
+  export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
+  export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
 fi
 
 prompt_or_default() {
@@ -97,23 +118,76 @@ generate_owner_id() {
 
 echo ""
 echo "================================================================"
-if [ "$CORE_MODE" = "1" ]; then
-  echo "  Meridian Core — Quick Setup"
-  echo "================================================================"
-  echo ""
-  echo "  Core mode: sensible defaults applied, no governance choices."
-  echo "  Gives you a working local agent runtime in under a minute."
-  echo ""
-  echo "  After setup, run daily tasks with:"
-  echo "    ./scripts/core.sh help"
+echo "  Meridian — First-Run Onboarding"
+echo "================================================================"
+echo ""
+echo "  One product. One install. Choose your mode:"
+echo ""
+echo "    Core  — daily-use local agent runtime"
+echo "            browser tasks, research, memory, scheduling, agent loops"
+echo "            no governance expertise required to start"
+echo ""
+echo "    Team  — Core plus governance depth"
+echo "            institution treasury, court rules, warrants, authority"
+echo "            gates, and full audit surfaces"
+echo ""
+
+# Interactive mode selection — only if no mode was chosen via flag or env
+if [ "$CORE_MODE" = "0" ] && [ "$TEAM_MODE" = "0" ] && [ "$NON_INTERACTIVE" = "0" ]; then
+  while true; do
+    read -rp "  Choose mode [core/team] (default: core): " _mode_choice
+    _mode_choice="${_mode_choice:-core}"
+    case "$_mode_choice" in
+      core|Core|CORE)
+        CORE_MODE=1
+        export MERIDIAN_MODE="core"
+        export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
+        export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
+        export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
+        export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-cli_session}"
+        export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
+        export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
+        export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+        break
+        ;;
+      team|Team|TEAM)
+        TEAM_MODE=1
+        export MERIDIAN_MODE="team"
+        export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-team}"
+        export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
+        export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
+        break
+        ;;
+      *)
+        echo "  Please enter 'core' or 'team'."
+        ;;
+    esac
+  done
+elif [ "$CORE_MODE" = "0" ] && [ "$TEAM_MODE" = "0" ] && [ "$NON_INTERACTIVE" = "1" ]; then
+  # Non-interactive with no mode specified: default to Core
+  CORE_MODE=1
+  export MERIDIAN_MODE="core"
+  export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
+  export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
+  export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
+  export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-cli_session}"
+  export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
+  export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
+  export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+fi
+
+SELECTED_MODE="${MERIDIAN_MODE:-core}"
+if [ "$TEAM_MODE" = "1" ]; then SELECTED_MODE="team"; fi
+if [ "$CORE_MODE" = "1" ]; then SELECTED_MODE="core"; fi
+
+echo ""
+if [ "$SELECTED_MODE" = "core" ]; then
+  echo "  Mode: Meridian Core"
+  echo "  Quick setup with sensible defaults. No governance choices required."
+  echo "  After setup: use ./scripts/core.sh for daily tasks."
 else
-  echo "  Meridian — First-Run Onboarding"
-  echo "================================================================"
-  echo ""
-  echo "  This guided flow creates your first local institution and"
-  echo "  first agent. Everything stays on your machine."
-  echo ""
-  echo "  Quick path: ./scripts/onboard.sh --mode core  (sensible defaults)"
+  echo "  Mode: Meridian Team"
+  echo "  Core plus governance depth. You will configure governance surfaces."
 fi
 echo ""
 echo "  What this creates:"
@@ -132,7 +206,13 @@ echo "----------------------------------------------------------------"
 
 INST_NAME="$(prompt_or_default MERIDIAN_INST_NAME "Institution name" "My Workspace")"
 OWNER_ID="${MERIDIAN_OWNER_ID:-$(generate_owner_id)}"
-INST_PLAN="$(prompt_or_default MERIDIAN_INST_PLAN "Plan (free / starter / pro / enterprise)" "free")"
+
+# Plan is derived from mode; only prompt in Team mode for explicit override
+if [ "$SELECTED_MODE" = "core" ]; then
+  INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
+else
+  INST_PLAN="$(prompt_or_default MERIDIAN_INST_PLAN "Governance tier (team / enterprise)" "team")"
+fi
 
 AGENT_NAME="$(prompt_or_default MERIDIAN_AGENT_NAME "First agent name" "Assistant")"
 AGENT_ROLE="$(prompt_or_default MERIDIAN_AGENT_ROLE "First agent role (manager / analyst / executor / writer)" "manager")"
@@ -303,13 +383,14 @@ ONBOARD_STATE_DIR="${MERIDIAN_ROOT}/runtime"
 mkdir -p "$ONBOARD_STATE_DIR"
 
 echo "$ONBOARD_RESULT" | python3 -c "
-import sys, json
+import sys, json, os
 result = json.load(sys.stdin)
 state = {
     'org_id': result['org_id'],
     'org_slug': result.get('org_slug', ''),
     'owner_id': result['owner_id'],
     'plan': result['plan'],
+    'mode': os.environ.get('MERIDIAN_MODE', 'core'),
     'execution_route': result.get('institution_brain_policy', {}),
     'onboarded_at': __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
     'source': 'onboard.sh',
@@ -395,39 +476,62 @@ if [ "$AGENT_CREATED" = "1" ]; then
   echo "    org_id:   $ORG_ID"
   echo ""
 fi
+echo "  Mode: ${SELECTED_MODE}"
+echo ""
 echo "  What is local (your machine only):"
 echo "    - Institution data:  $MERIDIAN_ROOT/intelligence/"
 echo "    - Runtime state:     $MERIDIAN_ROOT/runtime/"
 echo "    - Kernel governance: $MERIDIAN_ROOT/kernel/"
 echo "    - Loom agents:       $MERIDIAN_ROOT/runtime/default/"
-echo "    - Loom config:       $LOOM_CONFIG_ROOT/"
-echo "    - Agent configs:     $LOOM_AGENT_CONFIG_DIR/"
 echo ""
-echo "  What is the public demo site:"
-echo "    - https://app.welliam.codes is a public showcase."
-echo "    - It is NOT your personal dashboard."
-echo "    - Your local workspace runs on localhost after dev-up."
-echo ""
-echo "  What requires sign-in:"
-echo "    - The local workspace API requires credentials after dev-up."
-echo "    - The trust-ops page on the public site requires separate auth."
-echo ""
-echo "  Daily-use tasks (Meridian Core):"
-echo "    ./scripts/core.sh browse https://example.com"
-echo "    ./scripts/core.sh research \"echo hello\""
-echo "    ./scripts/core.sh remember my_note \"something to remember\""
-echo "    ./scripts/core.sh recall my_note"
-echo "    ./scripts/core.sh inspect"
-echo "    ./scripts/core.sh help"
-echo ""
-echo "  Local workspace (after dev-up):"
-echo "    MERIDIAN_ORG_ID=$ORG_ID MERIDIAN_WORKSPACE_ORG_ID=$ORG_ID ./scripts/dev-up.sh"
-echo "    http://127.0.0.1:8266/api/status"
-echo ""
-if [ "$AGENT_CREATED" = "1" ]; then
-  echo "  Run your agent:"
-  echo "    \"$LOOM_BIN\" run-agent \"$AGENT_SLUG\""
+
+if [ "$SELECTED_MODE" = "core" ]; then
+  echo "  ── Meridian Core next steps ──────────────────────────────"
   echo ""
+  echo "  Daily tasks:"
+  echo "    ./scripts/core.sh browse https://example.com"
+  echo "    ./scripts/core.sh research \"echo hello\""
+  echo "    ./scripts/core.sh remember my_note \"something to remember\""
+  echo "    ./scripts/core.sh recall my_note"
+  echo "    ./scripts/core.sh cap list"
+  echo "    ./scripts/core.sh inspect"
+  echo "    ./scripts/core.sh help"
+  echo ""
+  if [ "$AGENT_CREATED" = "1" ]; then
+    echo "  Your agent:"
+    echo "    \"$LOOM_BIN\" run-agent \"$AGENT_SLUG\""
+    echo ""
+  fi
+  echo "  Public demo surfaces (not your local runtime):"
+  echo "    https://app.welliam.codes/proofs"
+  echo "    https://app.welliam.codes/workflows"
+else
+  echo "  ── Meridian Team next steps ──────────────────────────────"
+  echo ""
+  echo "  Core daily tasks (same as Core mode):"
+  echo "    ./scripts/core.sh browse https://example.com"
+  echo "    ./scripts/core.sh research \"echo hello\""
+  echo "    ./scripts/core.sh inspect"
+  echo "    ./scripts/core.sh help"
+  echo ""
+  echo "  Governance depth surfaces:"
+  echo "    MERIDIAN_ORG_ID=$ORG_ID MERIDIAN_WORKSPACE_ORG_ID=$ORG_ID ./scripts/dev-up.sh"
+  echo "    http://127.0.0.1:8266/api/status           — runtime status"
+  echo "    http://127.0.0.1:8266/api/treasury          — treasury state"
+  echo "    http://127.0.0.1:8266/api/institution/template — institution template"
+  echo ""
+  echo "  Proof and audit surfaces:"
+  echo "    \"$LOOM_BIN\" contract show"
+  echo "    \"$LOOM_BIN\" capsule inspect"
+  echo "    \"$LOOM_BIN\" parity report"
+  echo ""
+  if [ "$AGENT_CREATED" = "1" ]; then
+    echo "  Your agent:"
+    echo "    \"$LOOM_BIN\" run-agent \"$AGENT_SLUG\""
+    echo ""
+  fi
 fi
+
 echo "    Your onboarding state: $ONBOARD_STATE_DIR/onboard_state.json"
+echo "    (mode persisted: ${SELECTED_MODE})"
 echo ""
