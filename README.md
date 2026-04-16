@@ -5,23 +5,23 @@
 </p>
 
 <p align="center">
-  <strong>Meridian — Run AI agents locally with built-in governance and verifiable proof.</strong><br>
-  Install Loom. Run guided onboarding. Start your local stack. Every action gets a receipt.
+  <strong>Meridian — one product, one install, two modes.</strong><br>
+  Meridian Core is the daily-use local agent runtime. Meridian Team adds governed execution depth. Run guided onboarding, choose your mode, and start locally with verifiable proof.
 </p>
 
 <p align="center">
   <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/ci.yml?branch=main&style=flat-square" alt="CI status">
   <img src="https://img.shields.io/badge/license-MIT-475569?style=flat-square" alt="MIT">
   <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="GitHub stars">
-  <img src="https://img.shields.io/badge/product-Loom-0f766e?style=flat-square" alt="Loom">
+  <img src="https://img.shields.io/badge/mode-Core%20%2B%20Team-0f766e?style=flat-square" alt="Core and Team modes">
   <img src="https://img.shields.io/badge/runtime-local%20first-1f6feb?style=flat-square" alt="Local-first runtime">
-  <img src="https://img.shields.io/badge/governance-built%20in-111827?style=flat-square" alt="Built-in governance">
+  <img src="https://img.shields.io/badge/governance-Team%20depth-111827?style=flat-square" alt="Team governance depth">
 </p>
 
 <p align="center">
   <a href="https://app.welliam.codes">Website</a> ·
-  <a href="https://app.welliam.codes/loom">Loom</a> ·
   <a href="https://app.welliam.codes/pilot">Get Started</a> ·
+  <a href="https://app.welliam.codes/loom">Runtime Details</a> ·
   <a href="https://app.welliam.codes/compare">Compare</a> ·
   <a href="CONTRIBUTING.md">Contributing</a> ·
   <a href="ROADMAP.md">Roadmap</a>

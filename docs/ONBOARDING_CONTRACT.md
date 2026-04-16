@@ -1,6 +1,6 @@
 # Onboarding Contract (Ready-to-Run)
 
-This contract defines what "one-command onboarding" means in Meridian.
+This contract defines what "one-command onboarding" means in Meridian's one-product, two-mode contract.
 
 ## Definition
 
@@ -43,13 +43,22 @@ Fields collected during guided onboarding. Each can be overridden by setting the
 | Import demo pack | `MERIDIAN_IMPORT_DEMO_PACK` | `no` | Set to `yes` to seed pre-built demo data |
 | Enable governance | `MERIDIAN_ENABLE_GOVERNANCE` | `yes` | Set to `no` to disable governance gates |
 
-## Install Modes
+## Onboarding Modes (Product Contract)
 
 | Mode | Description |
 | --- | --- |
-| **User** (default) | Clean-slate install. Creates the user's own institution and first agent. No demo or maintainer state. |
-| **Demo** | Like user mode, but also imports a pre-seeded demo data pack (`MERIDIAN_IMPORT_DEMO_PACK=yes`). |
-| **Maintainer** | Operator-level install. Uses existing operator credentials and state. Not for new-user onboarding. |
+| **Core** (recommended) | Daily-use local runtime setup. Creates institution + first agent with minimal operator overhead. |
+| **Team** | Core plus governed execution depth (authority/treasury/court/audit surfaces). |
+
+## Bootstrap Profiles (Advanced / Internal)
+
+The installer/bootstrap layer can still run with internal profiles (`user`, `demo`, `maintainer`) for packaging and ops workflows. These are implementation profiles, not separate product lines.
+
+- `user`: clean-slate bootstrap path
+- `demo`: bootstrap plus demo data import path
+- `maintainer`: operator-level bootstrap path
+
+Public onboarding contract remains Core/Team mode selection via `./scripts/onboard.sh`.
 
 ## Data Roots
 
