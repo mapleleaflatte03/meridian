@@ -1,0 +1,67 @@
+# Meridian Skill Metadata — core.url.fetch.v1
+# Canonical repo source: loom/capabilities/contrib/core.url.fetch.v1/
+
+id: "core.url.fetch.v1"
+name: "core.url.fetch.v1"
+version: "0.1.0"
+description: "Fetch a URL and extract the page title and first N characters of visible text. Uses Python stdlib only (urllib, html.parser). No external dependencies."
+
+runtime:
+  kind: "python"
+  entrypoint: "worker.py"
+  action_type: "browse"
+
+inputs:
+  - name: url
+    type: string
+    description: "The URL to fetch (required)"
+    required: true
+  - name: max_chars
+    type: integer
+    description: "Maximum characters of body text to extract (default: 500)"
+    required: false
+
+outputs:
+  - name: status
+    type: string
+    description: "completed | error"
+  - name: title
+    type: string
+    description: "Page title extracted from <title> tag, empty string if not found"
+  - name: text
+    type: string
+    description: "Visible body text extracted from HTML, up to max_chars"
+  - name: http_status
+    type: integer
+    description: "HTTP response code (200, 404, etc.)"
+  - name: url
+    type: string
+    description: "The URL that was fetched"
+  - name: summary
+    type: string
+    description: "One-line summary: [HTTP_STATUS] 'title' — text[:120]"
+  - name: error
+    type: string
+    description: "Error message if status is 'error', empty string otherwise"
+
+permissions:
+  # Host capabilities this worker uses
+  - network  # outbound HTTP requests via urllib
+
+example_invocation:
+  command: "./scripts/skill.sh run core.url.fetch.v1 --payload '{\"url\": \"https://example.com\", \"max_chars\": 300}'"
+  expected_output: |
+    {
+      "status": "completed",
+      "http_status": 200,
+      "title": "Example Domain",
+      "text": "Example Domain This domain is for use ...",
+      "summary": "[200] 'Example Domain' — ..."
+    }
+
+install:
+  # To install this capability into your local runtime:
+  steps:
+    - "loom capability import-workspace-skill --skill-root loom/capabilities/contrib/core.url.fetch.v1 --entrypoint worker.py --name core.url.fetch.v1"
+    - "./scripts/skill.sh verify core.url.fetch.v1"
+    - "./scripts/skill.sh promote core.url.fetch.v1"

@@ -199,7 +199,9 @@ inspect it as a reference:
   --payload '{"url": "https://example.com", "max_chars": 300}'
 ```
 
-Source worker: `runtime/default/workers/python/core-url-fetch-v1.py`
+Canonical repo source: `loom/capabilities/contrib/core.url.fetch.v1/`
+- `worker.py` — implementation
+- `skill.yaml` — complete metadata (id, version, description, inputs, outputs, permissions, example)
 
 ---
 
@@ -246,6 +248,41 @@ meridian/
         └── workers/
             └── python/        — Python worker scripts (you edit these)
 ```
+
+---
+
+## Clean-state repeatability
+
+The flow works from a fresh runtime root. To prove this yourself:
+
+```bash
+# 1. Initialize a fresh runtime root
+CLEAN=/tmp/my_test_meridian
+loom init --mode embedded --kernel-path kernel/ --root "$CLEAN" --org-id YOUR_ORG_ID
+
+# 2. Scaffold a capability
+MERIDIAN_LOOM_ROOT="$CLEAN" ./scripts/skill.sh scaffold my.test.cap.v1 --kind python --action respond
+
+# 3. List — appears as candidate
+MERIDIAN_LOOM_ROOT="$CLEAN" ./scripts/skill.sh list
+
+# 4. Verify (requires a kernel capsule and an agent — point to your initialized runtime)
+loom capability verify --name my.test.cap.v1 --agent-id YOUR_AGENT --kernel-path kernel/ \
+  --org-id YOUR_ORG_ID --payload-json '{"message":"test"}' --root "$CLEAN" --format json
+
+# 5. Promote
+MERIDIAN_LOOM_ROOT="$CLEAN" ./scripts/skill.sh promote my.test.cap.v1
+
+# 6. Inspect
+MERIDIAN_LOOM_ROOT="$CLEAN" ./scripts/skill.sh inspect my.test.cap.v1
+
+# 7. Run
+MERIDIAN_ORG_ID=YOUR_ORG_ID MERIDIAN_LOOM_ROOT="$CLEAN" \
+  ./scripts/skill.sh run my.test.cap.v1 --payload '{"message":"hello"}'
+```
+
+Note: the kernel capsule must match an initialized institution. After `./scripts/onboard.sh`,
+use the org_id from `runtime/onboard_state.json`.
 
 ---
 

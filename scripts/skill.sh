@@ -154,16 +154,18 @@ cmd_scaffold() {
         --root "$LOOM_ROOT" 2>&1)"
     echo "$result"
 
-    # Write companion skill.yaml
+    # Write per-capability skill.yaml alongside the manifest
     local cap_dir="${LOOM_ROOT}/capabilities/custom"
     local slug; slug="$(echo "$name" | tr '.' '-')"
     local worker_path="${LOOM_ROOT}/workers/python/${slug}.py"
     write_skill_yaml "$cap_dir" "$name" "$action" "$kind" "workers/python/${slug}.py"
+    # Rename to per-capability file so multiple capabilities don't share one yaml
+    mv "${cap_dir}/skill.yaml" "${cap_dir}/${slug}.skill.yaml" 2>/dev/null || true
 
     echo ""
     echo "[skill] next steps:"
     echo "  1. Edit the worker:  $worker_path"
-    echo "  2. Edit metadata:    $cap_dir/skill.yaml"
+    echo "  2. Edit metadata:    $cap_dir/${slug}.skill.yaml"
     echo "  3. Verify:           ./scripts/skill.sh verify $name"
     echo "  4. Promote:          ./scripts/skill.sh promote $name"
     echo "  5. Run:              ./scripts/skill.sh run $name"
@@ -215,40 +217,152 @@ cmd_inspect() {
     local cap_json
     cap_json="$("$LOOM_BIN" capability show --name "$name" --root "$LOOM_ROOT" --format json 2>/dev/null || true)"
 
-    echo "$cap_json" | python3 -c "
-import sys, json, os
-data = json.loads(sys.stdin.read())
-print('[skill] capability metadata')
+    # Locate skill.yaml for this capability (per-capability file takes priority)
+    local slug; slug="$(echo "$name" | tr '.' '-')"
+    local skill_yaml_per="${LOOM_ROOT}/capabilities/custom/${slug}.skill.yaml"
+    local skill_yaml_shared="${LOOM_ROOT}/capabilities/custom/skill.yaml"
+    local skill_yaml=""
+    if [ -f "$skill_yaml_per" ]; then
+        skill_yaml="$skill_yaml_per"
+    elif [ -f "$skill_yaml_shared" ]; then
+        # Only use shared skill.yaml if it describes this capability
+        local yaml_id
+        yaml_id="$(grep -m1 '^id:' "$skill_yaml_shared" 2>/dev/null | sed 's/id: *"\(.*\)"/\1/' | tr -d '"' | xargs)" || true
+        [ "$yaml_id" = "$name" ] && skill_yaml="$skill_yaml_shared"
+    fi
+
+    # Pass skill_yaml path to Python via env to avoid quoting issues
+    CAP_SKILL_YAML="${skill_yaml}" CAP_JSON_DATA="${cap_json}" python3 /dev/stdin <<'PYEOF'
+import sys, json, re, datetime, os
+
+cap_json_str = os.environ.get("CAP_JSON_DATA", "{}")
+skill_yaml_path = os.environ.get("CAP_SKILL_YAML", "")
+
+data = json.loads(cap_json_str)
+skill_yaml_text = ""
+if skill_yaml_path and os.path.isfile(skill_yaml_path):
+    with open(skill_yaml_path, encoding="utf-8") as fh:
+        skill_yaml_text = fh.read()
+
+
+def _yaml_val(s):
+    return s.strip().strip('"').strip("'")
+
+def parse_yaml_simple(text):
+    """Minimal YAML key extractor for skill.yaml — no external deps needed."""
+    result = {}
+    current_list_key = None
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # top-level key: (block follows — must check before key:value)
+        m2 = re.match(r'^([a-z_]+):\s*$', line)
+        if m2 and not line.startswith(" "):
+            current_list_key = m2.group(1)
+            if current_list_key not in result:
+                result[current_list_key] = []
+            continue
+        # top-level key: value
+        m = re.match(r'^([a-z_]+):\s*(.+)$', line)
+        if m and not line.startswith(" "):
+            k, v = m.group(1), _yaml_val(m.group(2))
+            result[k] = v
+            current_list_key = None
+            continue
+        # list item starting with sub-key: "  - name: value"
+        m3k = re.match(r'^  - ([a-z_]+):\s*(.+)$', line)
+        if m3k and current_list_key and isinstance(result.get(current_list_key), list):
+            k2, v2 = m3k.group(1), _yaml_val(m3k.group(2))
+            result[current_list_key].append({k2: v2})
+            continue
+        # plain list item: "  - value"
+        m3 = re.match(r'^  - (.+)', line)
+        if m3 and current_list_key and isinstance(result.get(current_list_key), list):
+            result[current_list_key].append(m3.group(1).strip())
+            continue
+        # sub-key under list item (4-space indent)
+        m4 = re.match(r'^    ([a-z_]+):\s*(.*)$', line)
+        if m4 and current_list_key in ("inputs", "outputs"):
+            lst = result.get(current_list_key, [])
+            k2, v2 = m4.group(1), _yaml_val(m4.group(2))
+            if lst and isinstance(lst[-1], dict):
+                lst[-1][k2] = v2
+    return result
+
+
+sy = parse_yaml_simple(skill_yaml_text) if skill_yaml_text.strip() else {}
+
+print("[skill] capability metadata — full inspector view")
 print()
-print(f'  id:              {data.get(\"name\")}')
-print(f'  action_type:     {data.get(\"action_type\")}')
-print(f'  description:     {data.get(\"description\")}')
-print(f'  worker_kind:     {data.get(\"worker_kind\")}')
-print(f'  worker_entry:    {data.get(\"worker_entry\")}')
-print(f'  runtime_lane:    {data.get(\"runtime_lane\")}')
-print(f'  promotion_state: {data.get(\"promotion_state\")}')
-print(f'  verification:    {data.get(\"verification_status\")}')
-vt = data.get('last_verified_at', '')
+# Identity
+print(f'  id:              {sy.get("id") or data.get("name")}')
+print(f'  name:            {sy.get("name") or data.get("name")}')
+print(f'  version:         {sy.get("version") or "(not set)"}')
+print(f'  description:     {sy.get("description") or data.get("description")}')
+print()
+# Runtime
+print(f'  action_type:     {data.get("action_type")}')
+print(f'  worker_kind:     {data.get("worker_kind")}')
+print(f'  worker_entry:    {data.get("worker_entry")}')
+print(f'  runtime_lane:    {data.get("runtime_lane")}')
+print()
+# Inputs
+inputs = [x for x in sy.get("inputs", []) if x]
+if inputs:
+    print("  inputs:")
+    for inp in inputs:
+        if isinstance(inp, dict):
+            req = " (required)" if inp.get("required", "").lower() in ("true", "yes") else ""
+            print(f'    - {inp.get("name","?")} [{inp.get("type","?")}]{req}: {inp.get("description","")}')
+        else:
+            print(f"    - {inp}")
+else:
+    print("  inputs:          (not documented in skill.yaml)")
+print()
+# Outputs
+outputs = [x for x in sy.get("outputs", []) if x]
+if outputs:
+    print("  outputs:")
+    for out in outputs:
+        if isinstance(out, dict):
+            print(f'    - {out.get("name","?")} [{out.get("type","?")}]: {out.get("description","")}')
+        else:
+            print(f"    - {out}")
+else:
+    print("  outputs:         (not documented in skill.yaml)")
+print()
+# Permissions
+perms = [x for x in sy.get("permissions", []) if x]
+if perms:
+    print(f'  permissions:     {" | ".join(perms)}')
+else:
+    print("  permissions:     (not documented in skill.yaml)")
+print()
+# Example invocation
+ex_cmd = ""
+for line in skill_yaml_text.splitlines():
+    m = re.match(r'\s+command:\s*"?(.+?)"?\s*$', line)
+    if m:
+        ex_cmd = m.group(1).strip().strip('"')
+        break
+if ex_cmd:
+    print(f"  example:         {ex_cmd[:120]}")
+print()
+# Registration
+print(f'  promotion_state: {data.get("promotion_state")}')
+print(f'  verification:    {data.get("verification_status")}')
+vt = data.get("last_verified_at", "")
 if vt:
-    import datetime
     try:
         dt = datetime.datetime.fromtimestamp(int(vt), tz=datetime.timezone.utc)
-        print(f'  verified_at:     {dt.strftime(\"%Y-%m-%dT%H:%M:%SZ\")}')
+        print(f'  verified_at:     {dt.strftime("%Y-%m-%dT%H:%M:%SZ")}')
     except Exception:
-        print(f'  verified_at:     {vt}')
-ev = data.get('verification_evidence', {})
-if ev.get('worker_result'):
-    print(f'  last_result:     {ev[\"worker_result\"]}')
-"
-
-    # Show skill.yaml if it exists
-    local slug; slug="$(echo "$name" | tr '.' '-')"
-    local skill_yaml="${LOOM_ROOT}/capabilities/custom/skill.yaml"
-    if [ -f "$skill_yaml" ]; then
-        echo ""
-        echo "[skill] contributor metadata (skill.yaml):"
-        cat "$skill_yaml"
-    fi
+        print(f"  verified_at:     {vt}")
+ev = data.get("verification_evidence", {})
+if ev.get("worker_result"):
+    print(f'  last_result:     {ev["worker_result"]}')
+PYEOF
 }
 
 # ── Command: verify ───────────────────────────────────────────────────────
