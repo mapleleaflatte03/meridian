@@ -24,7 +24,8 @@ def main():
 
     capability = payload.get("capability", {})
     envelope = payload.get("envelope", {})
-    raw_payload = payload.get("payload_json", "")
+    # payload_json may be at root level or nested inside envelope
+    raw_payload = payload.get("payload_json", "") or envelope.get("payload_json", "")
     parsed_payload = {}
     if raw_payload:
         try:

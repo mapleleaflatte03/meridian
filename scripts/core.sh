@@ -347,6 +347,18 @@ cmd_status() {
     "$LOOM_BIN" status --root "$LOOM_ROOT" 2>/dev/null
 }
 
+# ── Command: cap ──────────────────────────────────────────────────────────
+# Delegates to skill.sh for capability discovery and execution
+
+cmd_cap() {
+    local subcmd="${1:-list}"
+    shift || true
+    local skill_script="${ROOT_DIR}/scripts/skill.sh"
+    [ -x "$skill_script" ] || die "skill.sh not found at $skill_script"
+    MERIDIAN_ROOT="$ROOT_DIR" MERIDIAN_LOOM_ROOT="$LOOM_ROOT" \
+      bash "$skill_script" "$subcmd" "$@"
+}
+
 # ── Command: help ─────────────────────────────────────────────────────────
 
 cmd_help() {
@@ -362,7 +374,16 @@ Commands:
   schedules               List all scheduled tasks
   inspect                 Show last execution receipts and agent state
   status                  Show full runtime status
+  cap list                List available capabilities
+  cap inspect NAME        Show capability metadata
+  cap run NAME [PAYLOAD]  Run a capability by name
   help                    Show this help
+
+Capability contributor flow:
+  ./scripts/skill.sh scaffold my.cap.v1
+  ./scripts/skill.sh verify my.cap.v1
+  ./scripts/skill.sh promote my.cap.v1
+  ./scripts/core.sh cap run my.cap.v1
 
 Environment:
   MERIDIAN_ROOT      monorepo root (default: auto-detected)
@@ -390,6 +411,7 @@ case "$COMMAND" in
     schedules)   cmd_schedules "$@" ;;
     inspect)     cmd_inspect "$@" ;;
     status)      cmd_status "$@" ;;
+    cap)         cmd_cap "$@" ;;
     help|--help) cmd_help ;;
     *)
         echo "[core] Unknown command: $COMMAND" >&2
