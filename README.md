@@ -74,15 +74,6 @@ After install, run the guided onboarding:
 ```bash
 # Create your institution and first agent (interactive)
 ./scripts/onboard.sh
-
-# Start the local stack
-./scripts/dev-up.sh
-
-# Check system status
-curl http://127.0.0.1:8266/api/status
-
-# See proof receipts
-open http://127.0.0.1:8266/proofs
 ```
 
 For non-interactive / CI usage:
@@ -90,6 +81,12 @@ For non-interactive / CI usage:
 ```bash
 MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" ./scripts/onboard.sh --non-interactive
 ```
+
+After onboarding completes, explore the public proof surfaces:
+
+- [Proofs](https://app.welliam.codes/proofs) — runtime proof posture dashboard
+- [Workflows](https://app.welliam.codes/workflows) — operator workflow gallery
+- [Demo](https://app.welliam.codes/demo) — full walkthrough
 
 Ready-to-run gate: [`docs/ONBOARDING_CONTRACT.md`](docs/ONBOARDING_CONTRACT.md)
 
