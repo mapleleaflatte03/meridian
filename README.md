@@ -68,7 +68,32 @@ After Core setup, run daily tasks:
 ./scripts/core.sh inspect
 ```
 
-After Team setup, Core tasks work the same — plus governance surfaces via `dev-up.sh`.
+After Team setup, Core tasks work the same — plus governed Team execution surfaces via `dev-up.sh`.
+
+Team governed execution (Team mode only):
+
+```bash
+# Run one governed execution slice (court + budget + authority/treasury/court/audit context)
+curl -s -X POST http://127.0.0.1:18901/api/team/governed-execution \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "agent_id":"agent_123",
+    "task_description":"Prepare governed execution memo",
+    "amount_usd":15.0,
+    "proof_receipt":"proof_team_demo",
+    "assigned_by":"ops_lead",
+    "settled_by":"ops_lead",
+    "estimated_cost_usd":0.25
+  }'
+
+# Inspect Team governance state for an agent
+curl -s "http://127.0.0.1:18901/api/team/governed-execution/inspect?agent_id=agent_123"
+
+# Export Team audit artifact (JSON)
+curl -s "http://127.0.0.1:18901/api/team/governed-execution/audit-export?agent_id=agent_123"
+```
+
+This Team flow adds a real policy consequence over Core: it is blocked unless onboarding mode is `team`, and it returns an inspectable governance + audit artifact tied to runtime evidence.
 
 ## Why Loom
 

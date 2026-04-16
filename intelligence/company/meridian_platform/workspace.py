@@ -83,6 +83,9 @@ Endpoints:
   GET  /api/marketplace/disputes  → Marketplace disputes
   POST /api/marketplace/bids      → Create a marketplace bid
   POST /api/marketplace/dispute   → Open/resolve marketplace dispute
+  POST /api/team/governed-execution → Team-governed execution run (Team mode required)
+  GET  /api/team/governed-execution/inspect → Team governance inspect surface
+  GET  /api/team/governed-execution/audit-export → Team governed execution audit artifact
   POST /api/warrants/issue        → Issue a warrant record
   POST /api/warrants/approve      → Approve a warrant for execution
   POST /api/warrants/stay         → Stay a warrant before execution
@@ -285,7 +288,7 @@ from agent_registry import (
     transition_lifecycle as transition_agent_lifecycle,
     record_incident as record_agent_incident,
 )
-from audit import log_event, query_events
+from audit import log_event, query_events, stats as audit_stats
 import alerting
 
 import importlib.util
@@ -440,6 +443,7 @@ activate_rule = _workspace_court_mod.activate_rule
 get_proposals = _workspace_court_mod.get_proposals
 get_dynamic_rules = _workspace_court_mod.get_dynamic_rules
 dynamic_court_status = _workspace_court_mod.dynamic_court_status
+get_agent_record = _workspace_court_mod.get_agent_record
 # Load workspace marketplace module by absolute file path to avoid import
 # collisions with similarly named kernel modules already present in sys.modules.
 _workspace_marketplace_spec = importlib.util.spec_from_file_location(
@@ -680,6 +684,7 @@ from runtime_host import (
 )
 import commonwealth as _commonwealth
 import side_hustle
+import team_governed_execution
 
 # Process-level session authority (tokens do not survive restarts unless
 # MERIDIAN_SESSION_SECRET is set in the environment).
@@ -6168,6 +6173,78 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             events = query_events(org_id=org_id, limit=30)
             events.reverse()
             return self._json({'events': events})
+        elif path == '/api/team/governed-execution/inspect':
+            agent_id = (parse_qs(parsed.query).get('agent_id') or [''])[-1]
+            authority_queue = _load_queue(org_id)
+            treasury_view = treasury_snapshot(org_id)
+            court_record = get_agent_record(agent_id, org_id=org_id) if agent_id else {}
+            audit_events = query_events(org_id=org_id, action='team_governed_execution_requested', limit=30)
+            audit_events.reverse()
+            return self._json({
+                'team_mode_required': 'team',
+                'org_id': org_id,
+                'agent_id': agent_id,
+                'authority': {
+                    'kill_switch': authority_queue.get('kill_switch', {}),
+                    'pending_approvals': get_pending_approvals(org_id=org_id),
+                    'delegations': [
+                        d for d in authority_queue.get('delegations', {}).values()
+                        if d.get('org_id') in (None, '', org_id)
+                    ],
+                    'sprint_lead': _public_sprint_lead(*get_sprint_lead(org_id), reg=load_registry()),
+                },
+                'treasury': treasury_view,
+                'court': court_record,
+                'audit': {
+                    'events': audit_events,
+                    'summary': audit_stats(org_id),
+                },
+            })
+        elif path == '/api/team/governed-execution/audit-export':
+            agent_id = (parse_qs(parsed.query).get('agent_id') or [''])[-1]
+            if not agent_id:
+                return self._json({'error': 'agent_id is required'}, 400)
+            authority_queue = _load_queue(org_id)
+            authority_snapshot = {
+                'kill_switch': authority_queue.get('kill_switch', {}),
+                'pending_approvals': get_pending_approvals(org_id=org_id),
+                'delegations': [
+                    d for d in authority_queue.get('delegations', {}).values()
+                    if d.get('org_id') in (None, '', org_id)
+                ],
+                'sprint_lead': _public_sprint_lead(*get_sprint_lead(org_id), reg=load_registry()),
+            }
+            treasury_view = treasury_snapshot(org_id)
+            court_record = get_agent_record(agent_id, org_id=org_id)
+            audit_events = query_events(org_id=org_id, limit=50)
+            artifact = team_governed_execution.build_audit_export(
+                org_id=org_id,
+                actor_id=auth_context.get('actor_id', ''),
+                team_mode='team',
+                request_payload={'agent_id': agent_id},
+                execution_result={
+                    'status': 'inspect_only',
+                    'reason': '',
+                    'governance_checks': {
+                        'court': {
+                            'allowed': not bool(court_record.get('active_restrictions')),
+                            'reason': 'ok' if not bool(court_record.get('active_restrictions')) else 'active restrictions present',
+                            'blocking_violations': [],
+                        },
+                        'budget': {
+                            'allowed': True,
+                            'reason': 'inspect_only',
+                            'estimated_cost_usd': 0.0,
+                        },
+                    },
+                },
+                authority_snapshot=authority_snapshot,
+                treasury_snapshot=treasury_view,
+                court_record=court_record,
+                audit_events=audit_events,
+                audit_summary=audit_stats(org_id),
+            )
+            return self._json(artifact)
         elif path in ('/metrics', '/api/metrics'):
             metrics_text = status_surface.observability_metrics_text(org_id)
             return self._text(metrics_text)
@@ -7014,6 +7091,39 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     session_id=_sid,
                 )
                 return self._json(hustle_result)
+
+            elif path == '/api/team/governed-execution':
+                team_result = team_governed_execution.run_team_governed_execution(
+                    org_id=org_id,
+                    actor_id=by,
+                    request_payload={
+                        'agent_id': body['agent_id'],
+                        'task_description': body['task_description'],
+                        'amount_usd': float(body.get('amount_usd', 0.0)),
+                        'proof_receipt': body['proof_receipt'],
+                        'assigned_by': body['assigned_by'],
+                        'settled_by': body['settled_by'],
+                        'estimated_cost_usd': float(body.get('estimated_cost_usd', 0.0)),
+                    },
+                    meridian_root=os.environ.get('MERIDIAN_ROOT', ''),
+                )
+                team_outcome = 'success' if team_result.get('status') == 'settled' else 'blocked'
+                log_event(
+                    org_id,
+                    by,
+                    'team_governed_execution_requested',
+                    resource=body['agent_id'],
+                    outcome=team_outcome,
+                    details={
+                        'status': team_result.get('status'),
+                        'task_description': body.get('task_description', ''),
+                        'amount_usd': float(body.get('amount_usd', 0.0)),
+                        'reason': team_result.get('reason', ''),
+                        'team_mode': team_result.get('team_mode', ''),
+                    },
+                    session_id=_sid,
+                )
+                return self._json(team_result)
 
             elif path == '/api/memory/append':
                 node_hash, depth = memory_append_node(

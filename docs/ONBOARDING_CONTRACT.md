@@ -77,10 +77,14 @@ Fields collected during guided onboarding. Each can be overridden by setting the
    - `/api/status`
    - `/api/runtime-proof`
    - `/api/kernel-proof-bundle`
-5. Court rule set initialized (>=3 rules in template path).
-6. First agent can be provisioned through one helper command:
+5. Team governed execution surface available (Team mode only):
+   - `POST /api/team/governed-execution`
+   - `GET /api/team/governed-execution/inspect?agent_id=<id>`
+   - `GET /api/team/governed-execution/audit-export?agent_id=<id>`
+6. Court rule set initialized (>=3 rules in template path).
+7. First agent can be provisioned through one helper command:
    - `./scripts/new-first-agent.sh "My Assistant"`
-7. Supervisor auto-restart layer active for local stack reliability:
+8. Supervisor auto-restart layer active for local stack reliability:
    - tracks `18901` (workspace), `19001` (peer workspace), `8266` (gateway)
    - status command: `./scripts/dev-supervisor.sh status`
    - optional persistent user service:
