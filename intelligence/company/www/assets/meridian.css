@@ -3,7 +3,7 @@
    Cold-black ceremonial shell for the Meridian public surface
    ═══════════════════════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
 /* ── Design tokens ── */
 :root {
@@ -242,6 +242,81 @@ li { padding: 0.2rem 0; }
 }
 
 /* ── Hero ── */
+.workspace-entry {
+  margin: 1.1rem auto 0;
+  width: min(calc(100% - 3rem), var(--shell-max));
+}
+.workspace-entry-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(260px, 0.8fr);
+  gap: 1rem;
+  border: 1px solid rgba(135,216,255,0.18);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(11,16,24,0.92), rgba(6,10,16,0.9));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 18px 42px rgba(0,0,0,0.28);
+  padding: 1rem 1.1rem;
+}
+.workspace-entry-main h2 {
+  margin: 0 0 0.45rem;
+  border: none;
+  padding: 0;
+  color: #f4f8fc;
+}
+.workspace-entry-main p {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.92rem;
+}
+.workspace-entry-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  margin-top: 0.8rem;
+}
+.workspace-entry-links a {
+  text-decoration: none;
+  color: var(--fg);
+  border: 1px solid rgba(135,216,255,0.22);
+  border-radius: 999px;
+  padding: 0.32rem 0.72rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  font-family: var(--mono);
+  background: linear-gradient(180deg, rgba(12,19,30,0.94), rgba(8,12,19,0.9));
+}
+.workspace-entry-links a:hover {
+  border-color: rgba(255,215,0,0.35);
+  color: #fff;
+}
+.workspace-entry-rail {
+  border-left: 1px solid rgba(135,216,255,0.14);
+  padding-left: 0.9rem;
+}
+.workspace-entry-rail .rail-kicker {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  margin-bottom: 0.3rem;
+}
+.workspace-entry-rail p {
+  margin: 0;
+  color: var(--dim);
+  font-size: 0.84rem;
+}
+@media (max-width: 860px) {
+  .workspace-entry-shell {
+    grid-template-columns: 1fr;
+  }
+  .workspace-entry-rail {
+    border-left: 0;
+    border-top: 1px solid rgba(135,216,255,0.14);
+    padding-top: 0.8rem;
+    padding-left: 0;
+  }
+}
 .hero {
   padding: 4.8rem 0 2.7rem;
   background: linear-gradient(180deg, rgba(3,5,8,0.92) 0%, rgba(3,5,8,0.52) 46%, rgba(3,5,8,0.08) 100%);

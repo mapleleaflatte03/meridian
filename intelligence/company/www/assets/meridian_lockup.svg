@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 256" width="960" height="256" preserveAspectRatio="xMidYMid meet" role="img" aria-labelledby="title desc">
   <title id="title">Meridian flat lockup</title>
-  <desc id="desc">Warrior mark alongside the Meridian wordmark.</desc>
+  <desc id="desc">Canonical Meridian logo mark alongside the Meridian product wordmark.</desc>
   <defs>
     <style>
       .mk { fill: #d7e1eb; }
-      .word { fill: #d7e1eb; font: 700 88px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 7px; }
+      .word { fill: #d7e1eb; font: 700 88px/1 'IBM Plex Sans Condensed', 'Space Grotesk', sans-serif; letter-spacing: 7px; }
       .accent { fill: #7f92a6; font: 500 20px/1 'JetBrains Mono', monospace; letter-spacing: 4.5px; text-transform: uppercase; }
     </style>
   </defs>
@@ -15,5 +15,5 @@
   </g>
   <!-- Wordmark -->
   <text x="286" y="124" class="word">Meridian</text>
-  <text x="290" y="166" class="accent">Governed Agent Runtime</text>
+  <text x="290" y="166" class="accent">Core + Team · Local-first</text>
 </svg>

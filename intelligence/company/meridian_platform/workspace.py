@@ -4773,8 +4773,10 @@ def api_status(context_source='configured_default', institution_context=None):
         model_hint='',
     )
 
+    onboard_mode = 'team' if str(org.get('plan', '')).strip().lower() in ('team', 'enterprise') else 'core'
     result = {
         'runtime_id': 'loom_native',
+        'product_mode': onboard_mode,
         'slo': slo,
         'queue_count': int(alert_queue.get('queue_count', 0) or 0),
         'pending_delivery_count': int(alert_queue.get('pending_delivery_count', 0) or 0),
@@ -4902,97 +4904,229 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Meridian — Governed Workspace</title>
+<title>Meridian — Local Control Dashboard</title>
 <style>
-:root { --bg: #0a0a0f; --fg: #e0e0e0; --accent: #4fc3f7; --card: #151520;
-        --border: #2a2a3a; --green: #4caf50; --gold: #ffd54f; --dim: #888;
-        --red: #ef5350; --orange: #ff9800; }
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+:root {
+  --bg: #07090d;
+  --fg: #d8e3ef;
+  --accent: #6fd7ff;
+  --accent-warm: #f1c25d;
+  --card: rgba(13, 19, 30, 0.92);
+  --border: rgba(111, 215, 255, 0.2);
+  --green: #4caf50;
+  --gold: #ffd54f;
+  --dim: #92a3b8;
+  --red: #ef5350;
+  --orange: #ff9800;
+  --mono: 'JetBrains Mono', monospace;
+  --body: 'IBM Plex Sans', sans-serif;
+  --display: 'IBM Plex Sans Condensed', sans-serif;
+}
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg);
-       color: var(--fg); line-height: 1.5; padding: 1.5rem; max-width: 1100px; margin: 0 auto; }
-h1 { font-size: 1.5rem; color: #fff; margin-bottom: 0.5rem; }
-h2 { font-size: 1.15rem; color: var(--accent); margin: 1.5rem 0 0.75rem;
-     border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
-.subtitle { color: var(--dim); font-size: 0.9rem; margin-bottom: 1.5rem; }
-.card { background: var(--card); border: 1px solid var(--border);
-        border-radius: 8px; padding: 1rem; margin-bottom: 0.75rem; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
-@media (max-width: 700px) { .grid2, .grid3 { grid-template-columns: 1fr; } }
+body {
+  font-family: var(--body);
+  background:
+    radial-gradient(circle at 20% -6%, rgba(111,215,255,0.14), transparent 36%),
+    radial-gradient(circle at 82% 7%, rgba(241,194,93,0.09), transparent 30%),
+    linear-gradient(180deg, #05070a 0%, #090c12 53%, #0d1219 100%);
+  color: var(--fg);
+  line-height: 1.55;
+  padding: 1.4rem;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+.shell {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(10,15,23,0.95), rgba(7,11,18,0.92));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 22px 60px rgba(0,0,0,0.34);
+  padding: 1.1rem 1.15rem;
+  margin-bottom: 1rem;
+}
+.header-brand {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  gap: 0.95rem;
+  align-items: center;
+}
+.brand-logo {
+  width: 62px;
+  height: 62px;
+  border-radius: 10px;
+  border: 1px solid rgba(111,215,255,0.26);
+  padding: 4px;
+  background: linear-gradient(180deg, rgba(13,20,31,0.94), rgba(9,14,23,0.88));
+}
+.h-kicker {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 0.71rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+h1 {
+  font-family: var(--display);
+  font-size: 1.8rem;
+  letter-spacing: 0.02em;
+  color: #f4f9ff;
+}
+.subtitle { color: var(--dim); font-size: 0.92rem; margin-top: 0.3rem; }
+.mode-strip {
+  margin-top: 0.9rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+.pill {
+  border: 1px solid rgba(111,215,255,0.2);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.pill.live { color: #f7fcff; border-color: rgba(241,194,93,0.35); background: rgba(241,194,93,0.12); }
+.h2 {
+  font-family: var(--display);
+  font-size: 1.1rem;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  margin: 1.25rem 0 0.65rem;
+  text-transform: uppercase;
+}
+.grid-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 0.9rem;
+}
+.section-card {
+  background: var(--card);
+  border: 1px solid rgba(111,215,255,0.15);
+  border-radius: 10px;
+  padding: 0.92rem;
+  margin-bottom: 0.75rem;
+}
+.status-bar {
+  display: flex;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+.status-bar .item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(111,215,255,0.16);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.77rem;
+  background: rgba(10,15,23,0.72);
+}
+.card { background: var(--card); border: 1px solid rgba(111,215,255,0.15); border-radius: 10px; padding: 0.92rem; margin-bottom: 0.75rem; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.72rem; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.72rem; }
 .metric { text-align: center; }
-.metric .val { font-size: 1.6rem; font-weight: 700; color: #fff; }
-.metric .label { font-size: 0.8rem; color: var(--dim); }
-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-th { text-align: left; color: var(--dim); font-weight: 600; padding: 0.4rem 0.5rem;
-     border-bottom: 1px solid var(--border); }
-td { padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border); }
-.tag { display: inline-block; padding: 2px 8px; border-radius: 4px;
-       font-size: 0.75rem; font-weight: 700; }
+.metric .val { font-size: 1.55rem; font-weight: 700; color: #fff; }
+.metric .label { font-size: 0.76rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+th { text-align: left; color: var(--dim); font-weight: 600; padding: 0.38rem 0.45rem; border-bottom: 1px solid rgba(111,215,255,0.16); }
+td { padding: 0.38rem 0.45rem; border-bottom: 1px solid rgba(111,215,255,0.1); }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; }
 .tag-live { background: #1a3a1a; color: var(--green); }
 .tag-warn { background: #3a2a1a; color: var(--orange); }
 .tag-crit { background: #3a1a1a; color: var(--red); }
-.tag-off  { background: #1a2a1a; color: var(--green); }
-.tag-on   { background: #3a1a1a; color: var(--red); }
+.tag-off { background: #1a2a1a; color: var(--green); }
+.tag-on { background: #3a1a1a; color: var(--red); }
 .action-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0; }
-button { background: var(--accent); color: #000; border: none; padding: 6px 16px;
-         border-radius: 4px; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
-button:hover { background: #81d4fa; }
-button.danger { background: var(--red); color: #fff; }
-button.danger:hover { background: #c62828; }
-button.secondary { background: transparent; border: 1px solid var(--border);
-                   color: var(--fg); }
-button.secondary:hover { border-color: var(--accent); color: var(--accent); }
-input, select, textarea { background: #1a1a2a; border: 1px solid var(--border);
-  color: var(--fg); padding: 6px 10px; border-radius: 4px; font-size: 0.85rem; }
+button {
+  background: linear-gradient(180deg, #83dfff, #58c9f0);
+  color: #05111b;
+  border: none;
+  padding: 6px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+button:hover { background: linear-gradient(180deg, #9de7ff, #69d4f7); }
+button.danger { background: linear-gradient(180deg, #ef6460, #db4b48); color: #fff; }
+button.danger:hover { background: linear-gradient(180deg, #f2807c, #e35a57); }
+button.secondary { background: transparent; border: 1px solid rgba(111,215,255,0.2); color: var(--fg); }
+button.secondary:hover { border-color: rgba(241,194,93,0.36); color: #fff; }
+input, select, textarea {
+  background: #121a27;
+  border: 1px solid rgba(111,215,255,0.22);
+  color: var(--fg);
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.83rem;
+}
 textarea { width: 100%; min-height: 60px; font-family: inherit; }
-.form-row { display: flex; gap: 0.5rem; align-items: center; margin: 0.4rem 0; flex-wrap: wrap; }
-.form-row label { color: var(--dim); font-size: 0.8rem; min-width: 80px; }
-.status-bar { display: flex; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1rem;
-              padding: 0.75rem 1rem; background: var(--card); border-radius: 8px;
-              border: 1px solid var(--border); font-size: 0.85rem; }
-.status-bar .item { display: flex; align-items: center; gap: 0.4rem; }
-#toast { position: fixed; bottom: 1rem; right: 1rem; background: var(--card);
-         border: 1px solid var(--accent); color: var(--fg); padding: 0.75rem 1.25rem;
-         border-radius: 6px; display: none; z-index: 99; font-size: 0.9rem; }
+.form-row { display: flex; gap: 0.5rem; align-items: center; margin: 0.38rem 0; flex-wrap: wrap; }
+.form-row label { color: var(--dim); font-size: 0.76rem; min-width: 90px; text-transform: uppercase; letter-spacing: 0.07em; }
 .empty { color: var(--dim); font-style: italic; padding: 0.5rem 0; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+#toast {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  background: #101824;
+  border: 1px solid var(--accent);
+  color: var(--fg);
+  padding: 0.75rem 1.15rem;
+  border-radius: 6px;
+  display: none;
+  z-index: 99;
+  font-size: 0.9rem;
+}
+@media (max-width: 980px) {
+  .grid-shell { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; }
+  .header-brand { grid-template-columns: 54px 1fr; }
+  .brand-logo { width: 54px; height: 54px; }
+}
 </style>
 </head>
 <body>
 
-<h1>Meridian Governed Workspace</h1>
-<p class="subtitle">Constitutional Operating System — Six Primitives</p>
+<div class="shell">
+  <div class="header-brand">
+    <img src="/assets/logo.png" alt="Meridian logo" class="brand-logo" onerror="this.style.display='none'">
+    <div>
+      <div class="h-kicker">Meridian local control dashboard</div>
+      <h1>One product · two modes · one runtime truth</h1>
+      <p class="subtitle">Core is your daily local cockpit. Team exposes governed execution depth with visible authority, treasury, court, and audit controls.</p>
+      <div class="mode-strip" id="mode-strip">
+        <span class="pill">Loading mode…</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 <div class="status-bar" id="status-bar">Loading...</div>
 
-<!-- INSTITUTION -->
-<h2>Institution</h2>
-<div class="card" id="inst-card">Loading...</div>
+<div class="grid-shell">
+  <section id="core-shell">
+    <div class="h2">Core cockpit</div>
+    <div class="card" id="inst-card">Loading...</div>
+    <div class="card" id="agents-card">Loading...</div>
+    <div class="card" id="audit-card">Loading...</div>
+  </section>
 
-<!-- AGENTS -->
-<h2>Agents</h2>
-<div class="card" id="agents-card">Loading...</div>
-
-<!-- AUTHORITY -->
-<h2>Authority</h2>
-<div id="authority-section">Loading...</div>
-
-<!-- TREASURY -->
-<h2>Treasury</h2>
-<div class="card" id="treasury-card">Loading...</div>
-
-<!-- COURT -->
-<h2>Court</h2>
-<div id="court-section">Loading...</div>
-
-<!-- CI VERTICAL -->
-<h2>CI Vertical — Constitutional Pipeline</h2>
-<div class="card" id="ci-card">Loading...</div>
-
-<!-- RECENT AUDIT -->
-<h2>Recent Audit Trail</h2>
-<div class="card" id="audit-card">Loading...</div>
+  <section id="team-shell">
+    <div class="h2">Team governed operations</div>
+    <div id="authority-section">Loading...</div>
+    <div class="card" id="treasury-card">Loading...</div>
+    <div id="court-section">Loading...</div>
+    <div class="card" id="ci-card">Loading...</div>
+  </section>
+</div>
 
 <div id="toast"></div>
 
@@ -5033,6 +5167,16 @@ function riskTag(state) {
 
 function render(data) {
   currentContext = data.context || null;
+  var modeStrip = document.getElementById('mode-strip');
+  if (modeStrip) {
+    var mode = String(data.product_mode || 'core').toLowerCase();
+    var coreLive = mode === 'core' ? 'pill live' : 'pill';
+    var teamLive = mode === 'team' ? 'pill live' : 'pill';
+    modeStrip.innerHTML = ''
+      + '<span class="' + coreLive + '">Core mode</span>'
+      + '<span class="' + teamLive + '">Team mode</span>'
+      + '<span class="pill">Runtime: ' + (data.runtime_id || 'unknown') + '</span>';
+  }
   // Status bar
   var ks = data.authority.kill_switch;
   var sb = '';
