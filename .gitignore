@@ -53,3 +53,7 @@ loom/agents/
 loom/context/
 loom/providers/
 loom/state/
+
+# Local git worktrees
+.worktrees/
+worktrees/
