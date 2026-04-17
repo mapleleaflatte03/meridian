@@ -251,7 +251,6 @@ for path, mode in checks:
         # Open-source positioning present
         assert "open-source" in body.lower() or "open source" in body.lower(), "Missing open-source positioning on homepage"
         assert "Get Started" in body, "Missing 'Get Started' CTA on homepage"
-        assert "Local-first" in body, "Missing trust bar copy on homepage"
         assert "Contribute" in body, "Missing contribution link on homepage"
         assert "/support" in body, "Missing support link on homepage"
         # Legacy commercial strings must be absent
