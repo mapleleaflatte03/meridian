@@ -5002,6 +5002,8 @@ h1 {
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
   gap: 0.9rem;
 }
+#core-shell, #team-shell { min-width: 0; }
+.card, .grid2, .grid3 { min-width: 0; }
 .section-card {
   background: var(--card);
   border: 1px solid rgba(111,215,255,0.15);
@@ -5117,17 +5119,56 @@ a:hover { text-decoration: underline; }
 <div class="grid-shell">
   <section id="core-shell">
     <div class="h2">Core cockpit</div>
+    <div class="card" id="core-composer-card">
+      <div style="display:flex;justify-content:space-between;gap:0.6rem;align-items:center;flex-wrap:wrap">
+        <strong>Task composer</strong>
+        <span class="empty" id="composer-source" style="font-style:normal">Source: loading...</span>
+      </div>
+      <div class="form-row"><label>Agent</label><select id="task-agent"></select></div>
+      <div class="form-row"><label>Task</label><textarea id="task-description" placeholder="Describe the next action you want Meridian to run..."></textarea></div>
+      <div class="form-row"><label>Amount</label><input id="task-amount" type="number" step="0.01" value="0.01" style="width:120px"></div>
+      <div class="action-row" id="task-buttons">
+        <button onclick="runGovernedTask()">Run Task</button>
+        <button class="secondary" onclick="inspectGovernedTask()">Inspect</button>
+        <button class="secondary" onclick="exportGovernedTask()">Export Audit</button>
+      </div>
+      <div id="task-result" class="empty">No task executed in this session yet.</div>
+      <div class="action-row" id="core-actions" style="margin-top:0.75rem"></div>
+      <div id="core-team-gate" class="empty" style="margin-top:0.4rem"></div>
+    </div>
+    <div class="card" id="runtime-card">Loading runtime status...</div>
+    <div class="grid2">
+      <div class="card" id="connections-card">Loading connection status...</div>
+      <div class="card" id="automation-card">Loading automation status...</div>
+    </div>
+    <div class="card" id="next-steps-card">Loading next actions...</div>
+    <div class="grid2">
+      <div class="card" id="latest-result-card">Loading latest result...</div>
+      <div class="card" id="recent-output-card">Loading recent outputs...</div>
+    </div>
+    <div class="card" id="inspection-card">Loading inspection entry...</div>
+    <div class="grid2">
+      <div class="card" id="browser-research-card">Loading browser/research entry...</div>
+      <div class="card" id="memory-entry-card">Loading memory/recall entry...</div>
+    </div>
+    <div class="grid2">
+      <div class="card" id="schedule-entry-card">Loading schedule entry...</div>
+      <div class="card" id="capabilities-entry-card">Loading capabilities entry...</div>
+    </div>
+    <div class="card" id="audit-card">Loading...</div>
     <div class="card" id="inst-card">Loading...</div>
     <div class="card" id="agents-card">Loading...</div>
-    <div class="card" id="audit-card">Loading...</div>
   </section>
 
   <section id="team-shell">
-    <div class="h2">Team governed operations</div>
-    <div id="authority-section">Loading...</div>
-    <div class="card" id="treasury-card">Loading...</div>
-    <div id="court-section">Loading...</div>
-    <div class="card" id="ci-card">Loading...</div>
+    <details id="team-details" open>
+      <summary class="h2" style="cursor:pointer; margin-top:0">Team governed operations</summary>
+      <div id="team-mode-note" class="empty">Loading team mode status...</div>
+      <div id="authority-section">Loading...</div>
+      <div class="card" id="treasury-card">Loading...</div>
+      <div id="court-section">Loading...</div>
+      <div class="card" id="ci-card">Loading...</div>
+    </details>
   </section>
 </div>
 
@@ -5168,11 +5209,21 @@ function riskTag(state) {
   return '<span class="tag tag-live">NOMINAL</span>';
 }
 
+function asMoney(value, digits) {
+  var num = Number(value);
+  return isNaN(num) ? (0).toFixed(digits) : num.toFixed(digits);
+}
+function asCount(value) {
+  var num = Number(value);
+  return isNaN(num) ? 0 : num;
+}
 function render(data) {
+  window.__lastStatusPayload = data;
   currentContext = data.context || null;
+  var mode = String(data.product_mode || 'core').toLowerCase();
+
   var modeStrip = document.getElementById('mode-strip');
   if (modeStrip) {
-    var mode = String(data.product_mode || 'core').toLowerCase();
     var coreLive = mode === 'core' ? 'pill live' : 'pill';
     var teamLive = mode === 'team' ? 'pill live' : 'pill';
     modeStrip.innerHTML = ''
@@ -5180,17 +5231,19 @@ function render(data) {
       + '<span class="' + teamLive + '">Team mode</span>'
       + '<span class="pill">Runtime: ' + (data.runtime_id || 'unknown') + '</span>';
   }
-  // Status bar
-  var ks = data.authority.kill_switch;
+
+  // Status bar: actionable and honest state only
+  var ks = (data.authority && data.authority.kill_switch) || {};
   var sb = '';
   sb += '<span class="item">Kill switch: ' + (ks.engaged
     ? '<span class="tag tag-on">ENGAGED</span>' : '<span class="tag tag-off">OFF</span>') + '</span>';
-  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury.balance_usd, 2) + '</strong></span>';
-  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury.runway_usd, 2) + '</strong></span>';
-  sb += '<span class="item">CI Gate: <strong>' + data.ci_vertical.preflight + '</strong></span>';
-  sb += '<span class="item">Violations: <strong>' + data.court.open_violations.length + ' open</strong></span>';
-  sb += '<span class="item">Approvals: <strong>' + data.authority.pending_approvals.length + ' pending</strong></span>';
-  sb += '<span class="item">Lead: <strong>' + (data.authority.sprint_lead.agent_id || 'none') + '</strong></span>';
+  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury && data.treasury.balance_usd, 2) + '</strong></span>';
+  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury && data.treasury.runway_usd, 2) + '</strong></span>';
+  sb += '<span class="item">CI Gate: <strong>' + ((data.ci_vertical && data.ci_vertical.preflight) || 'unknown') + '</strong></span>';
+  sb += '<span class="item">Violations: <strong>' + asCount(data.court && data.court.open_violations && data.court.open_violations.length) + ' open</strong></span>';
+  sb += '<span class="item">Approvals: <strong>' + asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) + ' pending</strong></span>';
+  sb += '<span class="item">Lead: <strong>' + ((data.authority && data.authority.sprint_lead && data.authority.sprint_lead.agent_id) || 'none') + '</strong></span>';
+
   var persistence = data.persistence || {};
   var observability = data.observability || {};
   var dbStatus = (persistence.db && persistence.db.status) || 'unknown';
@@ -5199,15 +5252,7 @@ function render(data) {
   var monthCost = Number(monthCostRaw);
   if (isNaN(monthCost)) monthCost = 0;
   var slo = observability.slo || {};
-  function asMoney(value, digits) {
-    var num = Number(value);
-    return isNaN(num) ? (0).toFixed(digits) : num.toFixed(digits);
-  }
-  function asCount(value) {
-    var num = Number(value);
-    return isNaN(num) ? 0 : num;
-  }
-  window.__lastStatusPayload = data;
+
   sb += '<span class="item">DB: <strong>' + dbStatus + '</strong></span>';
   sb += '<span class="item">Obs: <strong>audit ' + asCount(auditTotal) + ' / $' + asMoney(monthCost, 2) + '</strong></span>';
   sb += '<span class="item">SLO: <strong>' + (slo.status || 'unknown') + '</strong></span>';
@@ -5215,6 +5260,247 @@ function render(data) {
     sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong> (' + (data.context.auth.role || 'unbound') + ')</span>';
   }
   document.getElementById('status-bar').innerHTML = sb;
+
+  // Core-first cards
+  var runtimeState = data.runtime_core || {};
+  var authInfo = (data.context && data.context.auth) || {};
+  var policyStatus = data.context && data.context.institution_brain_policy_status || {};
+  var selectedPlan = policyStatus.selected_plan || {};
+  var activeRoute = policyStatus.active_route || {};
+  var readinessBits = [];
+  readinessBits.push('Auth mode: <strong>' + (authInfo.mode || 'unknown') + '</strong>');
+  readinessBits.push('Actor: <strong>' + (authInfo.actor_id || 'anonymous') + '</strong>');
+  readinessBits.push('Source: <strong>' + ((data.context && data.context.source) || 'unknown') + '</strong>');
+  readinessBits.push('Updated: <strong>' + (data.timestamp || 'unknown') + '</strong>');
+  if (runtimeState.current_boundary) {
+    readinessBits.push('Boundary: <strong>' + (runtimeState.current_boundary.name || 'unknown') + '</strong>');
+  }
+  if (selectedPlan.transport_kind || activeRoute.route_type) {
+    readinessBits.push('Route: <strong>' + (selectedPlan.transport_kind || activeRoute.route_type || 'unknown') + '</strong>');
+  }
+  var runtimeNotes = [];
+  var marketplace = data.marketplace || {};
+  var settledCount = asCount(marketplace.settled_count);
+  var activeAssignments = asCount(marketplace.active_assignments);
+  var openBids = asCount(marketplace.open_bids);
+  var hasExecutionEvidence = settledCount > 0 || activeAssignments > 0 || openBids > 0;
+  var policyState = (policyStatus.status || 'unknown').toLowerCase();
+  var policyReason = policyStatus.reason || 'policy check unavailable';
+  var selectedTransport = String(selectedPlan.transport_kind || '').trim();
+  var activeRouteType = String(activeRoute.route_type || '').trim();
+  var hasConfiguredRoute = !!(selectedTransport || activeRouteType);
+
+  if (policyState === 'ok') {
+    runtimeNotes.push('Execution route is healthy and routable.');
+  } else if (policyState === 'blocked') {
+    if (policyReason === 'no_active_execution_route_configured') {
+      runtimeNotes.push('Execution route is not configured yet: no active execution route is selected.');
+    } else {
+      runtimeNotes.push('Execution route is policy-blocked: ' + policyReason + '.');
+    }
+  } else if (policyState === 'unhealthy') {
+    runtimeNotes.push('Execution route is configured but unhealthy: ' + policyReason + '.');
+  } else if (policyState === 'not_configured') {
+    runtimeNotes.push('Execution route is not configured yet.');
+  } else {
+    runtimeNotes.push('Execution route state: ' + policyState + ' (' + policyReason + ').');
+  }
+
+  if (hasExecutionEvidence && policyState !== 'ok') {
+    runtimeNotes.push('Execution evidence exists (settled/active bids), but policy state is not healthy: this is a surface/evidence mismatch to review.');
+  }
+
+  if (mode === 'team') {
+    runtimeNotes.push('Team-governed execution controls are available in Team context.');
+  } else {
+    runtimeNotes.push('Core mode is active; Team-governed controls stay in Team depth.');
+  }
+
+  if (hasConfiguredRoute) {
+    runtimeNotes.push('Configured route: ' + (selectedTransport || activeRouteType) + '.');
+  }
+
+  if (data.treasury && !data.treasury.above_reserve) {
+    runtimeNotes.push('Treasury is below reserve floor; budget-gated work may block.');
+  }
+
+  runtimeNotes.push('Source: /api/status (policy + marketplace + treasury).');
+  document.getElementById('runtime-card').innerHTML = '<strong>Runtime readiness</strong><div class="form-row" style="margin-top:0.5rem">' + readinessBits.map(function(x){ return '<span class="pill">'+x+'</span>'; }).join('') + '</div><ul style="margin:0.6rem 0 0 1.2rem">' + runtimeNotes.map(function(x){ return '<li>'+x+'</li>'; }).join('') + '</ul>';
+
+  var taskButtons = document.getElementById('task-buttons');
+  if (taskButtons) {
+    if (mode === 'team') {
+      taskButtons.style.display = 'flex';
+    } else {
+      taskButtons.style.display = 'none';
+    }
+  }
+  var taskAgentInput = document.getElementById('task-agent');
+  var taskDescInput = document.getElementById('task-description');
+  var taskAmountInput = document.getElementById('task-amount');
+  if (taskAgentInput) taskAgentInput.disabled = mode !== 'team';
+  if (taskDescInput) taskDescInput.disabled = mode !== 'team';
+  if (taskAmountInput) taskAmountInput.disabled = mode !== 'team';
+
+  var taskResult = document.getElementById('task-result');
+  if (taskResult && mode !== 'team') {
+    taskResult.textContent = 'Core mode active: use browser/research/memory/schedule flows here. Team-governed run/inspect/export is available after switching to Team mode.';
+  }
+
+  var coreActions = document.getElementById('core-actions');
+  if (coreActions) {
+    coreActions.innerHTML = '<a href="/api/status" target="_blank" rel="noopener">Status</a>'
+      + '<a href="/api/context" target="_blank" rel="noopener">Context</a>'
+      + '<a href="/api/runtime-proof" target="_blank" rel="noopener">Runtime proof</a>'
+      + '<a href="/api/kernel-proof-bundle" target="_blank" rel="noopener">Kernel bundle</a>';
+  }
+
+  var composerSource = document.getElementById('composer-source');
+  if (composerSource) {
+    composerSource.textContent = mode === 'team'
+      ? 'Team source: /api/team/governed-execution'
+      : 'Core source: local core.sh flows (browse/research/remember/recall/schedule); Team run routes are hidden in Core mode.';
+  }
+
+  var latestResult = document.getElementById('latest-result-card');
+  if (latestResult) {
+    if (hasExecutionEvidence) {
+      latestResult.innerHTML = '<strong>Latest execution signal</strong>'
+        + '<div class="form-row"><label>Settled</label><strong>' + settledCount + '</strong></div>'
+        + '<div class="form-row"><label>Active assignments</label><strong>' + activeAssignments + '</strong></div>'
+        + '<div class="form-row"><label>Open bids</label><strong>' + openBids + '</strong></div>'
+        + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Source: /api/status marketplace counters.</div>';
+    } else {
+      latestResult.innerHTML = '<strong>Latest execution signal</strong><div class="empty">No marketplace execution evidence yet for this institution.</div><div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Source: /api/status marketplace counters.</div>';
+    }
+  }
+
+  var recentOutputCard = document.getElementById('recent-output-card');
+  if (recentOutputCard) {
+    var auditEvents = asCount(observability.metrics && observability.metrics.audit && observability.metrics.audit.total_events);
+    var meteringCost = asMoney(monthCost, 2);
+    recentOutputCard.innerHTML = '<strong>Recent output and observability</strong>'
+      + '<div class="form-row"><label>Audit events</label><strong>' + auditEvents + '</strong></div>'
+      + '<div class="form-row"><label>Metering cost</label><strong>$' + meteringCost + '</strong></div>'
+      + '<div class="form-row"><label>SLO</label><strong>' + (slo.status || 'unknown') + '</strong></div>'
+      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Source: /api/status observability.</div>';
+  }
+
+  var inspectionCard = document.getElementById('inspection-card');
+  if (inspectionCard) {
+    inspectionCard.innerHTML = '<strong>Inspect current session</strong>'
+      + '<div class="action-row" style="margin-top:0.55rem"><a href="/api/audit" target="_blank" rel="noopener">Audit stream</a><a href="/api/context" target="_blank" rel="noopener">Auth & permissions</a><a href="/api/marketplace" target="_blank" rel="noopener">Marketplace state</a></div>'
+      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Use these to inspect live session truth without mutating state.</div>';
+  }
+
+  var browserResearchCard = document.getElementById('browser-research-card');
+  if (browserResearchCard) {
+    browserResearchCard.innerHTML = '<strong>Browser and research entry</strong>'
+      + '<div class="action-row" style="margin-top:0.55rem"><a href="http://127.0.0.1:8266" target="_blank" rel="noopener">Gateway</a><a href="/api/runtime-proof" target="_blank" rel="noopener">Proofs</a><a href="/api/workflows/showcase" target="_blank" rel="noopener">Workflows</a></div>'
+      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Core browser/research flow can run without Team-governed execution controls.</div>';
+  }
+
+  var memoryEntryCard = document.getElementById('memory-entry-card');
+  if (memoryEntryCard) {
+    memoryEntryCard.innerHTML = '<strong>Memory and recall entry</strong>'
+      + '<div class="action-row" style="margin-top:0.55rem"><span class="pill">./scripts/core.sh remember</span><span class="pill">./scripts/core.sh recall</span><a href="/api/memory/head" target="_blank" rel="noopener">Memory head</a></div>'
+      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Source of truth: memory chain routes in workspace API.</div>';
+  }
+
+  var scheduleEntryCard = document.getElementById('schedule-entry-card');
+  if (scheduleEntryCard) {
+    scheduleEntryCard.innerHTML = '<strong>Schedules and automation entry</strong>'
+      + '<div class="action-row" style="margin-top:0.55rem"><span class="pill">./scripts/core.sh schedule</span><span class="pill">./scripts/core.sh schedules</span><a href="/api/alerts" target="_blank" rel="noopener">Alerts queue</a></div>'
+      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Automation signals come from queue, delivery, and SLO counters.</div>';
+  }
+
+  var capabilitiesEntryCard = document.getElementById('capabilities-entry-card');
+  if (capabilitiesEntryCard) {
+    capabilitiesEntryCard.innerHTML = '<strong>Capabilities and skills entry</strong>'
+      + '<div class="action-row" style="margin-top:0.55rem"><span class="pill">./scripts/core.sh cap list</span><span class="pill">./scripts/core.sh cap inspect</span><span class="pill">./scripts/core.sh cap run</span></div>'
+      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Core capabilities are available independent of Team governance depth.</div>';
+  }
+
+  var agentSel = document.getElementById('task-agent');
+  if (agentSel) {
+    var old = agentSel.value;
+    agentSel.innerHTML = '';
+    (data.agents || []).forEach(function(a) {
+      var key = (a.economy_key || a.name || '').trim();
+      if (!key) return;
+      var opt = document.createElement('option');
+      opt.value = key;
+      opt.textContent = a.name + ' (' + key + ')';
+      agentSel.appendChild(opt);
+    });
+    if (old) agentSel.value = old;
+  }
+
+  var serviceState = data.service_state || {};
+  var subscriptions = serviceState.subscriptions || {};
+  var deliveryTargets = subscriptions.targets || [];
+
+  var next = [];
+  if (!data.agents || data.agents.length === 0) {
+    next.push('No agents registered yet. Run onboarding and register your first agent.');
+  }
+  if (!deliveryTargets.length) {
+    next.push('No delivery channel connected yet; external delivery/export stays unavailable until configured.');
+  }
+  if (policyState === 'blocked' && !hasExecutionEvidence) {
+    next.push('Execution route is blocked and no execution evidence exists yet: ' + policyReason + '.');
+  }
+  if (mode === 'core') {
+    next.push('Use Core now: browse/research/memory/schedule/capability flows from this cockpit.');
+  } else {
+    next.push('Team mode active: open Team governed operations when approval, treasury, or court actions are needed.');
+  }
+  if (next.length === 0) {
+    next.push('System ready for daily Core actions.');
+  }
+  document.getElementById('next-steps-card').innerHTML = '<strong>Next recommended actions</strong><ul style="margin:0.6rem 0 0 1.2rem">' + next.map(function(x){ return '<li>'+x+'</li>'; }).join('') + '</ul><div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Derived from live /api/status and mode-aware policy state.</div>';
+
+  var teamDetails = document.getElementById('team-details');
+  var teamNote = document.getElementById('team-mode-note');
+  if (teamDetails && teamNote) {
+    if (mode !== 'team') {
+      teamDetails.open = false;
+      teamNote.innerHTML = 'Team mode is not active. Team governance controls stay collapsed in Core mode to keep daily actions focused.';
+    } else {
+      var hasTeamAction = asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) > 0
+        || asCount(data.court && data.court.open_violations && data.court.open_violations.length) > 0
+        || (data.treasury && data.treasury.above_reserve === false)
+        || (ks && ks.engaged);
+      teamDetails.open = hasTeamAction;
+      teamNote.innerHTML = hasTeamAction
+        ? 'Team mode active with actionable governance state. Controls are expanded for immediate action.'
+        : 'Team mode active. No urgent governance blockers; Team controls stay available on demand.';
+    }
+  }
+
+  var coreTeamGate = document.getElementById('core-team-gate');
+  if (coreTeamGate) {
+    coreTeamGate.innerHTML = mode === 'team'
+      ? 'Team mode is active: governed run controls are enabled below.'
+      : 'Core mode is active: governed run controls are hidden from first-fold primary actions.';
+  }
+
+  var connectionItems = [];
+  connectionItems.push('<div class="form-row"><label>Gateway</label> <strong>http://127.0.0.1:8266</strong></div>');
+  connectionItems.push('<div class="form-row"><label>Workspace</label> <strong>http://127.0.0.1:18901</strong></div>');
+  connectionItems.push('<div class="form-row"><label>Delivery targets</label> ' + (deliveryTargets.length ? deliveryTargets.length : '0 connected') + '</div>');
+  connectionItems.push('<div class="form-row"><label>Proof route</label> <a href="/api/runtime-proof" target="_blank" rel="noopener">/api/runtime-proof</a></div>');
+  if (!deliveryTargets.length) {
+    connectionItems.push('<div class="empty">No delivery channels connected yet. Core still works locally; exported delivery remains unavailable until a target is configured.</div>');
+  }
+  document.getElementById('connections-card').innerHTML = '<strong>Connections and channels</strong>' + connectionItems.join('') + '<div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Source: /api/context, /api/status, /api/subscriptions snapshot.</div>';
+
+  var automationItems = [];
+  automationItems.push('<div class="form-row"><label>Queued alerts</label> <strong>' + asCount(data.queue_count) + '</strong></div>');
+  automationItems.push('<div class="form-row"><label>Pending delivery</label> <strong>' + asCount(data.pending_delivery_count) + '</strong></div>');
+  automationItems.push('<div class="form-row"><label>Delivered</label> <strong>' + asCount(data.delivered_count) + '</strong></div>');
+  automationItems.push('<div class="form-row"><label>SLO</label> <strong>' + ((data.slo && data.slo.status) || 'unknown') + '</strong></div>');
+  document.getElementById('automation-card').innerHTML = '<strong>Schedules and automation</strong>' + automationItems.join('') + '<div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Source: /api/status service_state and observability snapshot.</div>';
 
   // Institution
   var inst = data.institution;
@@ -5599,25 +5885,83 @@ function setLifecycle() {
     .then(function(r) { toast(r.message || r.error); refresh(); });
 }
 
+function renderAudit(data) {
+  if (!data.events || data.events.length === 0) {
+    document.getElementById('audit-card').innerHTML = '<strong>Recent audit</strong><div class="empty" style="margin-top:0.4rem">No audit events yet. Your first action will appear here with timestamp and outcome.</div>';
+    return;
+  }
+  var at = '<strong>Recent audit</strong><table style="margin-top:0.5rem"><tr><th>Time</th><th>Action</th><th>Agent</th><th>Resource</th><th>Outcome</th></tr>';
+  data.events.slice(0, 20).forEach(function(e) {
+    at += '<tr><td style="font-size:0.8rem">' + e.timestamp + '</td>';
+    at += '<td>' + e.action + '</td><td>' + (e.agent_id || '-') + '</td>';
+    at += '<td>' + (e.resource || '-') + '</td><td>' + e.outcome + '</td></tr>';
+  });
+  at += '</table>';
+  document.getElementById('audit-card').innerHTML = at;
+}
+
+function runGovernedTask() {
+  var agent = (document.getElementById('task-agent').value || '').trim();
+  var desc = (document.getElementById('task-description').value || '').trim();
+  var amount = parseFloat(document.getElementById('task-amount').value || '0.01');
+  if (!agent) return toast('Select an agent first.');
+  if (!desc) return toast('Task description is required.');
+  if (isNaN(amount) || amount < 0) return toast('Task amount must be 0 or greater.');
+  var result = document.getElementById('task-result');
+  result.textContent = 'Running task...';
+  api('POST', '/api/team/governed-execution', {
+    agent_id: agent,
+    task_description: desc,
+    amount_usd: amount,
+  }).then(function(r) {
+    var status = r.status || 'unknown';
+    var reason = r.reason || '';
+    var settlement = r.settlement_id || '(none)';
+    result.innerHTML = '<strong>Status:</strong> ' + status
+      + ' | <strong>Settlement:</strong> ' + settlement
+      + (reason ? ' | <strong>Reason:</strong> ' + reason : '');
+    toast('Task result: ' + status);
+    refresh();
+  }).catch(function(e) {
+    result.textContent = 'Task failed: ' + e;
+    toast('Task request failed.');
+  });
+}
+
+function inspectGovernedTask() {
+  var agent = (document.getElementById('task-agent').value || '').trim();
+  if (!agent) return toast('Select an agent first.');
+  var result = document.getElementById('task-result');
+  api('GET', '/api/team/governed-execution/inspect?agent_id=' + encodeURIComponent(agent))
+    .then(function(r) {
+      result.innerHTML = '<strong>Inspect:</strong> team=' + (r.team_mode_required || 'unknown')
+        + ' | org=' + (r.org_id || 'unknown')
+        + ' | reserve=' + asMoney(r.treasury && r.treasury.reserve_floor_usd, 2);
+      toast('Inspect loaded.');
+    }).catch(function(e) {
+      result.textContent = 'Inspect failed: ' + e;
+    });
+}
+
+function exportGovernedTask() {
+  var agent = (document.getElementById('task-agent').value || '').trim();
+  if (!agent) return toast('Select an agent first.');
+  var result = document.getElementById('task-result');
+  api('GET', '/api/team/governed-execution/audit-export?agent_id=' + encodeURIComponent(agent))
+    .then(function(r) {
+      var exec = (r.execution && r.execution.status) || 'unknown';
+      result.innerHTML = '<strong>Audit export:</strong> ' + (r.artifact_type || 'unknown') + ' | execution=' + exec;
+      toast('Audit export loaded.');
+    }).catch(function(e) {
+      result.textContent = 'Audit export failed: ' + e;
+    });
+}
+
 function refresh() {
   api('GET', '/api/status').then(render).catch(function(e) {
     document.getElementById('status-bar').innerHTML = '<span style="color:var(--red)">Error loading: ' + e + '</span>';
   });
-  // Also load audit trail
-  api('GET', '/api/audit').then(function(data) {
-    if (!data.events || data.events.length === 0) {
-      document.getElementById('audit-card').innerHTML = '<div class="empty">No recent audit events</div>';
-      return;
-    }
-    var at = '<table><tr><th>Time</th><th>Action</th><th>Agent</th><th>Resource</th><th>Outcome</th></tr>';
-    data.events.slice(0, 20).forEach(function(e) {
-      at += '<tr><td style="font-size:0.8rem">' + e.timestamp + '</td>';
-      at += '<td>' + e.action + '</td><td>' + (e.agent_id || '-') + '</td>';
-      at += '<td>' + (e.resource || '-') + '</td><td>' + e.outcome + '</td></tr>';
-    });
-    at += '</table>';
-    document.getElementById('audit-card').innerHTML = at;
-  }).catch(function(){});
+  api('GET', '/api/audit').then(renderAudit).catch(function(){});
 }
 
 refresh();
@@ -7270,6 +7614,10 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                 return self._json(hustle_result)
 
             elif path == '/api/team/governed-execution':
+                meridian_root = (
+                    os.environ.get('MERIDIAN_ROOT', '')
+                    or os.path.abspath(os.path.join(WORKSPACE, '..'))
+                )
                 team_result = team_governed_execution.run_team_governed_execution(
                     org_id=org_id,
                     actor_id=by,
@@ -7282,7 +7630,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                         'settled_by': str(body.get('settled_by') or by),
                         'estimated_cost_usd': float(body.get('estimated_cost_usd', 0.0)),
                     },
-                    meridian_root=os.environ.get('MERIDIAN_ROOT', ''),
+                    meridian_root=meridian_root,
                 )
                 team_outcome = 'success' if team_result.get('status') == 'settled' else 'blocked'
                 log_event(
