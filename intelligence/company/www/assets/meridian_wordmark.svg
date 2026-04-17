@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 128" role="img" aria-labelledby="title desc">
   <title id="title">Meridian wordmark</title>
-  <desc id="desc">The Meridian wordmark in Space Grotesk with governed agent runtime subtitle.</desc>
+  <desc id="desc">The Meridian wordmark with Core and Team product framing.</desc>
   <defs>
     <style>
-      .word { fill: #bccada; font: 700 72px/1 'Space Grotesk', Inter, sans-serif; letter-spacing: 5.8px; }
+      .word { fill: #bccada; font: 700 72px/1 'IBM Plex Sans Condensed', 'Space Grotesk', sans-serif; letter-spacing: 5.8px; }
       .accent { fill: #7f93a7; font: 500 18px/1 'JetBrains Mono', monospace; letter-spacing: 4px; text-transform: uppercase; }
     </style>
   </defs>
   <text x="0" y="78" class="word">Meridian</text>
-  <text x="4" y="112" class="accent">Governed Agent Runtime</text>
+  <text x="4" y="112" class="accent">Core + Team · Local-first</text>
 </svg>

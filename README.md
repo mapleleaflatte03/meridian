@@ -104,9 +104,9 @@ curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
 
 This Team flow adds a real policy consequence over Core: the routes themselves are Basic-auth-gated, it is blocked unless onboarding mode is `team`, and it returns an inspectable governance + audit artifact tied to runtime evidence.
 
-## Why Loom
+## Why Meridian
 
-Other local agent runtimes give you autonomy. Loom gives you autonomy plus:
+Other local agent runtimes give you autonomy. Meridian gives you autonomy plus Core daily-use flow, Team governed depth, and runtime proof in one install:
 
 - **Verifiable receipts** — every agent action produces a PoGE proof receipt you can inspect.
 - **Budget controls** — Treasury enforces reserve floors, spend limits, and payout boundaries.
