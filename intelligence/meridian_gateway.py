@@ -11589,6 +11589,31 @@ class WebAPIAdapter(ChannelAdapter):
                 self.send_header("Content-Length", "0")
                 self.end_headers()
 
+            def do_HEAD(self) -> None:  # noqa: N802
+                request_path = urlparse(self.path).path
+                if request_path.startswith('/assets/'):
+                    asset_path = (COMPANY_DIR / 'www' / 'assets' / request_path.removeprefix('/assets/')).resolve()
+                    assets_root = (COMPANY_DIR / 'www').resolve()
+                    if not str(asset_path).startswith(str(assets_root)) or not asset_path.is_file():
+                        self.send_response(404)
+                        self.end_headers()
+                        return
+                    self.send_response(200)
+                    suffix = asset_path.suffix.lower()
+                    if suffix == '.png':
+                        self.send_header('Content-Type', 'image/png')
+                    elif suffix == '.svg':
+                        self.send_header('Content-Type', 'image/svg+xml; charset=utf-8')
+                    elif suffix in ('.jpg', '.jpeg'):
+                        self.send_header('Content-Type', 'image/jpeg')
+                    else:
+                        self.send_header('Content-Type', 'application/octet-stream')
+                    self.send_header('Cache-Control', 'public, max-age=300')
+                    self.end_headers()
+                    return
+                self.send_response(501)
+                self.end_headers()
+
             def do_GET(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)
                 request_path = parsed.path
@@ -11599,6 +11624,30 @@ class WebAPIAdapter(ChannelAdapter):
                         return
                 elif not self._origin_allowed(request_path) and not self._public_read_allowed(request_path):
                     self._send_json(403, {"status": "error", "output": "origin_not_allowed"})
+                    return
+                if request_path.startswith('/assets/'):
+                    asset_path = (COMPANY_DIR / 'www' / 'assets' / request_path.removeprefix('/assets/')).resolve()
+                    assets_root = (COMPANY_DIR / 'www').resolve()
+                    if not str(asset_path).startswith(str(assets_root)) or not asset_path.is_file():
+                        self._send_json(404, {"status": "error", "output": "not_found"})
+                        return
+                    suffix = asset_path.suffix.lower()
+                    if suffix == '.png':
+                        content_type = 'image/png'
+                    elif suffix == '.svg':
+                        content_type = 'image/svg+xml; charset=utf-8'
+                    elif suffix in ('.jpg', '.jpeg'):
+                        content_type = 'image/jpeg'
+                    else:
+                        content_type = 'application/octet-stream'
+                    body = asset_path.read_bytes()
+                    self.send_response(200)
+                    self._send_cors_headers()
+                    self.send_header('Content-Type', content_type)
+                    self.send_header('Content-Length', str(len(body)))
+                    self.send_header('Cache-Control', 'public, max-age=300')
+                    self.end_headers()
+                    self.wfile.write(body)
                     return
                 if request_path == "/api/events":
                     events = []

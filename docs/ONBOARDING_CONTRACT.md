@@ -10,7 +10,7 @@ Running:
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-must produce a local state where a new user can immediately inspect governance/runtime surfaces without manual patching.
+must produce a local state where a new user can immediately inspect governance/runtime surfaces without manual patching. The first dashboard view must remain honest on clean state: if no agents, channels, delivery targets, or audit history exist yet, Meridian must show those surfaces as empty or unavailable instead of fabricating activity.
 
 ## Guided Onboarding Path
 
@@ -37,7 +37,7 @@ Fields collected during guided onboarding. Each can be overridden by setting the
 | --- | --- | --- | --- |
 | Institution name | `MERIDIAN_INST_NAME` | `"My Workspace"` | Display name for the institution |
 | Owner user ID | `MERIDIAN_OWNER_ID` | auto-generated UUID | Identifier for the owning user |
-| Plan tier | `MERIDIAN_INST_PLAN` | `free` | One of: `free`, `starter`, `pro`, `enterprise` |
+| Plan tier | `MERIDIAN_INST_PLAN` | `core` or `team` from selected mode | Core mode persists `core`; Team mode persists `team` by default, with `enterprise` available as an explicit Team override |
 | First agent name | `MERIDIAN_AGENT_NAME` | `"Assistant"` | Display name of the first provisioned agent |
 | First agent role | `MERIDIAN_AGENT_ROLE` | `manager` | One of: `manager`, `analyst`, `executor`, `writer` |
 | Import demo pack | `MERIDIAN_IMPORT_DEMO_PACK` | `no` | Set to `yes` to seed pre-built demo data |
