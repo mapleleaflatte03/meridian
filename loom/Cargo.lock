@@ -747,7 +747,7 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "loom-core"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "loom-poge",
  "rayon",
@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "loom-poge"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -771,7 +771,7 @@ dependencies = [
 
 [[package]]
 name = "loom-shadow"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "ed25519-dalek",
  "hex",
@@ -817,7 +817,7 @@ dependencies = [
 
 [[package]]
 name = "meridian-loom"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "ed25519-dalek",
  "hex",

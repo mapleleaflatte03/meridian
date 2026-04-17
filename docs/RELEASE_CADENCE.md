@@ -44,7 +44,8 @@ git push origin v0.1.17
 
 | Version | Date | Highlights |
 | --- | --- | --- |
-| v0.1.16 | 2026-04 | Current: Core/Team modes, governed execution, benchmark lane |
+| v0.1.17 | 2026-04 | Current: release hardening — Rust supervision race fix, Team example Basic-auth path, docs/example truth |
+| v0.1.16 | 2026-04 | Core/Team modes, governed execution, benchmark lane |
 
 ## Release Notes Convention
 
