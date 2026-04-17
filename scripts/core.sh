@@ -31,42 +31,86 @@ KERNEL_PATH="${MERIDIAN_ROOT}/kernel"
 ONBOARD_STATE="${MERIDIAN_ROOT}/runtime/onboard_state.json"
 
 # ── Resolve org_id ────────────────────────────────────────────────────────
+#
+# Truth order: explicit env → kernel-bound org via `loom agent resolve` →
+# loom.toml → onboard_state.json. The kernel-bound value is authoritative
+# because action execute needs the org the kernel actually registered.
 
 resolve_org_id() {
     if [ -n "${MERIDIAN_ORG_ID:-}" ]; then
         echo "$MERIDIAN_ORG_ID"
         return
     fi
-    if [ -f "$ONBOARD_STATE" ]; then
-        python3 -c "import json,sys; d=json.load(open('$ONBOARD_STATE')); print(d.get('org_id',''))" 2>/dev/null || true
+    local kernel_org
+    kernel_org="$(_resolve_via_loom bound_org_id 2>/dev/null || true)"
+    if [ -n "$kernel_org" ]; then
+        echo "$kernel_org"
+        return
     fi
     if [ -f "${LOOM_ROOT}/loom.toml" ]; then
-        grep -m1 '^org_id' "${LOOM_ROOT}/loom.toml" | sed 's/.*= *"\(.*\)"/\1/' 2>/dev/null || true
+        local toml_org
+        toml_org="$(grep -m1 '^org_id' "${LOOM_ROOT}/loom.toml" | sed 's/.*= *"\(.*\)"/\1/' 2>/dev/null || true)"
+        if [ -n "$toml_org" ]; then
+            echo "$toml_org"
+            return
+        fi
+    fi
+    if [ -f "$ONBOARD_STATE" ]; then
+        python3 -c "import json,sys; d=json.load(open('$ONBOARD_STATE')); print(d.get('org_id',''))" 2>/dev/null || true
     fi
 }
 
 # ── Resolve agent_id ──────────────────────────────────────────────────────
+#
+# Registry exposes economy keys (aegis, atlas, ...). The runtime needs the
+# kernel-registered agent_id (agent_aegis). Use `loom agent resolve` to map
+# from economy key to the actual id the runtime accepts.
 
 resolve_agent_id() {
     if [ -n "${MERIDIAN_AGENT_ID:-}" ]; then
         echo "$MERIDIAN_AGENT_ID"
         return
     fi
+    local key=""
     local registry="${LOOM_ROOT}/agents/registry.json"
     if [ -f "$registry" ]; then
-        python3 - "$registry" <<'PY'
+        key="$(python3 - "$registry" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
 agents = data.get("agents", [])
-# Prefer the aegis (QA gate / system agent) or first available
 for a in agents:
     if a.get("agent_id") == "aegis":
-        print("aegis")
-        sys.exit(0)
+        print("aegis"); sys.exit(0)
 if agents:
     print(agents[0]["agent_id"])
 PY
+        )"
     fi
+    if [ -z "$key" ]; then
+        return
+    fi
+    local resolved
+    resolved="$(_resolve_via_loom agent_id "$key" 2>/dev/null || true)"
+    if [ -n "$resolved" ]; then
+        echo "$resolved"
+    else
+        echo "$key"
+    fi
+}
+
+# Shared helper: run `loom agent resolve` and extract a field.
+# Usage: _resolve_via_loom FIELD [AGENT_KEY]
+_resolve_via_loom() {
+    local field="$1"
+    local agent_key="${2:-aegis}"
+    [ -x "$LOOM_BIN" ] || return 1
+    "$LOOM_BIN" agent resolve --agent-id "$agent_key" --root "$LOOM_ROOT" --format json 2>/dev/null \
+        | python3 -c "import sys,json;
+try:
+    d=json.load(sys.stdin)
+    print(d.get('$field',''))
+except Exception:
+    pass" 2>/dev/null
 }
 
 # ── Guard checks ──────────────────────────────────────────────────────────
@@ -117,17 +161,30 @@ if "stdout_utf8" in host_resp:
 
 # Browser navigate
 nav = host_resp.get("navigate") or {}
-text = nav.get("body_text") or nav.get("extracted_text") or host_resp.get("body_text") or ""
-url = nav.get("url") or ""
+final_url = nav.get("url") or host_resp.get("final_url") or ""
 title = nav.get("title") or ""
-if url or title or text:
+text = (
+    nav.get("body_text")
+    or nav.get("extracted_text")
+    or host_resp.get("body_text")
+    or host_resp.get("body_excerpt_utf8")
+    or ""
+)
+http_status = host_resp.get("http_status")
+if final_url or title or text or http_status is not None:
     if title:
-        print(f"Title: {title}")
-    if url:
-        print(f"URL:   {url}")
+        print(f"Title:  {title}")
+    if final_url:
+        print(f"URL:    {final_url}")
+    if http_status is not None:
+        print(f"Status: {http_status}")
     if text:
         print()
-        print(text[:2000])
+        import re as _re
+        # Strip HTML tags for a readable excerpt.
+        excerpt = _re.sub(r"<[^>]+>", " ", text)
+        excerpt = _re.sub(r"\s+", " ", excerpt).strip()
+        print(excerpt[:2000])
     sys.exit(0)
 
 # Generic

@@ -1,7 +1,7 @@
 # Meridian
 
 <p align="center">
-  <img src="intelligence/company/www/assets/meridian_lockup.svg" alt="Meridian — Governed AI Agent Platform" width="720">
+  <img src="intelligence/company/www/assets/logo.png" alt="Meridian — Core and Team local-first product" width="220">
 </p>
 
 <p align="center">
