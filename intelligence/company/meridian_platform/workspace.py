@@ -5031,9 +5031,9 @@ h1 {
 .metric { text-align: center; }
 .metric .val { font-size: 1.55rem; font-weight: 700; color: #fff; }
 .metric .label { font-size: 0.76rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
-th { text-align: left; color: var(--dim); font-weight: 600; padding: 0.38rem 0.45rem; border-bottom: 1px solid rgba(111,215,255,0.16); }
-td { padding: 0.38rem 0.45rem; border-bottom: 1px solid rgba(111,215,255,0.1); }
+table { width: 100%; border-collapse: collapse; font-size: 0.84rem; table-layout: fixed; }
+th { text-align: left; color: var(--dim); font-weight: 600; padding: 0.38rem 0.45rem; border-bottom: 1px solid rgba(111,215,255,0.16); overflow-wrap: anywhere; word-break: break-word; vertical-align: top; }
+td { padding: 0.38rem 0.45rem; border-bottom: 1px solid rgba(111,215,255,0.1); overflow-wrap: anywhere; word-break: break-word; vertical-align: top; }
 .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; }
 .tag-live { background: #1a3a1a; color: var(--green); }
 .tag-warn { background: #3a2a1a; color: var(--orange); }
@@ -5090,6 +5090,9 @@ a:hover { text-decoration: underline; }
   .grid2, .grid3 { grid-template-columns: 1fr; }
   .header-brand { grid-template-columns: 54px 1fr; }
   .brand-logo { width: 54px; height: 54px; }
+  body { padding: 0.9rem; }
+  table { display: block; width: 100%; overflow-x: auto; }
+  th, td { white-space: normal; font-size: 0.78rem; }
 }
 </style>
 </head>
@@ -5182,8 +5185,8 @@ function render(data) {
   var sb = '';
   sb += '<span class="item">Kill switch: ' + (ks.engaged
     ? '<span class="tag tag-on">ENGAGED</span>' : '<span class="tag tag-off">OFF</span>') + '</span>';
-  sb += '<span class="item">Balance: <strong>$' + data.treasury.balance_usd.toFixed(2) + '</strong></span>';
-  sb += '<span class="item">Runway: <strong>$' + data.treasury.runway_usd.toFixed(2) + '</strong></span>';
+  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury.balance_usd, 2) + '</strong></span>';
+  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury.runway_usd, 2) + '</strong></span>';
   sb += '<span class="item">CI Gate: <strong>' + data.ci_vertical.preflight + '</strong></span>';
   sb += '<span class="item">Violations: <strong>' + data.court.open_violations.length + ' open</strong></span>';
   sb += '<span class="item">Approvals: <strong>' + data.authority.pending_approvals.length + ' pending</strong></span>';
@@ -5192,10 +5195,21 @@ function render(data) {
   var observability = data.observability || {};
   var dbStatus = (persistence.db && persistence.db.status) || 'unknown';
   var auditTotal = observability.metrics && observability.metrics.audit ? observability.metrics.audit.total_events : 0;
-  var monthCost = observability.metrics && observability.metrics.metering ? observability.metrics.metering.total_cost_usd : 0;
+  var monthCostRaw = observability.metrics && observability.metrics.metering ? observability.metrics.metering.total_cost_usd : 0;
+  var monthCost = Number(monthCostRaw);
+  if (isNaN(monthCost)) monthCost = 0;
   var slo = observability.slo || {};
+  function asMoney(value, digits) {
+    var num = Number(value);
+    return isNaN(num) ? (0).toFixed(digits) : num.toFixed(digits);
+  }
+  function asCount(value) {
+    var num = Number(value);
+    return isNaN(num) ? 0 : num;
+  }
+  window.__lastStatusPayload = data;
   sb += '<span class="item">DB: <strong>' + dbStatus + '</strong></span>';
-  sb += '<span class="item">Obs: <strong>audit ' + auditTotal + ' / $' + monthCost.toFixed(2) + '</strong></span>';
+  sb += '<span class="item">Obs: <strong>audit ' + asCount(auditTotal) + ' / $' + asMoney(monthCost, 2) + '</strong></span>';
   sb += '<span class="item">SLO: <strong>' + (slo.status || 'unknown') + '</strong></span>';
   if (data.context && data.context.auth && data.context.auth.actor_id) {
     sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong> (' + (data.context.auth.role || 'unbound') + ')</span>';
@@ -5261,7 +5275,7 @@ function render(data) {
     data.authority.pending_approvals.forEach(function(a) {
       au += '<tr><td>' + a.id + '</td><td>' + a.requester_agent_id + '</td>';
       au += '<td>' + a.action + '</td><td>' + a.resource + '</td>';
-      au += '<td>$' + a.cost_usd.toFixed(2) + '</td>';
+      au += '<td>$' + asMoney(a.cost_usd, 2) + '</td>';
       au += '<td><button onclick="decideApproval(\'' + a.id + '\',\'approved\')">Approve</button> ';
       au += '<button class="danger" onclick="decideApproval(\'' + a.id + '\',\'denied\')">Deny</button></td></tr>';
     });
@@ -5314,19 +5328,19 @@ function render(data) {
   // Treasury
   var tr = data.treasury;
   var tc = '<div class="grid3">';
-  tc += '<div class="metric"><div class="val">$' + tr.balance_usd.toFixed(2) + '</div><div class="label">Balance</div></div>';
-  tc += '<div class="metric"><div class="val' + (tr.runway_usd < 0 ? '" style="color:var(--red)' : '') + '">$' + tr.runway_usd.toFixed(2) + '</div><div class="label">Runway</div></div>';
-  tc += '<div class="metric"><div class="val">$' + tr.reserve_floor_usd.toFixed(2) + '</div><div class="label">Reserve Floor</div></div>';
+  tc += '<div class="metric"><div class="val">$' + asMoney(tr.balance_usd, 2) + '</div><div class="label">Balance</div></div>';
+  tc += '<div class="metric"><div class="val' + (Number(tr.runway_usd) < 0 ? '" style="color:var(--red)' : '') + '">$' + asMoney(tr.runway_usd, 2) + '</div><div class="label">Runway</div></div>';
+  tc += '<div class="metric"><div class="val">$' + asMoney(tr.reserve_floor_usd, 2) + '</div><div class="label">Reserve Floor</div></div>';
   tc += '</div>';
   tc += '<div class="grid3" style="margin-top:0.75rem">';
-  tc += '<div class="metric"><div class="val">$' + tr.total_revenue_usd.toFixed(2) + '</div><div class="label">Customer Revenue</div></div>';
-  tc += '<div class="metric"><div class="val">$' + tr.support_received_usd.toFixed(2) + '</div><div class="label">Support</div></div>';
-  tc += '<div class="metric"><div class="val">$' + tr.owner_capital_usd.toFixed(2) + '</div><div class="label">Owner Capital</div></div>';
+  tc += '<div class="metric"><div class="val">$' + asMoney(tr.total_revenue_usd, 2) + '</div><div class="label">Customer Revenue</div></div>';
+  tc += '<div class="metric"><div class="val">$' + asMoney(tr.support_received_usd, 2) + '</div><div class="label">Support</div></div>';
+  tc += '<div class="metric"><div class="val">$' + asMoney(tr.owner_capital_usd, 2) + '</div><div class="label">Owner Capital</div></div>';
   tc += '</div>';
   tc += '<div style="margin-top:0.75rem;font-size:0.85rem;color:var(--dim)">';
-  tc += 'Receivables: $' + tr.receivables_usd.toFixed(2) + ' | Clients: ' + tr.clients;
-  tc += ' | Paid orders: ' + tr.paid_orders + ' | Owner draws: $' + tr.owner_draws_usd.toFixed(2);
-  tc += ' | Spend (30d): $' + tr.spend_30d_usd.toFixed(4);
+  tc += 'Receivables: $' + asMoney(tr.receivables_usd, 2) + ' | Clients: ' + asCount(tr.clients);
+  tc += ' | Paid orders: ' + asCount(tr.paid_orders) + ' | Owner draws: $' + asMoney(tr.owner_draws_usd, 2);
+  tc += ' | Spend (30d): $' + asMoney(tr.spend_30d_usd, 4);
   tc += ' | ' + (tr.above_reserve ? '<span style="color:var(--green)">Above reserve</span>' : '<span style="color:var(--red)">BELOW reserve</span>');
   tc += '</div>';
   if (data.phase_machine) {
@@ -5352,11 +5366,11 @@ function render(data) {
   }
   if (tr.remediation && tr.remediation.blocked) {
     tc += '<div class="card" style="margin-top:0.75rem"><strong>Treasury Remediation</strong>';
-    tc += '<div class="form-row"><label>Shortfall</label><strong>$' + tr.remediation.shortfall_usd.toFixed(2) + '</strong></div>';
-    tc += '<div class="form-row"><label>Capital</label><input id="cap-amount" type="number" step="0.01" value="' + tr.remediation.recommended_owner_capital_usd.toFixed(2) + '" style="width:120px"> <input id="cap-note" placeholder="Real transfer note" style="flex:1"></div>';
+    tc += '<div class="form-row"><label>Shortfall</label><strong>$' + asMoney(tr.remediation.shortfall_usd, 2) + '</strong></div>';
+    tc += '<div class="form-row"><label>Capital</label><input id="cap-amount" type="number" step="0.01" value="' + asMoney(tr.remediation.recommended_owner_capital_usd, 2) + '" style="width:120px"> <input id="cap-note" placeholder="Real transfer note" style="flex:1"></div>';
     tc += '<div class="action-row"><button onclick="contributeCapital()">Record Owner Capital</button></div>';
     tc += '<div style="font-size:0.8rem;color:var(--dim);margin-top:0.35rem">Only record this after real money has actually moved into treasury custody.</div>';
-    tc += '<div class="form-row" style="margin-top:0.75rem"><label>Reserve</label><input id="reserve-amount" type="number" step="0.01" value="' + tr.remediation.recommended_reserve_floor_usd.toFixed(2) + '" style="width:120px"> <input id="reserve-note" placeholder="Why policy changed" style="flex:1"></div>';
+    tc += '<div class="form-row" style="margin-top:0.75rem"><label>Reserve</label><input id="reserve-amount" type="number" step="0.01" value="' + asMoney(tr.remediation.recommended_reserve_floor_usd, 2) + '" style="width:120px"> <input id="reserve-note" placeholder="Why policy changed" style="flex:1"></div>';
     tc += '<div class="action-row"><button class="secondary" onclick="updateReserveFloor()">Update Reserve Floor</button></div>';
     tc += '<ul style="margin:0.5rem 0 0 1.25rem;font-size:0.82rem;color:var(--dim)">';
     tr.remediation.next_steps.forEach(function(step) { tc += '<li>' + step + '</li>'; });
@@ -5450,7 +5464,7 @@ function render(data) {
       cv += '<strong>' + r.agent_name + '</strong> ' + riskTag(r.risk_state);
       cv += '<div style="margin-top:0.35rem;font-size:0.82rem;color:var(--dim)">Restrictions: ' + (r.restrictions.length ? r.restrictions.join(', ') : '-') + ' | Open violations: ' + r.open_violations + ' | Total violations: ' + r.total_violations + '</div>';
       if (r.actions && r.actions.remediate && r.actions.remediate.allowed) {
-        cv += '<div class="action-row" style="margin-top:0.5rem"><button class="secondary" onclick="remediateAgent(\\'' + r.agent_key + '\\', \\'' + r.agent_name + '\\')">Run Court Remediation</button></div>';
+        cv += '<div class="action-row" style="margin-top:0.5rem"><button class="secondary" onclick="remediateAgent(\'' + r.agent_key + '\', \'' + r.agent_name + '\')">Run Court Remediation</button></div>';
       }
       cv += '<ul style="margin:0.5rem 0 0 1.25rem">';
       r.next_steps.forEach(function(step) { cv += '<li>' + step + '</li>'; });
@@ -5688,6 +5702,18 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(html.encode())
 
+    def _serve_static_logo(self):
+        logo_path = os.path.join(os.path.dirname(PLATFORM_DIR), 'www', 'assets', 'logo.png')
+        if not os.path.exists(logo_path):
+            return self._text('Not found', status=404)
+        self.send_response(200)
+        self.send_header('Content-Type', 'image/png')
+        self.send_header('Cache-Control', 'public, max-age=300')
+        self.end_headers()
+        with open(logo_path, 'rb') as fh:
+            self.wfile.write(fh.read())
+        return None
+
     def _text(self, text, status=200, content_type='text/plain; charset=utf-8'):
         self.send_response(status)
         self.send_header('Content-Type', content_type)
@@ -5851,6 +5877,11 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
         path = parsed.path
         if path == '/api/healthz':
             return self._headers_only(200, 'application/json')
+        if path == '/assets/logo.png':
+            logo_path = os.path.join(os.path.dirname(PLATFORM_DIR), 'www', 'assets', 'logo.png')
+            if os.path.exists(logo_path):
+                return self._headers_only(200, 'image/png')
+            return self._headers_only(404, 'text/plain; charset=utf-8')
         is_api = path.startswith('/api/')
         protected = is_workspace_protected_path(path)
         if protected:
@@ -5928,6 +5959,8 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
 
         if path == '/' or path == '/workspace':
             return self._html(DASHBOARD_HTML)
+        elif path == '/assets/logo.png':
+            return self._serve_static_logo()
         elif path == '/api/status':
             return self._json(_sanitize_public_status_payload(api_status(institution_context=inst_ctx)))
         elif path == '/api/context':

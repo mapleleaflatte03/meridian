@@ -4,6 +4,24 @@ set -euo pipefail
 MODE="${1:-run}"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Match dev-up.sh: load local operator env so respawned children inherit provider
+# keys and brain_router overrides instead of dropping to an incomplete env.
+MERIDIAN_LOCAL_ENV_FILE="${MERIDIAN_LOCAL_ENV_FILE:-$HOME/.meridian/.env}"
+if [[ -f "${MERIDIAN_LOCAL_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${MERIDIAN_LOCAL_ENV_FILE}"
+  set +a
+fi
+MERIDIAN_LOCAL_GATEWAY_ENV_FILE="${MERIDIAN_LOCAL_GATEWAY_ENV_FILE:-$HOME/.meridian/.env.gateway}"
+if [[ -f "${MERIDIAN_LOCAL_GATEWAY_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${MERIDIAN_LOCAL_GATEWAY_ENV_FILE}"
+  set +a
+fi
+
 export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"

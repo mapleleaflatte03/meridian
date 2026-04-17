@@ -2,6 +2,27 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# Load persistent local operator environment if present. This is where provider
+# keys and brain_router overrides live (MERIDIAN_BRAIN_MANAGER_*, OPENAI_API_KEY,
+# MERIDIAN_MANAGER_XAI_*, agent provider envs, etc.), so the workspace process
+# inherits a real provider path instead of defaulting to cli_session with no
+# cli_bin and failing every Team governed execution.
+MERIDIAN_LOCAL_ENV_FILE="${MERIDIAN_LOCAL_ENV_FILE:-$HOME/.meridian/.env}"
+if [[ -f "${MERIDIAN_LOCAL_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${MERIDIAN_LOCAL_ENV_FILE}"
+  set +a
+fi
+MERIDIAN_LOCAL_GATEWAY_ENV_FILE="${MERIDIAN_LOCAL_GATEWAY_ENV_FILE:-$HOME/.meridian/.env.gateway}"
+if [[ -f "${MERIDIAN_LOCAL_GATEWAY_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${MERIDIAN_LOCAL_GATEWAY_ENV_FILE}"
+  set +a
+fi
+
 export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 export MERIDIAN_KERNEL_ROOT="${MERIDIAN_KERNEL_ROOT:-$MERIDIAN_ROOT/kernel}"
 export MERIDIAN_INTELLIGENCE_ROOT="${MERIDIAN_INTELLIGENCE_ROOT:-$MERIDIAN_ROOT/intelligence}"
