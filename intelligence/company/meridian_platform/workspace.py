@@ -5065,6 +5065,7 @@ input, select, textarea {
   padding: 6px 10px;
   border-radius: 4px;
   font-size: 0.83rem;
+  max-width: 100%;
 }
 textarea { width: 100%; min-height: 60px; font-family: inherit; }
 .form-row { display: flex; gap: 0.5rem; align-items: center; margin: 0.38rem 0; flex-wrap: wrap; }
@@ -5096,6 +5097,29 @@ a:hover { text-decoration: underline; }
   table { display: block; width: 100%; overflow-x: auto; }
   th, td { white-space: normal; font-size: 0.78rem; }
 }
+.team-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid rgba(111,215,255,0.15);
+  border-radius: 8px;
+  background: rgba(10,15,23,0.6);
+  transition: background 0.15s;
+  cursor: pointer;
+  margin-top: 0;
+}
+.team-section-toggle::-webkit-details-marker { display: none; }
+.team-section-toggle::before {
+  content: '▸';
+  color: var(--accent);
+  font-size: 0.85rem;
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+details[open] > .team-section-toggle::before { transform: rotate(90deg); }
+.team-section-toggle:hover { background: rgba(111,215,255,0.07); }
 </style>
 </head>
 <body>
@@ -5106,7 +5130,7 @@ a:hover { text-decoration: underline; }
     <div>
       <div class="h-kicker">Meridian local control dashboard</div>
       <h1>One product · two modes · one runtime truth</h1>
-      <p class="subtitle">Core is your daily local cockpit. Team exposes governed execution depth with visible authority, treasury, court, and audit controls.</p>
+      <p class="subtitle">Core — daily actions. Team — governed execution depth.</p>
       <div class="mode-strip" id="mode-strip">
         <span class="pill">Loading mode…</span>
       </div>
@@ -5156,18 +5180,18 @@ a:hover { text-decoration: underline; }
       <div class="card" id="capabilities-entry-card">Loading capabilities entry...</div>
     </div>
     <div class="card" id="audit-card">Loading...</div>
-    <div class="card" id="inst-card">Loading...</div>
-    <div class="card" id="agents-card">Loading...</div>
   </section>
 
   <section id="team-shell">
     <details id="team-details" open>
-      <summary class="h2" style="cursor:pointer; margin-top:0">Team governed operations</summary>
+      <summary class="h2 team-section-toggle">Team governed operations</summary>
       <div id="team-mode-note" class="empty">Loading team mode status...</div>
       <div id="authority-section">Loading...</div>
       <div class="card" id="treasury-card">Loading...</div>
       <div id="court-section">Loading...</div>
       <div class="card" id="ci-card">Loading...</div>
+      <div class="card" id="inst-card">Loading...</div>
+      <div class="card" id="agents-card">Loading...</div>
     </details>
   </section>
 </div>
@@ -5232,32 +5256,25 @@ function render(data) {
       + '<span class="pill">Runtime: ' + (data.runtime_id || 'unknown') + '</span>';
   }
 
-  // Status bar: actionable and honest state only
+  // Status bar: 5 items — kill switch, balance, runway, SLO, actor
   var ks = (data.authority && data.authority.kill_switch) || {};
-  var sb = '';
-  sb += '<span class="item">Kill switch: ' + (ks.engaged
-    ? '<span class="tag tag-on">ENGAGED</span>' : '<span class="tag tag-off">OFF</span>') + '</span>';
-  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury && data.treasury.balance_usd, 2) + '</strong></span>';
-  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury && data.treasury.runway_usd, 2) + '</strong></span>';
-  sb += '<span class="item">CI Gate: <strong>' + ((data.ci_vertical && data.ci_vertical.preflight) || 'unknown') + '</strong></span>';
-  sb += '<span class="item">Violations: <strong>' + asCount(data.court && data.court.open_violations && data.court.open_violations.length) + ' open</strong></span>';
-  sb += '<span class="item">Approvals: <strong>' + asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) + ' pending</strong></span>';
-  sb += '<span class="item">Lead: <strong>' + ((data.authority && data.authority.sprint_lead && data.authority.sprint_lead.agent_id) || 'none') + '</strong></span>';
-
   var persistence = data.persistence || {};
   var observability = data.observability || {};
-  var dbStatus = (persistence.db && persistence.db.status) || 'unknown';
   var auditTotal = observability.metrics && observability.metrics.audit ? observability.metrics.audit.total_events : 0;
   var monthCostRaw = observability.metrics && observability.metrics.metering ? observability.metrics.metering.total_cost_usd : 0;
   var monthCost = Number(monthCostRaw);
   if (isNaN(monthCost)) monthCost = 0;
   var slo = observability.slo || {};
-
-  sb += '<span class="item">DB: <strong>' + dbStatus + '</strong></span>';
-  sb += '<span class="item">Obs: <strong>audit ' + asCount(auditTotal) + ' / $' + asMoney(monthCost, 2) + '</strong></span>';
+  var ksLabel = ks.engaged
+    ? '<span class="tag tag-on">ENGAGED</span>'
+    : '<span class="tag tag-off">off</span>';
+  var sb = '';
+  sb += '<span class="item">Kill switch: ' + ksLabel + '</span>';
+  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury && data.treasury.balance_usd, 2) + '</strong></span>';
+  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury && data.treasury.runway_usd, 2) + '</strong></span>';
   sb += '<span class="item">SLO: <strong>' + (slo.status || 'unknown') + '</strong></span>';
   if (data.context && data.context.auth && data.context.auth.actor_id) {
-    sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong> (' + (data.context.auth.role || 'unbound') + ')</span>';
+    sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong></span>';
   }
   document.getElementById('status-bar').innerHTML = sb;
 

@@ -2345,3 +2345,19 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
     padding: 0.8rem 0.85rem;
   }
 }
+
+/* hero-single: full-width centered layout without dossier aside */
+.hero-single .hero-copy { max-width: 640px; margin: 0 auto; text-align: center; }
+.hero-install {
+  margin-top: 1.25rem;
+  background: rgba(0,0,0,0.38);
+  border: 1px solid rgba(111,215,255,0.18);
+  border-radius: 7px;
+  padding: 0.7rem 1rem;
+  font-size: 0.78rem;
+  color: #aec6dd;
+  overflow-x: auto;
+  white-space: nowrap;
+  text-align: left;
+}
+.hero-install code { font-family: 'JetBrains Mono', monospace; color: inherit; }
