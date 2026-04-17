@@ -56,8 +56,15 @@ def _install_mcp_server_stub() -> None:
         ledger_path = base / "ledger.json"
         if not ledger_path.exists():
             ledger_path.write_text('{"treasury":{"cash_usd":0.0}}\n', encoding="utf-8")
+
+        def _capsule_path(org_id: str, filename: str) -> str:
+            org_dir = base / str(org_id or "org_test")
+            org_dir.mkdir(parents=True, exist_ok=True)
+            return str(org_dir / filename)
+
         capsule.ensure_treasury_aliases = lambda *_args, **_kwargs: {"ledger": str(ledger_path)}
         capsule.ledger_path = lambda *_args, **_kwargs: str(ledger_path)
+        capsule.capsule_path = _capsule_path
         sys.modules["capsule"] = capsule
 
     if "court" not in sys.modules:

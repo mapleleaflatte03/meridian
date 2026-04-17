@@ -743,7 +743,9 @@ mod tests {
         fs::create_dir_all(&fake_home).expect("create fake home");
         let _home_guard = home_env_guard();
         let previous_home = std::env::var("HOME").ok();
+        let previous_openai_key = std::env::var("OPENAI_API_KEY").ok();
         std::env::set_var("HOME", &fake_home);
+        std::env::remove_var("OPENAI_API_KEY");
         let config = init_workspace(&root, "embedded", None, "org_demo").expect("init");
         ensure_onboard_manifest(&root, &config).expect("manifest");
         let mut manifest = load_onboard_manifest(&root).expect("manifest");
@@ -767,6 +769,7 @@ mod tests {
 
         let state = detect_setup_state(&root);
         restore_home(previous_home);
+        restore_env_var("OPENAI_API_KEY", previous_openai_key);
         match state {
             SetupState::ProviderConfiguredAuthPending {
                 profiles,
@@ -812,6 +815,14 @@ mod tests {
             std::env::set_var("HOME", home);
         } else {
             std::env::remove_var("HOME");
+        }
+    }
+
+    fn restore_env_var(key: &str, previous: Option<String>) {
+        if let Some(value) = previous {
+            std::env::set_var(key, value);
+        } else {
+            std::env::remove_var(key);
         }
     }
 

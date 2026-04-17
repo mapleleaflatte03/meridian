@@ -86,10 +86,13 @@ Public onboarding contract remains Core/Team mode selection via `./scripts/onboa
    - `/api/status`
    - `/api/runtime-proof`
    - `/api/kernel-proof-bundle`
-5. Team governed execution surface available (Team mode only):
+5. Team governed execution surface available (Team mode only, Basic-auth-protected):
    - `POST /api/team/governed-execution`
    - `GET /api/team/governed-execution/inspect?agent_id=<id>`
    - `GET /api/team/governed-execution/audit-export?agent_id=<id>`
+   - Credentials are written to `runtime/workspace_credentials` by `./scripts/dev-up.sh`;
+     override via `MERIDIAN_WORKSPACE_USER` / `MERIDIAN_WORKSPACE_PASS` or
+     `MERIDIAN_WORKSPACE_PASSWORD`. See `examples/team-governed-execution.sh` for a runnable flow.
 6. Court rule set initialized (>=3 rules in template path).
 7. First agent can be provisioned through one helper command:
    - `./scripts/new-first-agent.sh "My Assistant"`

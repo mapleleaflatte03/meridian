@@ -779,7 +779,7 @@ fn build_run_agent_summary(
     let action = if worker_running {
         "healthy"
     } else {
-        supervision_action(&run_policy, now_ms)
+        supervision_action(&run_policy, supervisor_running, now_ms)
     };
     let normalized_status = derive_run_agent_status(
         state.as_ref(),
@@ -892,14 +892,18 @@ fn derive_crash_state(
     "manual_restart_required"
 }
 
-fn supervision_action(policy: &PersonalAgentRunPolicy, now_unix_ms: u64) -> &'static str {
+fn supervision_action(
+    policy: &PersonalAgentRunPolicy,
+    supervisor_running: bool,
+    now_unix_ms: u64,
+) -> &'static str {
     if policy.desired_state != "running" {
         return "stopped_by_policy";
     }
     if pid_is_running(policy.current_worker_pid) {
         return "healthy";
     }
-    if pid_is_running(policy.supervisor_pid) {
+    if supervisor_running {
         if policy.next_restart_after_unix_ms > now_unix_ms {
             return "waiting_backoff";
         }
@@ -3297,7 +3301,7 @@ mod tests {
         assert_eq!(loaded.restart_policy, "always");
         assert_eq!(loaded.restart_backoff_seconds, 45);
         assert_eq!(loaded.desired_state, "running");
-        assert_eq!(supervision_action(&loaded, 0), "needs_restart");
+        assert_eq!(supervision_action(&loaded, false, 0), "needs_restart");
         fs::remove_dir_all(&root).ok();
     }
 
@@ -3332,7 +3336,10 @@ mod tests {
         policy.desired_state = "running".to_string();
         policy.last_crash_unix_ms = 42;
         policy.failure_count = 1;
-        assert_eq!(supervision_action(&policy, 100), "manual_restart_required");
+        assert_eq!(
+            supervision_action(&policy, false, 100),
+            "manual_restart_required"
+        );
         assert_eq!(
             derive_crash_state(&policy, false, false, 100),
             "manual_restart_required"
@@ -3340,7 +3347,10 @@ mod tests {
 
         policy.restart_policy = "always".to_string();
         policy.next_restart_after_unix_ms = 200;
-        assert_eq!(supervision_action(&policy, 100), "waiting_backoff");
+        assert_eq!(
+            supervision_action(&policy, false, 100),
+            "waiting_backoff"
+        );
         assert_eq!(
             derive_crash_state(&policy, false, false, 100),
             "awaiting_restart"

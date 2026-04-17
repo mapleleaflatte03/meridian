@@ -1678,6 +1678,14 @@ mod tests {
             .expect("lock HOME env")
     }
 
+    fn restore_env_var(key: &str, previous: Option<String>) {
+        if let Some(value) = previous {
+            std::env::set_var(key, value);
+        } else {
+            std::env::remove_var(key);
+        }
+    }
+
     #[test]
     fn scaffold_writes_local_ollama_default_profile() {
         let root = temp_path("loom-provider-scaffold");
@@ -2064,6 +2072,9 @@ mod tests {
     #[test]
     fn configure_onboard_provider_profile_materializes_openai_compatible_route() {
         let root = temp_path("loom-provider-onboard-openai-compatible");
+        let _home_guard = home_env_guard();
+        let previous_openai_key = std::env::var("OPENAI_API_KEY_ONBOARD_TEST").ok();
+        std::env::remove_var("OPENAI_API_KEY_ONBOARD_TEST");
         ensure_provider_profiles_scaffold(&root).expect("scaffold provider profiles");
         let path = configure_onboard_provider_profile(
             &root,
@@ -2073,7 +2084,7 @@ mod tests {
                 base_url: DEFAULT_OPENAI_ENDPOINT.to_string(),
                 default_model: "gpt-5.4".to_string(),
                 auth: ProviderAuthMode::BearerEnv {
-                    env_var: "OPENAI_API_KEY".to_string(),
+                    env_var: "OPENAI_API_KEY_ONBOARD_TEST".to_string(),
                 },
                 note: "seeded openai-compatible route".to_string(),
                 make_default: true,
@@ -2083,13 +2094,14 @@ mod tests {
         assert!(path.exists());
         let profiles = load_provider_profiles(Some(&root)).expect("load provider profiles");
         assert_eq!(profiles.default_profile_name, DEFAULT_OPENAI_PROFILE_NAME);
-        let route = resolve_provider_route(
+        let route_result = resolve_provider_route(
             Some(&root),
             &ProviderRouteIntent::llm_inference("").with_agent_id("leviathann"),
-        )
-        .expect_err("route should require OPENAI_API_KEY");
+        );
+        restore_env_var("OPENAI_API_KEY_ONBOARD_TEST", previous_openai_key);
+        let route = route_result.expect_err("route should require OPENAI_API_KEY_ONBOARD_TEST");
         assert!(route.contains("provider profile 'openai_default' is not ready"));
-        assert!(route.contains("OPENAI_API_KEY"));
+        assert!(route.contains("OPENAI_API_KEY_ONBOARD_TEST"));
         let manager = profiles
             .profiles
             .iter()

@@ -66,7 +66,13 @@ cd ~/meridian
 ./scripts/core.sh inspect
 
 # 4. (Team only) Try governed execution
-curl -s -X POST http://127.0.0.1:18901/api/team/governed-execution \
+#    Team routes are Basic-auth-protected. `dev-up.sh` writes credentials to
+#    runtime/workspace_credentials. Or use the ready-made example:
+#      bash examples/team-governed-execution.sh
+WORKSPACE_USER="$(awk -F': *' '/^user:/ {print $2; exit}' runtime/workspace_credentials)"
+WORKSPACE_PASS="$(awk -F': *' '/^pass:/ {print $2; exit}' runtime/workspace_credentials)"
+curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
+  -X POST http://127.0.0.1:18901/api/team/governed-execution \
   -H 'Content-Type: application/json' \
   -d '{"agent_id":"agent_1","task_description":"Test governed task","amount_usd":5.0,"proof_receipt":"proof_test","assigned_by":"me","settled_by":"me","estimated_cost_usd":0.10}'
 ```

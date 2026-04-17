@@ -2,9 +2,9 @@
 
 ## Current Model
 
-Meridian ships on a **tag-driven** release model:
+Meridian ships on a **tag-driven** release model for the Loom runtime package:
 
-- **Tags**: A push to `v0.x.y` triggers the GitHub release workflow.
+- **Tags**: A push to `v0.x.y` triggers the checked-in Loom release workflow at `loom/.github/workflows/release.yml`.
 - **Artifacts**: Four platform binaries (linux x86_64/aarch64, darwin x86_64/aarch64) plus SHA-256 checksums.
 - **Cadence**: No fixed calendar. Releases happen when a meaningful milestone (feature, fix, or benchmark improvement) lands on `main`.
 
@@ -25,11 +25,11 @@ git status
 cargo test --manifest-path loom/Cargo.toml --workspace
 python3 -m unittest discover -s intelligence/company/meridian_platform -p 'test_*.py'
 
-# 2. Tag and push
+# 2. Tag and push (the checked-in release workflow lives under loom/)
 git tag v0.1.17
 git push origin v0.1.17
 
-# 3. GitHub Actions builds and publishes release assets
+# 3. GitHub Actions builds and publishes Loom release assets
 ```
 
 ## Release Verification

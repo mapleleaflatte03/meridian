@@ -72,9 +72,16 @@ After Team setup, Core tasks work the same — plus governed Team execution surf
 
 Team governed execution (Team mode only):
 
+Team routes are auth-protected. `dev-up.sh` writes a Basic-auth credentials file to `runtime/workspace_credentials` (default user `owner`, default password `meridian_local_operator`). Override either via the `MERIDIAN_WORKSPACE_USER` / `MERIDIAN_WORKSPACE_PASS` env vars, or via `MERIDIAN_WORKSPACE_PASSWORD` before running `dev-up.sh`. The runnable `examples/team-governed-execution.sh` already resolves these automatically.
+
 ```bash
+# Resolve Basic-auth credentials written by dev-up.sh.
+WORKSPACE_USER="$(awk -F': *' '/^user:/ {print $2; exit}' runtime/workspace_credentials)"
+WORKSPACE_PASS="$(awk -F': *' '/^pass:/ {print $2; exit}' runtime/workspace_credentials)"
+
 # Run one governed execution slice (court + budget + authority/treasury/court/audit context)
-curl -s -X POST http://127.0.0.1:18901/api/team/governed-execution \
+curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
+  -X POST http://127.0.0.1:18901/api/team/governed-execution \
   -H 'Content-Type: application/json' \
   -d '{
     "agent_id":"agent_123",
@@ -87,13 +94,15 @@ curl -s -X POST http://127.0.0.1:18901/api/team/governed-execution \
   }'
 
 # Inspect Team governance state for an agent
-curl -s "http://127.0.0.1:18901/api/team/governed-execution/inspect?agent_id=agent_123"
+curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
+  "http://127.0.0.1:18901/api/team/governed-execution/inspect?agent_id=agent_123"
 
 # Export Team audit artifact (JSON)
-curl -s "http://127.0.0.1:18901/api/team/governed-execution/audit-export?agent_id=agent_123"
+curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
+  "http://127.0.0.1:18901/api/team/governed-execution/audit-export?agent_id=agent_123"
 ```
 
-This Team flow adds a real policy consequence over Core: it is blocked unless onboarding mode is `team`, and it returns an inspectable governance + audit artifact tied to runtime evidence.
+This Team flow adds a real policy consequence over Core: the routes themselves are Basic-auth-gated, it is blocked unless onboarding mode is `team`, and it returns an inspectable governance + audit artifact tied to runtime evidence.
 
 ## Why Loom
 

@@ -25,6 +25,16 @@ cd ~/meridian
 | --- | --- | --- |
 | Governed execution | `team-governed-execution.sh` | Full Team execution + inspect + audit export |
 
+The Team example requires:
+- Team mode onboarding (`./scripts/onboard.sh --mode team`)
+- Local workspace running (`./scripts/dev-up.sh`)
+
+Team API routes are Basic-auth-protected. The example resolves credentials automatically from
+`runtime/workspace_credentials` (created by `dev-up.sh`; default user `owner`, default password
+`meridian_local_operator`), or from the `MERIDIAN_WORKSPACE_USER` / `MERIDIAN_WORKSPACE_PASS` env
+vars if set. Rotate the default by exporting `MERIDIAN_WORKSPACE_PASSWORD` before running
+`dev-up.sh`.
+
 ## Running Examples
 
 ```bash
@@ -33,6 +43,6 @@ bash examples/core-daily-loop.sh
 bash examples/core-scheduled-check.sh
 bash examples/benchmark-vs-claw.sh
 
-# Team mode only:
+# Team mode only (requires onboard --mode team and dev-up.sh):
 bash examples/team-governed-execution.sh
 ```

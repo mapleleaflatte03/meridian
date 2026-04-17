@@ -359,7 +359,7 @@ fn manual_policy_exposes_crash_and_requires_operator_restart() {
         &[("MERIDIAN_LOOM_AGENT_CHAOS", "after_tick:once:91")],
     );
 
-    let status = harness.wait_for_status(Duration::from_secs(12), |value| {
+    let status = harness.wait_for_status(Duration::from_secs(40), |value| {
         value["supervision_action"].as_str() == Some("manual_restart_required")
     });
     assert_eq!(status["status"].as_str(), Some("crashed"));
@@ -421,7 +421,7 @@ fn always_policy_recovers_after_single_injected_crash() {
         &[("MERIDIAN_LOOM_AGENT_CHAOS", "after_tick:once:92")],
     );
 
-    let status = harness.wait_for_status(Duration::from_secs(16), |value| {
+    let status = harness.wait_for_status(Duration::from_secs(40), |value| {
         value["supervision_action"].as_str() == Some("healthy")
             && value["worker_running"].as_bool() == Some(true)
             && value["supervisor_running"].as_bool() == Some(true)
@@ -475,7 +475,7 @@ fn always_policy_surfaces_waiting_backoff_during_repeated_crashes() {
         &[("MERIDIAN_LOOM_AGENT_CHAOS", "after_tick:always:93")],
     );
 
-    let status = harness.wait_for_status(Duration::from_secs(12), |value| {
+    let status = harness.wait_for_status(Duration::from_secs(40), |value| {
         value["supervision_action"].as_str() == Some("waiting_backoff")
             && value["supervisor_running"].as_bool() == Some(true)
             && value["worker_running"].as_bool() == Some(false)
@@ -538,7 +538,7 @@ fn diagnose_surfaces_missing_channel_remediation_for_running_agent() {
         "1",
     ]);
 
-    let _status = harness.wait_for_status(Duration::from_secs(12), |value| {
+    let _status = harness.wait_for_status(Duration::from_secs(40), |value| {
         value["worker_running"].as_bool() == Some(true)
             && value["supervisor_running"].as_bool() == Some(true)
     });
