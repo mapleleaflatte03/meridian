@@ -5284,6 +5284,7 @@ a:hover { text-decoration: underline; }
               <span class="pill" style="cursor:pointer" onclick="fillTask('remember ')">remember</span>
               <span class="pill" style="cursor:pointer" onclick="fillTask('recall ')">recall</span>
               <span class="pill" style="cursor:pointer" onclick="fillTask('schedule ')">schedule</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('cap list')">cap list</span>
               <span class="pill" style="cursor:pointer" onclick="fillTask('inspect')">inspect</span>
             </div>
           </div>
@@ -6025,7 +6026,7 @@ function runCoreTask() {
   var command = parts[0].toLowerCase();
 
   if (validCommands.indexOf(command) === -1) {
-    resultDiv.innerHTML = '<span style="color:var(--orange)">Unknown command: ' + command + '. Try: browse, research, remember, recall, schedule, inspect.</span>';
+    resultDiv.innerHTML = '<span style="color:var(--orange)">Unknown command: ' + command + '. Try: browse, research, remember, recall, schedule, cap, inspect.</span>';
     return;
   }
 
