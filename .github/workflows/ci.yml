@@ -92,3 +92,21 @@ jobs:
       - name: Onboarding ready-to-run lane
         run: |
           ./scripts/acceptance_onboarding_ready_lane.sh
+
+  deploy-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Prevents the "bumped .css?v= in some files, forgot others" failure
+      # class that leaves live browsers on stale CSS/JS cache entries.
+      - name: Asset version drift gate
+        run: python3 scripts/ci/check_asset_versions.py
+
+      # Prevents regression to a Team-collapsible dashboard shell where
+      # governance controls leak back into the Core cockpit.
+      - name: Dashboard Core/Team contract gate
+        run: python3 scripts/ci/check_dashboard_contract.py
