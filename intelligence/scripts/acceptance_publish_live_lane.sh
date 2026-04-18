@@ -130,8 +130,21 @@ for channel, state in expected.items():
     assert payload["results_by_channel"][channel]["status"] == state, payload
 PY
 
+# Public-surface truth checks.
+# This section used to enforce a fixed homepage anatomy (section IDs like
+# `non-goals` / `governance-model` / `install-demo`, a 7-label nav, specific
+# trust-bar wording). Those requirements are retired — see
+# docs/PRODUCT_SURFACE_ACCEPTANCE_CONTRACT.md. What remains here is:
+#   * JSON API truth (status cleanness, institution template, deprecated 410s,
+#     kernel proof bundle shape).
+#   * HTML semantic truth: banned commercial wording on every public page,
+#     proofs/workflows page identity, homepage focus (single H1, visible
+#     /pilot path, Core+Team+local tokens, size ceiling).
+# The source-level structural shell contract lives in
+# scripts/ci/check_website_contract.py; this lane verifies the live surface.
 python3 - <<'PY'
 import json
+import re
 import urllib.request
 
 BASE = "https://app.welliam.codes"
@@ -142,14 +155,23 @@ checks = [
     ("/api/pilot/intake", "json_deprecated_410"),
     ("/api/subscriptions/checkout-capture", "json_deprecated_410_post"),
     ("/api/kernel-proof-bundle", "json_kernel_bundle"),
-    ("/", "html_home_anatomy"),
-    ("/proofs", "html_proofs_anatomy"),
-    ("/workflows", "html_workflows_anatomy"),
-    ("/support", "html_open_source"),
-    ("/demo", "html_open_source"),
-    ("/boundary", "html_open_source"),
-    ("/pilot", "html_open_source"),
+    ("/", "html_home_contract"),
+    ("/proofs", "html_proofs_contract"),
+    ("/workflows", "html_workflows_contract"),
+    ("/support", "html_public_truth"),
+    ("/demo", "html_public_truth"),
+    ("/boundary", "html_public_truth"),
+    ("/pilot", "html_public_truth"),
 ]
+
+BANNED_COMMERCIAL = (
+    "Constitutional Institution License",
+    "Get License",
+    "$299",
+    "$79",
+    "checkout-capture",
+    "manual pilot",
+)
 
 def fetch(path: str, allow_error: bool = False):
     try:
@@ -227,104 +249,50 @@ for path, mode in checks:
         assert runtime_id, payload
         slo = payload.get("slo") or {}
         assert slo.get("status") in {"healthy", "warning", "breach", "degraded"}, payload
-    elif mode == "html_home_anatomy":
+    elif mode == "html_home_contract":
         _, body = fetch(path)
-        # Home anatomy (section-level)
-        for token in (
-            "site-header",
-            "site-nav",
-            "hero",
-            "trust-bar",
-            "non-goals",
-            "why-meridian",
-            "governance-model",
-            "research-hub",
-            "how-to-contribute",
-            "install-demo",
-            "live-snapshot-section",
-            "premium-footer",
-        ):
-            assert token in body, f"Missing homepage anatomy token '{token}'"
-        # Home anatomy (component-level)
-        for token in (
-            "brand-mark",
-            "brand-wordmark",
-            "nav-cta",
-            "cta-group",
-            "feature-card",
-            "metric-card",
-            "live-chart-card",
-            "lane-card",
-            "step-card",
-        ):
-            assert token in body, f"Missing homepage component token '{token}'"
-        # Open-source positioning present
-        assert "open-source" in body.lower() or "open source" in body.lower(), "Missing open-source positioning on homepage"
-        assert "No paywall gate" in body, "Missing non-goal copy: No paywall gate"
-        assert "Get Started" in body, "Missing 'Get Started' CTA on homepage"
-        assert "Local-first" in body, "Missing trust bar copy on homepage"
-        assert "Contribute" in body, "Missing contribution link on homepage"
-        assert "/support" in body, "Missing support link on homepage"
-        assert "install_in_60_seconds.gif" in body, "Missing install GIF media on homepage"
-        assert "meridian_demo_2m20s.mp4" in body, "Missing install video media on homepage"
-        # Legacy commercial strings must be absent
-        assert "Constitutional Institution License" not in body, "Legacy 'Constitutional Institution License' found on homepage"
-        assert "Get License" not in body, "Legacy 'Get License' found on homepage"
-        assert "$299" not in body, "Legacy '$299' pricing found on homepage"
-        assert "$79" not in body, "Legacy '$79' pricing found on homepage"
-        assert "checkout-capture" not in body, "Legacy checkout-capture reference found on homepage"
-        # Consistent nav
-        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
-            assert nav_label in body, f"Missing nav label '{nav_label}' on homepage"
-    elif mode == "html_proofs_anatomy":
+        # Focus: exactly one H1 (the hero proposition is dominant).
+        h1_count = len(re.findall(r"<h1[\s>]", body, flags=re.IGNORECASE))
+        assert h1_count == 1, f"Homepage must have exactly one <h1> tag, found {h1_count}"
+        # Install/start path visible (contract W3).
+        assert re.search(r'href="/pilot"', body), "Homepage missing href=\"/pilot\" install path"
+        # Two-depth distinction: Core and Team both mentioned.
+        assert re.search(r"\bCore\b", body), "Homepage must mention Core"
+        assert re.search(r"\bTeam\b", body), "Homepage must mention Team"
+        # Local-first truth without forcing a specific phrase.
+        assert re.search(r"local", body, flags=re.IGNORECASE), (
+            "Homepage must reference local-first runtime in some form"
+        )
+        # Banned commercial / retired-funnel wording.
+        for banned in BANNED_COMMERCIAL:
+            assert banned not in body, f"Banned commercial wording '{banned}' on homepage"
+    elif mode == "html_proofs_contract":
         _, body = fetch(path)
-        for token in (
-            "site-header",
-            "site-nav",
-            "page-intro",
-            "live-chart-grid",
-            "proof-summary-shell",
-            "operator-stream-log",
-            "premium-footer",
-            "brand-mark",
-            "brand-wordmark",
-            "nav-cta",
-        ):
-            assert token in body, f"Missing proofs anatomy token '{token}'"
-        assert "Get License" not in body, "Legacy 'Get License' found on /proofs"
-        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
-            assert nav_label in body, f"Missing nav label '{nav_label}' on /proofs"
-    elif mode == "html_workflows_anatomy":
+        assert re.search(r"<title>[^<]*proof", body, flags=re.IGNORECASE), (
+            "/proofs title must mention Proof"
+        )
+        assert (
+            "/api/runtime-proof" in body or "/api/kernel-proof-bundle" in body
+        ), "/proofs must reference /api/runtime-proof or /api/kernel-proof-bundle"
+        for banned in BANNED_COMMERCIAL:
+            assert banned not in body, f"Banned commercial wording '{banned}' on /proofs"
+    elif mode == "html_workflows_contract":
         _, body = fetch(path)
-        for token in (
-            "site-header",
-            "site-nav",
-            "page-intro",
-            "feature-grid",
-            "data-workflow-showcase-grid",
-            "data-usdc-surface",
-            "premium-footer",
-            "brand-mark",
-            "brand-wordmark",
-            "nav-cta",
-        ):
-            assert token in body, f"Missing workflows anatomy token '{token}'"
-        assert "Get License" not in body, "Legacy 'Get License' found on /workflows"
-        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
-            assert nav_label in body, f"Missing nav label '{nav_label}' on /workflows"
-    elif mode == "html_open_source":
+        assert re.search(r"<title>[^<]*workflow", body, flags=re.IGNORECASE), (
+            "/workflows title must mention Workflow"
+        )
+        assert "/api/workflows/showcase" in body, (
+            "/workflows must reference /api/workflows/showcase"
+        )
+        for banned in BANNED_COMMERCIAL:
+            assert banned not in body, f"Banned commercial wording '{banned}' on /workflows"
+    elif mode == "html_public_truth":
         _, body = fetch(path)
-        assert "site-nav" in body, f"Missing site nav on {path}"
-        assert "premium-footer" in body or "footer-nav-group" in body, f"Missing premium footer on {path}"
-        assert "Get Started" in body, f"Missing 'Get Started' CTA on {path}"
-        assert "Constitutional Institution License" not in body, f"Legacy license copy found on {path}"
-        assert "Get License" not in body, f"Legacy 'Get License' found on {path}"
-        assert "$299" not in body, f"Legacy '$299' pricing found on {path}"
-        assert "$79" not in body, f"Legacy '$79' pricing found on {path}"
-        assert "checkout-capture" not in body, f"Legacy checkout capture text found on {path}"
-        assert "manual pilot" not in body.lower(), f"Legacy manual pilot copy found on {path}"
-        for nav_label in ("Product", "Governance", "Community", "Support", "Docs"):
-            assert nav_label in body, f"Missing nav label '{nav_label}' on {path}"
+        for banned in BANNED_COMMERCIAL:
+            assert banned not in body, f"Banned commercial wording '{banned}' on {path}"
+        # Public pages must share the canonical shell (header/footer).
+        assert re.search(r"<header[\s>]", body, flags=re.IGNORECASE), f"Missing <header> on {path}"
+        assert re.search(r"<footer[\s>]", body, flags=re.IGNORECASE), f"Missing <footer> on {path}"
 PY
 
 python3 "${WORKSPACE_DIR}/company/www/scripts/verify_brand_contract.py" --output human >/tmp/meridian_brand_contract_check.txt

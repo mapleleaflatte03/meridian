@@ -1,9 +1,11 @@
 {
   "schema_version": "meridian.brand.contract.v1",
+  "description": "Minimal structural truth for Meridian public HTML surfaces. Derives from docs/PRODUCT_SURFACE_ACCEPTANCE_CONTRACT.md. Enforces canonical brand assets exist and every public page has the shared shell (<header>, <footer>, viewport, stylesheet, brand identity). Does NOT enforce specific section IDs or component class tokens.",
   "canonical_assets": {
     "mark": "assets/meridian_mark_flat.svg",
     "wordmark": "assets/meridian_wordmark.svg",
-    "lockup": "assets/meridian_lockup.svg"
+    "lockup": "assets/meridian_lockup.svg",
+    "stylesheet": "assets/meridian.css"
   },
   "public_pages": [
     "index.html",
@@ -19,20 +21,11 @@
     "trust-ops.html",
     "OPEN_SOURCE_BOUNDARY.html"
   ],
-  "required_tokens": {
-    "header": [
-      "<header class=\"site-header\">",
-      "/assets/meridian_mark_flat.svg",
-      "/assets/meridian_wordmark.svg",
-      "class=\"nav-cta\""
-    ],
-    "footer": [
-      "<footer class=\"footer premium-footer\">",
-      "/assets/meridian_lockup.svg"
-    ],
-    "intro": [
-      "Meridian",
-      "Governed Agent Runtime"
-    ]
-  }
+  "shared_shell_required_patterns": [
+    "<header",
+    "<footer",
+    "name=\"viewport\"",
+    "/assets/meridian.css",
+    "Meridian"
+  ]
 }

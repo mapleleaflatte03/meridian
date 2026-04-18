@@ -97,58 +97,19 @@
   </div>
 </section>
 
-<section class="workspace-entry">
-  <div class="workspace-entry-shell">
-    <div class="workspace-entry-main">
-      <h2>Continue in your local dashboard</h2>
-      <p>After install and onboarding, Meridian runs locally with mode-aware surfaces: Core cockpit for daily operations, Team governed console for authority, treasury, court, and audit workflows.</p>
-      <div class="workspace-entry-links">
-        <a href="http://127.0.0.1:8266" target="_blank" rel="noopener">Local gateway</a>
-        <a href="http://127.0.0.1:18901" target="_blank" rel="noopener">Workspace dashboard</a>
-        <a href="http://127.0.0.1:18901/api/status" target="_blank" rel="noopener">Status JSON</a>
-        <a href="http://127.0.0.1:18901/api/team/governed-execution/inspect?agent_id=agent_123" target="_blank" rel="noopener">Team inspect</a>
-      </div>
-    </div>
-    <aside class="workspace-entry-rail">
-      <div class="rail-kicker">Remote and mobile access</div>
-      <p>Remote access remains self-hosted and opt-in. Use your own hardened domain + auth gateway in front of your running host instead of exposing local APIs directly.</p>
-    </aside>
-  </div>
-</section>
-
 <div class="container">
 
   <div class="trust-bar reveal">
-    <span>Local-first Core</span>
+    <span>Local-first</span>
+    <span>Core daily use</span>
     <span>Team governed depth</span>
-    <span>One-command install</span>
-    <span>Verifiable proof</span>
     <span>Open source</span>
   </div>
 
-  <section id="non-goals" class="reveal">
-    <h2>Non-Goals</h2>
-    <p class="section-intro compact-copy">Meridian is open source. The public surface intentionally avoids commercial lock-in patterns.</p>
-    <div class="feature-grid">
-      <article class="feature-card">
-        <h3>No paywall gate</h3>
-        <p>Install, runtime proof routes, and governance surfaces remain publicly accessible without paid unlock flow.</p>
-      </article>
-      <article class="feature-card">
-        <h3>No license funnel</h3>
-        <p>The website does not run mandatory checkout, pricing walls, or closed tiers for core stack usage.</p>
-      </article>
-      <article class="feature-card">
-        <h3>No closed governance module</h3>
-        <p>Institution templates, treasury baselines, and court rule sets are public in the monorepo.</p>
-      </article>
-    </div>
-  </section>
-
   <section id="why-meridian" class="reveal">
-    <h2>Why Meridian Core + Team</h2>
+    <h2>Why Meridian</h2>
     <p class="section-intro compact-copy">Other agent runtimes give you autonomy. Meridian gives you a Core daily-use path plus Team governed execution depth, with built-in proof that your agents followed the rules.</p>
-    <div class="feature-grid">
+    <div class="feature-grid three-col">
       <article class="feature-card">
         <h3>Governance built in</h3>
         <p>Authority gates, treasury controls, and court rules are part of the runtime, not an afterthought.</p>
@@ -164,195 +125,37 @@
     </div>
   </section>
 
-  <section id="governance-model" class="reveal">
-    <h2>Governance Model</h2>
-    <p class="section-intro compact-copy">Meridian combines five governance primitives and a three-ledger economy in one coherent runtime contract.</p>
-    <div class="metric-strip">
-      <div class="metric-card">
-        <span class="metric-label">Institution</span>
-        <div class="metric-value">Charter</div>
-        <p>Defines policy defaults, lifecycle, and owner accountability.</p>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Authority</span>
-        <div class="metric-value">Warrants</div>
-        <p>Routes high-risk actions through explicit approval paths.</p>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Treasury</span>
-        <div class="metric-value">Discipline</div>
-        <p>Enforces reserve-floor controls, spend checks, and payout boundaries.</p>
-      </div>
-      <div class="metric-card">
-        <span class="metric-label">Court</span>
-        <div class="metric-value">Sanctions</div>
-        <p>Records violations, appeals, and remediation with auditable history.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="research-hub" class="reveal">
-    <h2>Canonical docs and proof surfaces</h2>
-    <p class="section-intro compact-copy">Use these public surfaces to verify the product contract, install path, and proof model before you move into your private local runtime.</p>
-    <div class="lane-grid">
-      <div class="lane-card">
-        <span class="lane-kicker">Start here</span>
-        <h3>Get Started path</h3>
-        <p>The canonical first-run path is one-command install, guided onboarding, then local stack startup.</p>
-        <div class="lane-tags">
-          <a class="lane-tag" href="/pilot">/pilot</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/docs/ONBOARDING_CONTRACT.md" target="_blank" rel="noopener">ONBOARDING_CONTRACT.md</a>
-        </div>
-      </div>
-      <div class="lane-card">
-        <span class="lane-kicker">Proof</span>
-        <h3>Public demo evidence</h3>
-        <p>Inspect public proof samples and workflow demos without confusing them with your own private local runtime.</p>
-        <div class="lane-tags">
-          <a class="lane-tag" href="/proofs">Proofs Surface</a>
-          <a class="lane-tag" href="/workflows">Workflows Surface</a>
-          <a class="lane-tag" href="/boundary">Boundary note</a>
-        </div>
-      </div>
-      <div class="lane-card">
-        <span class="lane-kicker">Docs</span>
-        <h3>Repo contract</h3>
-        <p>Read the canonical monorepo README and contribution docs that match the live website contract.</p>
-        <div class="lane-tags">
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">README</a>
-          <a class="lane-tag" href="https://github.com/mapleleaflatte03/meridian/blob/main/CONTRIBUTING.md" target="_blank" rel="noopener">CONTRIBUTING.md</a>
-        </div>
-      </div>
-    </div>
-  </section>
-
   <section class="how-it-works reveal">
-    <h2 id="how-to-contribute" class="section-heading-center">Get Running in 4 Steps</h2>
-    <div class="steps-grid">
+    <h2 class="section-heading-center">Get started in four steps</h2>
+    <div class="steps-grid compact">
       <div class="step-card">
-        <div class="step-number">01</div>
+        <div class="step-number">1</div>
         <h3>Install</h3>
-        <p>One command installs Meridian locally, then onboarding lets you choose Core or Team mode.</p>
+        <p>One command installs Meridian locally.</p>
       </div>
       <div class="step-card">
-        <div class="step-number">02</div>
-        <h3>Run onboarding</h3>
-        <p>Use <code>./scripts/onboard.sh</code> to create your local institution and first governed agent.</p>
+        <div class="step-number">2</div>
+        <h3>Onboard</h3>
+        <p>Run <code>./scripts/onboard.sh</code> to create your institution.</p>
       </div>
       <div class="step-card">
-        <div class="step-number">03</div>
-        <h3>Start local stack and inspect</h3>
-        <p>Bring up your local services, then inspect receipts, proof routes, and memory events.</p>
+        <div class="step-number">3</div>
+        <h3>Operate</h3>
+        <p>Start your local stack and run your first agent.</p>
       </div>
       <div class="step-card">
-        <div class="step-number">04</div>
-        <h3>Contribute</h3>
-        <p>Open issues, submit features, improve governance modules, or write docs on GitHub.</p>
+        <div class="step-number">4</div>
+        <h3>Inspect</h3>
+        <p>View receipts, proof routes, and memory events.</p>
       </div>
     </div>
   </section>
 
-  <section class="live-snapshot-section reveal">
-    <h2>Public demo proof sample</h2>
-    <p class="section-intro compact-copy">These charts come from the public demo host, not your private local runtime. After completing onboarding, your own local control surfaces are available at <code>http://127.0.0.1:8266</code>.</p>
-    <div class="live-chart-grid" data-live-snapshot>
-      <div class="live-chart-card">
-        <span class="lane-kicker">Runtime</span>
-        <h3>Footprint now</h3>
-        <div class="live-chart-shell" data-live-chart="runtime"></div>
-        <p class="live-chart-caption" data-live-caption="runtime">Showing the latest verified sample. Runtime metrics refresh every 15 seconds.</p>
-      </div>
-      <div class="live-chart-card">
-        <span class="lane-kicker">Queue</span>
-        <h3>Pressure now</h3>
-        <div class="live-chart-shell" data-live-chart="queue"></div>
-        <p class="live-chart-caption" data-live-caption="queue">Showing the latest verified sample. Queue metrics refresh every 15 seconds.</p>
-      </div>
-      <div class="live-chart-card">
-        <span class="lane-kicker">Proof</span>
-        <h3>Boundary now</h3>
-        <div class="live-chart-shell" data-live-chart="proof"></div>
-        <p class="live-chart-caption" data-live-caption="proof">Showing the latest verified sample. Proof and SLO metrics refresh every 15 seconds.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="install-demo" class="reveal">
-    <h2>Installation Demo</h2>
-    <p class="section-intro compact-copy">A real installation capture from the current monorepo path: repository sync, bootstrap, governance initialization, and route verification. The short GIF is a rapid preview; the full video documents the complete operator flow.</p>
-    <div class="split-grid">
-      <article class="split-card media-card">
-        <h3>Quick install preview</h3>
-        <img src="/assets/install_in_60_seconds.gif" alt="Meridian install in 60 seconds" class="install-gif">
-      </article>
-      <article class="split-card media-card">
-        <h3>Full walkthrough (2m20s)</h3>
-        <video class="install-video" controls preload="metadata" playsinline poster="/assets/logo_banner_1200x630.jpg">
-          <source src="/assets/meridian_demo_2m20s.mp4" type="video/mp4">
-        </video>
-      </article>
-    </div>
-  </section>
-
-  <h2 class="reveal">What Meridian provides today</h2>
-  <p class="section-intro compact-copy">The governed runtime is production-usable for local operations: install, agent loops, terminal and browser jobs, channel delivery, memory operations, and proof receipts.</p>
-  <div class="lane-grid reveal">
-    <div class="lane-card">
-      <span class="lane-kicker">Create</span>
-      <h3>new-agent</h3>
-      <p>Provision a governed local agent, register it in Kernel, and generate its runtime folder.</p>
-      <div class="lane-tags">
-        <span class="lane-tag">kernel-wired</span>
-        <span class="lane-tag">template-driven</span>
-      </div>
-    </div>
-    <div class="lane-card">
-      <span class="lane-kicker">Operate</span>
-      <h3>run-agent</h3>
-      <p>Persistent heartbeat-driven local agent loop with service readiness and delivery checks.</p>
-      <div class="lane-tags">
-        <span class="lane-tag">persistent</span>
-        <span class="lane-tag">heartbeat</span>
-      </div>
-    </div>
-    <div class="lane-card">
-      <span class="lane-kicker">Prove</span>
-      <h3>Receipts and proof routes</h3>
-      <p>Job receipts, parity reports, service state, and memory receipts are all inspectable.</p>
-      <div class="lane-tags">
-        <span class="lane-tag">PoGE</span>
-        <span class="lane-tag">memory</span>
-        <span class="lane-tag">queue</span>
-      </div>
-    </div>
-  </div>
-  <div class="card small">
-    <p><strong>One-command install</strong></p>
+  <div class="card install-card reveal">
+    <p><strong>Install command</strong></p>
     <div class="sample-box"><code>curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash</code></div>
-    <p class="dim small mt-md">Then open <a href="/pilot">/pilot</a> for the complete local onboarding checklist.</p>
+    <p class="dim small mt-md">Then continue at <a href="/pilot">/pilot</a> for the full onboarding checklist.</p>
   </div>
-
-  <section class="support-section reveal">
-    <h2 id="sponsors" class="section-heading-center">Sponsors and Support</h2>
-    <p class="section-intro compact-copy text-center">Meridian is open source. These optional paths support governance research, infrastructure, and contributor time.</p>
-    <div class="feature-grid">
-      <article class="feature-card">
-        <h3>GitHub Sponsors</h3>
-        <p>Sponsor the project on GitHub to support maintenance, documentation, and community infrastructure.</p>
-        <p><a href="https://github.com/sponsors/mapleleaflatte03" target="_blank" rel="noopener">Sponsor Meridian →</a></p>
-      </article>
-      <article class="feature-card">
-        <h3>Contribute Code</h3>
-        <p>Open issues, submit governance modules, improve runtime features, or review pull requests.</p>
-        <p><a href="https://github.com/mapleleaflatte03/meridian/issues" target="_blank" rel="noopener">Open issues →</a></p>
-      </article>
-      <article class="feature-card">
-        <h3>Consulting &amp; Grants</h3>
-        <p>Need help with governed agent infrastructure? Reach out for consulting, partnerships, or grant collaboration.</p>
-        <p><a href="/support">Learn more →</a></p>
-      </article>
-    </div>
-  </section>
 
   <footer class="footer premium-footer">
     <div class="footer-inner">

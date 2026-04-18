@@ -4,16 +4,19 @@
 # Checks: anatomy blocks, no pricing remnants, no overflow, consistent header/footer.
 # Exits non-zero on any failure.
 #
-# Contract update 2026-04-17 (benchmark-led redesign):
-#   The 2026-04-17 surface redesign (docs/superpowers/plans/2026-04-17-benchmark-led-redesign.md)
-#   subtracts from the homepage to restore a Core/Team first-fold narrative that
-#   matches the product contract. Surfaces previously anchored on the homepage
-#   (governance-model, research-hub, sponsors, live snapshot, install demo, feature
-#   shelf) moved to dedicated pages (/proofs, /community, /pilot) because the
-#   homepage carrying all of them was reading as a template marketing page instead
-#   of a local-first agent cockpit. These lane checks are updated to encode the new
-#   IA contract (positive checks for retained sections + check_absent for the
-#   intentionally removed ones). This is a contract change, not a lane bypass.
+# Contract alignment 2026-04-18 (outcome-based surface acceptance):
+#   Derives from docs/PRODUCT_SURFACE_ACCEPTANCE_CONTRACT.md.
+#
+#   This lane protects structural truth (header/footer/viewport), semantic truth
+#   (no banned commercial wording), and focus (homepage size ceiling). It does NOT
+#   enforce specific section IDs, card counts, or legacy nav tokens.
+#
+#   Why changed: The previous lane enforced exact homepage anatomy (non-goals,
+#   governance-model, research-hub, etc.) which forced the homepage back into an
+#   overloaded warehouse shape. The new contract asserts outcomes, not wallpaper.
+#
+#   How to apply: If a redesign changes section IDs or class tokens, this lane
+#   should still pass as long as the outcome requirements (W1-W7 in contract) hold.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -109,20 +112,35 @@ for page in "${PAGES[@]}"; do
     check_absent "$page: no premium-pricing"      grep -q 'class="premium-pricing"' "$FILE"
 done
 
-# Homepage specific sections required after 2026-04-17 redesign
-check "index.html: why-meridian section"    grep -q 'id="why-meridian"'      "$WWW_DIR/index.html"
-check "index.html: workspace-entry section" grep -q 'class="workspace-entry"' "$WWW_DIR/index.html"
-check "index.html: install command card"    grep -q 'Install command'          "$WWW_DIR/index.html"
-check "index.html: how-to-contribute"       grep -q 'id="how-to-contribute"'  "$WWW_DIR/index.html"
+# Homepage outcome-based checks (per PRODUCT_SURFACE_ACCEPTANCE_CONTRACT.md W3-W4)
+# These verify focus without enforcing specific section IDs
 
-# Homepage sections intentionally removed in the 2026-04-17 redesign
-# (moved to /proofs, /community, /pilot per benchmark plan)
-check_absent "index.html: no governance-model section" grep -q 'id="governance-model"' "$WWW_DIR/index.html"
-check_absent "index.html: no research-hub section"     grep -q 'id="research-hub"'     "$WWW_DIR/index.html"
-check_absent "index.html: no sponsors section"         grep -q 'id="sponsors"'          "$WWW_DIR/index.html"
-check_absent "index.html: no live snapshot section"    grep -q 'live-snapshot-section'   "$WWW_DIR/index.html"
-check_absent "index.html: no install demo section"     grep -q 'id="install-demo"'      "$WWW_DIR/index.html"
-check_absent "index.html: no feature shelf headline"   grep -q 'What Meridian provides today' "$WWW_DIR/index.html"
+# Size check: homepage must stay under 60KB to prevent warehouse regression
+homepage_bytes=$(stat -c%s "$WWW_DIR/index.html" 2>/dev/null || echo "0")
+if [[ "$homepage_bytes" -lt 61440 ]]; then
+    echo "[OK]   index.html: size $homepage_bytes bytes (under 60KB ceiling)"
+else
+    echo "[FAIL] index.html: size $homepage_bytes bytes exceeds 60KB focus ceiling"
+    FAIL=1
+fi
+
+# Structural presence checks (outcome-based, not section-ID-based)
+check "index.html: exactly one h1"         grep -qE '<h1[^>]*>.*</h1>' "$WWW_DIR/index.html"
+h1_count=$(grep -oE '<h1[^>]*>' "$WWW_DIR/index.html" | wc -l)
+if [[ "$h1_count" -ne 1 ]]; then
+    echo "[FAIL] index.html: must have exactly one <h1>, found $h1_count"
+    FAIL=1
+fi
+
+check "index.html: install path /pilot"    grep -q 'href="/pilot"' "$WWW_DIR/index.html"
+check "index.html: mentions Core"          grep -qiE '\bCore\b' "$WWW_DIR/index.html"
+check "index.html: mentions Team"          grep -qiE '\bTeam\b' "$WWW_DIR/index.html"
+check "index.html: mentions local"       grep -qiE 'local' "$WWW_DIR/index.html"
+
+# No banned commercial class tokens
+check_absent "index.html: no pricing-grid class"   grep -q 'class="pricing-grid"' "$WWW_DIR/index.html"
+check_absent "index.html: no price-card class"   grep -q 'class="price-card"' "$WWW_DIR/index.html"
+check_absent "index.html: no checkout-card class" grep -q 'class="checkout-card"' "$WWW_DIR/index.html"
 
 # ---------------------------------------------------------------------------
 # 2. CSS cleanliness checks

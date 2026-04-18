@@ -1,4 +1,19 @@
 #!/usr/bin/env python3
+"""Verify the Meridian brand contract v1 — minimal structural truth.
+
+Contract shape (intelligence/company/www/brand_contract_v1.json):
+  * canonical_assets: dict of logical name -> relative path. Each path
+    must exist and be non-empty on disk.
+  * public_pages: list of HTML filenames. Each must exist and include
+    every pattern in ``shared_shell_required_patterns``.
+  * shared_shell_required_patterns: substrings that must appear in every
+    public page (shared shell truth: <header>, <footer>, viewport meta,
+    canonical stylesheet, brand identity text).
+
+This verifier does NOT enforce section IDs, component class tokens, or
+product copy. Those belong to the outcome-based website contract gate —
+see docs/PRODUCT_SURFACE_ACCEPTANCE_CONTRACT.md.
+"""
 from __future__ import annotations
 
 import argparse
@@ -20,27 +35,14 @@ def check_asset(base: Path, relpath: str, errors: List[str]) -> None:
         errors.append(f"empty asset: {relpath}")
 
 
-def check_page(page_path: Path, required_tokens: Dict[str, List[str]], errors: List[str]) -> None:
+def check_page(page_path: Path, required_patterns: List[str], errors: List[str]) -> None:
     if not page_path.exists():
         errors.append(f"missing page: {page_path.name}")
         return
     content = page_path.read_text(encoding="utf-8")
-    for token in required_tokens.get("header", []):
-        if token not in content:
-            errors.append(f"{page_path.name}: missing header token `{token}`")
-    for token in required_tokens.get("footer", []):
-        if token not in content:
-            errors.append(f"{page_path.name}: missing footer token `{token}`")
-    intro_tokens = required_tokens.get("intro", [])
-    for token in intro_tokens:
-        if token not in content:
-            errors.append(f"{page_path.name}: missing intro token `{token}`")
-
-    has_intro_shell = ('class="page-intro"' in content) or ('class="hero-lockup"' in content)
-    if not has_intro_shell:
-        errors.append(
-            f"{page_path.name}: missing page intro shell (expected page-intro or hero-lockup)"
-        )
+    for pattern in required_patterns:
+        if pattern not in content:
+            errors.append(f"{page_path.name}: missing shared-shell pattern `{pattern}`")
 
 
 def run(contract_path: Path, output: str) -> int:
@@ -48,14 +50,13 @@ def run(contract_path: Path, output: str) -> int:
     base = contract_path.parent
     errors: List[str] = []
 
-    assets = contract.get("canonical_assets", {})
-    for relpath in assets.values():
+    for relpath in (contract.get("canonical_assets") or {}).values():
         check_asset(base, relpath, errors)
 
-    required_tokens = contract.get("required_tokens", {})
-    pages = contract.get("public_pages", [])
+    required_patterns: List[str] = list(contract.get("shared_shell_required_patterns") or [])
+    pages = contract.get("public_pages") or []
     for page in pages:
-        check_page(base / page, required_tokens, errors)
+        check_page(base / page, required_patterns, errors)
 
     payload = {
         "schema_version": contract.get("schema_version", "unknown"),
