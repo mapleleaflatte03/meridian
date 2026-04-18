@@ -110,3 +110,18 @@ jobs:
       # governance controls leak back into the Core cockpit.
       - name: Dashboard Core/Team contract gate
         run: python3 scripts/ci/check_dashboard_contract.py
+
+      # Protects homepage focus, prevents commercial wording re-drift,
+      # and enforces the 60KB warehouse-regression ceiling.
+      - name: Website product contract gate
+        run: python3 scripts/ci/check_website_contract.py
+
+      # Protects README doorway ordering: identity→install→onboarding→core/team→first-commands.
+      # Prevents README becoming a warehouse or losing the front door.
+      - name: README doorway contract gate
+        run: python3 scripts/ci/check_readme_contract.py
+
+      # Outcome-based UI anatomy checks. No longer enforces legacy homepage
+      # section IDs; instead protects structural truth, semantic truth, and focus.
+      - name: UI anatomy contract gate
+        run: ./scripts/acceptance_ui_anatomy_lane.sh

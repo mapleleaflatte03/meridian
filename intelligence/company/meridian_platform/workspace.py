@@ -5053,12 +5053,15 @@ h1 {
 }
 .core-fold {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
-  gap: 0.72rem;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 320px);
+  gap: 1rem;
 }
 .core-fold .stack {
   display: grid;
-  gap: 0.72rem;
+  gap: 0.85rem;
+}
+@media (max-width: 900px) {
+  .core-fold { grid-template-columns: 1fr; }
 }
 .team-intro {
   margin-bottom: 0.7rem;
@@ -5112,9 +5115,14 @@ h1 {
   font-size: 0.77rem;
   background: rgba(10,15,23,0.72);
 }
-.card { background: var(--card); border: 1px solid rgba(111,215,255,0.15); border-radius: 10px; padding: 0.92rem; margin-bottom: 0.75rem; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.72rem; }
-.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.72rem; }
+.card { background: var(--card); border: 1px solid rgba(111,215,255,0.12); border-radius: 10px; padding: 1rem; }
+.card.compact { padding: 0.75rem; }
+.card + .card { margin-top: 0.85rem; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.85rem; }
+@media (max-width: 760px) {
+  .grid2, .grid3 { grid-template-columns: 1fr; gap: 0.75rem; }
+}
 .metric { text-align: center; }
 .metric .val { font-size: 1.55rem; font-weight: 700; color: #fff; }
 .metric .label { font-size: 0.76rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
@@ -5171,12 +5179,19 @@ a:hover { text-decoration: underline; }
   font-size: 0.9rem;
 }
 @media (max-width: 760px) {
-  .grid2, .grid3 { grid-template-columns: 1fr; }
-  .header-brand { grid-template-columns: 54px 1fr; }
-  .brand-logo { width: 54px; height: 54px; }
-  body { padding: 0.9rem; }
-  table { display: block; width: 100%; overflow-x: auto; }
-  th, td { white-space: normal; font-size: 0.78rem; }
+  .grid2, .grid3 { grid-template-columns: 1fr; gap: 0.75rem; }
+  .header-brand { grid-template-columns: 48px 1fr; gap: 0.7rem; }
+  .brand-logo { width: 48px; height: 48px; }
+  h1 { font-size: 1.4rem; }
+  .h2 { font-size: 1rem; margin: 1rem 0 0.5rem; }
+  body { padding: 0.75rem; }
+  .shell { padding: 0.85rem; }
+  .card { padding: 0.85rem; }
+  table { display: block; width: 100%; overflow-x: auto; font-size: 0.8rem; }
+  th, td { white-space: normal; font-size: 0.78rem; padding: 0.3rem 0.4rem; }
+  .status-bar { gap: 0.5rem; }
+  .status-bar .item { padding: 0.2rem 0.5rem; font-size: 0.72rem; }
+  .mode-tab { padding: 0.35rem 0.7rem; font-size: 0.7rem; }
 }
 </style>
 </head>
@@ -5207,45 +5222,53 @@ a:hover { text-decoration: underline; }
   <div class="mode-deck">
     <section id="panel-core" class="mode-panel" role="tabpanel" aria-labelledby="tab-core">
       <section id="core-shell">
+        <!-- Primary Action Area -->
+        <div class="card primary" id="core-composer-card">
+          <div style="display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start;flex-wrap:wrap">
+            <div>
+              <div class="h2" style="margin:0">Core cockpit</div>
+              <div class="state-line">Daily local actions: browser, research, memory, schedule. Team depth available when you need governance.</div>
+            </div>
+            <span class="empty" id="composer-source" style="font-style:normal">Source: loading...</span>
+          </div>
+          <div class="action-row" id="core-actions" style="margin-top:0.6rem"></div>
+          <div id="core-team-gate" class="empty" style="margin-top:0.4rem"></div>
+        </div>
+
+        <!-- Core Fold: Next Actions + Runtime Status -->
         <div class="core-fold">
           <div class="stack">
-            <div class="card primary" id="core-composer-card">
-              <div style="display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start;flex-wrap:wrap">
-                <div>
-                  <div class="h2" style="margin:0">Core cockpit</div>
-                  <div class="state-line">Daily action first. Browser, research, memory, recall, schedule. Governance stays out of the way until you need Team depth.</div>
-                </div>
-                <span class="empty" id="composer-source" style="font-style:normal">Source: loading...</span>
-              </div>
-              <div class="action-row" id="core-actions" style="margin-top:0.6rem"></div>
-              <div id="core-team-gate" class="empty" style="margin-top:0.4rem"></div>
-            </div>
             <div class="card subdued" id="next-steps-card">Loading next actions...</div>
+            <div class="card compact" id="runtime-card">Loading runtime status...</div>
           </div>
           <div class="stack">
-            <div class="card subdued" id="runtime-card">Loading runtime status...</div>
-            <div class="grid2">
-              <div class="card subdued" id="latest-result-card">Loading latest result...</div>
-              <div class="card subdued" id="recent-output-card">Loading recent outputs...</div>
-            </div>
+            <div class="card compact" id="latest-result-card">Loading latest result...</div>
+            <div class="card compact" id="recent-output-card">Loading recent outputs...</div>
+            <div class="card compact" id="connections-card">Loading connection status...</div>
           </div>
         </div>
-        <div class="grid2">
-          <div class="card" id="connections-card">Loading connection status...</div>
-          <div class="card" id="automation-card">Loading automation status...</div>
+
+        <!-- Quick Entry Points -->
+        <div class="card" id="quick-entry-card">
+          <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+            <strong>Quick actions:</strong>
+            <span id="browser-research-card" style="display:contents"></span>
+            <span id="memory-entry-card" style="display:contents"></span>
+            <span id="schedule-entry-card" style="display:contents"></span>
+            <span id="capabilities-entry-card" style="display:contents"></span>
+            <span id="automation-card" style="display:contents"></span>
+            <span id="inspection-card" style="display:contents"></span>
+          </div>
         </div>
-        <div class="card" id="inspection-card">Loading inspection entry...</div>
+
+        <!-- Audit Trail -->
+        <div class="card compact" id="audit-card">Loading...</div>
+
+        <!-- Institution and Agents -->
         <div class="grid2">
-          <div class="card" id="browser-research-card">Loading browser/research entry...</div>
-          <div class="card" id="memory-entry-card">Loading memory/recall entry...</div>
+          <div class="card" id="inst-card">Loading...</div>
+          <div class="card" id="agents-card">Loading...</div>
         </div>
-        <div class="grid2">
-          <div class="card" id="schedule-entry-card">Loading schedule entry...</div>
-          <div class="card" id="capabilities-entry-card">Loading capabilities entry...</div>
-        </div>
-        <div class="card" id="audit-card">Loading...</div>
-        <div class="card" id="inst-card">Loading...</div>
-        <div class="card" id="agents-card">Loading...</div>
       </section>
     </section>
 
@@ -5510,37 +5533,36 @@ function render(data) {
 
   var inspectionCard = document.getElementById('inspection-card');
   if (inspectionCard) {
-    inspectionCard.innerHTML = '<strong>Inspect current session</strong>'
-      + '<div class="action-row" style="margin-top:0.55rem"><a href="/api/audit" target="_blank" rel="noopener">Audit stream</a><a href="/api/context" target="_blank" rel="noopener">Auth & permissions</a><a href="/api/marketplace" target="_blank" rel="noopener">Marketplace state</a></div>'
-      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Use these to inspect live session truth without mutating state.</div>';
+    inspectionCard.innerHTML = '<a href="/api/audit" target="_blank" rel="noopener">Audit</a> <a href="/api/context" target="_blank" rel="noopener">Auth</a> <a href="/api/marketplace" target="_blank" rel="noopener">Marketplace</a>';
   }
 
   var browserResearchCard = document.getElementById('browser-research-card');
   if (browserResearchCard) {
-    browserResearchCard.innerHTML = '<strong>Browser and research entry</strong>'
-      + '<div class="action-row" style="margin-top:0.55rem"><a href="http://127.0.0.1:8266" target="_blank" rel="noopener">Gateway</a><a href="/api/runtime-proof" target="_blank" rel="noopener">Proofs</a><a href="/api/workflows/showcase" target="_blank" rel="noopener">Workflows</a></div>'
-      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Core browser/research flow can run without Team-governed execution controls.</div>';
+    browserResearchCard.innerHTML = '<a href="http://127.0.0.1:8266" target="_blank" rel="noopener">Gateway</a> <a href="/api/runtime-proof" target="_blank" rel="noopener">Proofs</a> <a href="/api/workflows/showcase" target="_blank" rel="noopener">Workflows</a>';
   }
 
   var memoryEntryCard = document.getElementById('memory-entry-card');
   if (memoryEntryCard) {
-    memoryEntryCard.innerHTML = '<strong>Memory and recall entry</strong>'
-      + '<div class="action-row" style="margin-top:0.55rem"><span class="pill">./scripts/core.sh remember</span><span class="pill">./scripts/core.sh recall</span><a href="/api/memory/head" target="_blank" rel="noopener">Memory head</a></div>'
-      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Source of truth: memory chain routes in workspace API.</div>';
+    memoryEntryCard.innerHTML = '<span class="pill">remember</span> <span class="pill">recall</span> <a href="/api/memory/head" target="_blank" rel="noopener">Head</a>';
   }
 
   var scheduleEntryCard = document.getElementById('schedule-entry-card');
   if (scheduleEntryCard) {
-    scheduleEntryCard.innerHTML = '<strong>Schedules and automation entry</strong>'
-      + '<div class="action-row" style="margin-top:0.55rem"><span class="pill">./scripts/core.sh schedule</span><span class="pill">./scripts/core.sh schedules</span><a href="/api/alerts" target="_blank" rel="noopener">Alerts queue</a></div>'
-      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Automation signals come from queue, delivery, and SLO counters.</div>';
+    scheduleEntryCard.innerHTML = '<span class="pill">schedule</span> <span class="pill">schedules</span> <a href="/api/alerts" target="_blank" rel="noopener">Alerts</a>';
   }
 
   var capabilitiesEntryCard = document.getElementById('capabilities-entry-card');
   if (capabilitiesEntryCard) {
-    capabilitiesEntryCard.innerHTML = '<strong>Capabilities and skills entry</strong>'
-      + '<div class="action-row" style="margin-top:0.55rem"><span class="pill">./scripts/core.sh cap list</span><span class="pill">./scripts/core.sh cap inspect</span><span class="pill">./scripts/core.sh cap run</span></div>'
-      + '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Core capabilities are available independent of Team governance depth.</div>';
+    capabilitiesEntryCard.innerHTML = '<span class="pill">cap list</span> <span class="pill">cap run</span>';
+  }
+
+  // Consolidated automation card for quick-entry
+  var automationCard = document.getElementById('automation-card');
+  if (automationCard) {
+    var autoQueued = asCount(data.queue_count);
+    var autoPending = asCount(data.pending_delivery_count);
+    var autoDelivered = asCount(data.delivered_count);
+    automationCard.innerHTML = '<span title="Queued: ' + autoQueued + '">Queue:' + autoQueued + '</span> <span title="Pending: ' + autoPending + '">Pend:' + autoPending + '</span> <span title="Delivered: ' + autoDelivered + '">Done:' + autoDelivered + '</span>';
   }
 
   var agentSel = document.getElementById('task-agent');
@@ -5616,14 +5638,7 @@ function render(data) {
   if (!deliveryTargets.length) {
     connectionItems.push('<div class="empty">No delivery channels connected yet. Core still works locally; exported delivery remains unavailable until a target is configured.</div>');
   }
-  document.getElementById('connections-card').innerHTML = '<strong>Connections and channels</strong>' + connectionItems.join('') + '<div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Source: /api/context, /api/status, /api/subscriptions snapshot.</div>';
-
-  var automationItems = [];
-  automationItems.push('<div class="form-row"><label>Queued alerts</label> <strong>' + asCount(data.queue_count) + '</strong></div>');
-  automationItems.push('<div class="form-row"><label>Pending delivery</label> <strong>' + asCount(data.pending_delivery_count) + '</strong></div>');
-  automationItems.push('<div class="form-row"><label>Delivered</label> <strong>' + asCount(data.delivered_count) + '</strong></div>');
-  automationItems.push('<div class="form-row"><label>SLO</label> <strong>' + ((data.slo && data.slo.status) || 'unknown') + '</strong></div>');
-  document.getElementById('automation-card').innerHTML = '<strong>Schedules and automation</strong>' + automationItems.join('') + '<div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Source: /api/status service_state and observability snapshot.</div>';
+  document.getElementById('connections-card').innerHTML = '<strong>Connections</strong>' + connectionItems.join('') + '<div style="margin-top:0.4rem;font-size:0.75rem;color:var(--dim)">Source: /api/context, /api/status, /api/subscriptions.</div>';
 
   // Institution
   var inst = data.institution;
