@@ -5274,8 +5274,8 @@ a:hover { text-decoration: underline; }
           <!-- Task Composer -->
           <div class="task-composer" style="margin-bottom:0.75rem">
             <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
-              <input type="text" id="core-task-input" placeholder="Enter a task (e.g., browse https://example.com, research 'topic', remember note_name 'content')..." style="flex:1;padding:0.5rem 0.75rem;border:1px solid rgba(111,215,255,0.25);border-radius:6px;background:rgba(10,14,21,0.6);color:var(--fg);font-size:0.9rem">
-              <button onclick="runCoreTask()" style="white-space:nowrap">Run</button>
+              <input type="text" id="core-task-input" placeholder="Type a Core command (e.g., browse https://example.com, research 'topic', remember note 'content')..." style="flex:1;padding:0.5rem 0.75rem;border:1px solid rgba(111,215,255,0.25);border-radius:6px;background:rgba(10,14,21,0.6);color:var(--fg);font-size:0.9rem">
+              <button onclick="runCoreTask()" style="white-space:nowrap">Build CLI</button>
             </div>
             <div class="composer-hints" style="display:flex;gap:0.5rem;flex-wrap:wrap;font-size:0.75rem;color:var(--dim)">
               <span>Try:</span>
@@ -6013,27 +6013,29 @@ function runCoreTask() {
   var task = input.value.trim();
   if (!task) {
     resultDiv.style.display = 'block';
-    resultDiv.innerHTML = '<span style="color:var(--orange)">Enter a task to run.</span>';
+    resultDiv.innerHTML = '<span style="color:var(--orange)">Enter a task to build CLI command.</span>';
     return;
   }
 
   resultDiv.style.display = 'block';
-  resultDiv.innerHTML = '<span style="color:var(--dim)">Running: ' + task + '...</span>';
 
-  // Parse core commands and call appropriate API
+  // Validate command is supported
+  var validCommands = ['browse', 'research', 'remember', 'recall', 'schedule', 'schedules', 'inspect', 'status', 'help', 'cap'];
   var parts = task.split(/\s+/);
   var command = parts[0].toLowerCase();
-  var args = parts.slice(1).join(' ');
 
-  api('POST', '/api/core/run', { command: command, args: args })
-    .then(function(r) {
-      resultDiv.innerHTML = '<span style="color:' + (r.ok ? 'var(--green)' : 'var(--orange)') + '">' + (r.output || r.message || r.error || 'Done') + '</span>';
-      refresh();
-    })
-    .catch(function(e) {
-      // Fallback: show command for CLI execution
-      resultDiv.innerHTML = '<span style="color:var(--dim)">Copy to terminal: <code class="pill" style="cursor:pointer" onclick="copyToClipboard(this)">./scripts/core.sh ' + task + '</code></span>';
-    });
+  if (validCommands.indexOf(command) === -1) {
+    resultDiv.innerHTML = '<span style="color:var(--orange)">Unknown command: ' + command + '. Try: browse, research, remember, recall, schedule, inspect.</span>';
+    return;
+  }
+
+  // Core tasks run locally via CLI - show copyable command
+  var cliCmd = './scripts/core.sh ' + task;
+  resultDiv.innerHTML = '<div style="background:rgba(10,14,21,0.8);padding:0.75rem;border-radius:6px;border:1px solid rgba(111,215,255,0.2)">'
+    + '<div style="font-size:0.75rem;color:var(--dim);margin-bottom:0.4rem">Core runs locally via CLI. Copy and run in your terminal:</div>'
+    + '<code class="pill" style="cursor:pointer;display:inline-block;padding:0.4rem 0.6rem;background:rgba(111,215,255,0.12);border:1px solid rgba(111,215,255,0.3);border-radius:4px;font-family:monospace" onclick="copyToClipboard(this)">' + cliCmd + '</code>'
+    + '<span id="copy-feedback" style="margin-left:0.5rem;font-size:0.75rem;color:var(--green);display:none">Copied!</span>'
+    + '</div>';
 }
 
 function copyToClipboard(el) {
