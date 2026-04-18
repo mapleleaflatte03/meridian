@@ -3,6 +3,17 @@
 # Verify consistent UI anatomy across /, /proofs, /workflows.
 # Checks: anatomy blocks, no pricing remnants, no overflow, consistent header/footer.
 # Exits non-zero on any failure.
+#
+# Contract update 2026-04-17 (benchmark-led redesign):
+#   The 2026-04-17 surface redesign (docs/superpowers/plans/2026-04-17-benchmark-led-redesign.md)
+#   subtracts from the homepage to restore a Core/Team first-fold narrative that
+#   matches the product contract. Surfaces previously anchored on the homepage
+#   (governance-model, research-hub, sponsors, live snapshot, install demo, feature
+#   shelf) moved to dedicated pages (/proofs, /community, /pilot) because the
+#   homepage carrying all of them was reading as a template marketing page instead
+#   of a local-first agent cockpit. These lane checks are updated to encode the new
+#   IA contract (positive checks for retained sections + check_absent for the
+#   intentionally removed ones). This is a contract change, not a lane bypass.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -98,12 +109,20 @@ for page in "${PAGES[@]}"; do
     check_absent "$page: no premium-pricing"      grep -q 'class="premium-pricing"' "$FILE"
 done
 
-# Homepage specific sections required
-check "index.html: why-meridian section"    grep -q 'id="why-meridian"'     "$WWW_DIR/index.html"
-check "index.html: governance-model section" grep -q 'id="governance-model"' "$WWW_DIR/index.html"
-check "index.html: research-hub section"    grep -q 'id="research-hub"'     "$WWW_DIR/index.html"
-check "index.html: how-to-contribute"       grep -q 'id="how-to-contribute"' "$WWW_DIR/index.html"
-check "index.html: sponsors section"        grep -q 'id="sponsors"'          "$WWW_DIR/index.html"
+# Homepage specific sections required after 2026-04-17 redesign
+check "index.html: why-meridian section"    grep -q 'id="why-meridian"'      "$WWW_DIR/index.html"
+check "index.html: workspace-entry section" grep -q 'class="workspace-entry"' "$WWW_DIR/index.html"
+check "index.html: install command card"    grep -q 'Install command'          "$WWW_DIR/index.html"
+check "index.html: how-to-contribute"       grep -q 'id="how-to-contribute"'  "$WWW_DIR/index.html"
+
+# Homepage sections intentionally removed in the 2026-04-17 redesign
+# (moved to /proofs, /community, /pilot per benchmark plan)
+check_absent "index.html: no governance-model section" grep -q 'id="governance-model"' "$WWW_DIR/index.html"
+check_absent "index.html: no research-hub section"     grep -q 'id="research-hub"'     "$WWW_DIR/index.html"
+check_absent "index.html: no sponsors section"         grep -q 'id="sponsors"'          "$WWW_DIR/index.html"
+check_absent "index.html: no live snapshot section"    grep -q 'live-snapshot-section'   "$WWW_DIR/index.html"
+check_absent "index.html: no install demo section"     grep -q 'id="install-demo"'      "$WWW_DIR/index.html"
+check_absent "index.html: no feature shelf headline"   grep -q 'What Meridian provides today' "$WWW_DIR/index.html"
 
 # ---------------------------------------------------------------------------
 # 2. CSS cleanliness checks

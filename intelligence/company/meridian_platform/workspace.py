@@ -4924,6 +4924,7 @@ DASHBOARD_HTML = r"""<!DOCTYPE html>
   --display: 'IBM Plex Sans Condensed', sans-serif;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   font-family: var(--body);
   background:
@@ -4997,13 +4998,97 @@ h1 {
   margin: 1.25rem 0 0.65rem;
   text-transform: uppercase;
 }
-.grid-shell {
+.mode-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 0.9rem;
+  gap: 0.8rem;
+}
+.mode-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.35rem;
+  border: 1px solid rgba(111,215,255,0.18);
+  border-radius: 999px;
+  background: rgba(8,12,19,0.82);
+}
+.mode-tab {
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font-family: var(--mono);
+  font-size: 0.74rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+.mode-tab:hover { color: #f5fbff; background: rgba(111,215,255,0.12); }
+.mode-tab.active {
+  color: #08121b;
+  background: linear-gradient(180deg, #83dfff, #58c9f0);
+  box-shadow: 0 0 0 1px rgba(111,215,255,0.2), 0 8px 20px rgba(0,0,0,0.2);
+}
+.mode-deck {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+}
+.mode-panel {
+  min-width: 0;
+  border: 1px solid rgba(111,215,255,0.16);
+  border-radius: 12px;
+  padding: 0.65rem;
+  background: linear-gradient(180deg, rgba(11,16,24,0.92), rgba(8,12,19,0.9));
 }
 #core-shell, #team-shell { min-width: 0; }
 .card, .grid2, .grid3 { min-width: 0; }
+.card.primary {
+  border-color: rgba(111,215,255,0.34);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 16px 32px rgba(0,0,0,0.24);
+}
+.card.subdued {
+  background: linear-gradient(180deg, rgba(10,14,21,0.78), rgba(7,10,16,0.82));
+  border-color: rgba(111,215,255,0.12);
+}
+.core-fold {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  gap: 0.72rem;
+}
+.core-fold .stack {
+  display: grid;
+  gap: 0.72rem;
+}
+.team-intro {
+  margin-bottom: 0.7rem;
+}
+.team-intro .h2 { margin: 0; }
+.team-intro p { color: var(--dim); font-size: 0.84rem; margin-top: 0.35rem; }
+.mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(111,215,255,0.22);
+  color: #dfe9f5;
+  font-size: 0.72rem;
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.mode-chip.core { border-color: rgba(111,215,255,0.3); }
+.mode-chip.team { border-color: rgba(241,194,93,0.38); }
+.state-line {
+  margin-top: 0.5rem;
+  color: var(--dim);
+  font-size: 0.81rem;
+}
+@media (max-width: 980px) {
+  .core-fold { grid-template-columns: 1fr; }
+}
 .section-card {
   background: var(--card);
   border: 1px solid rgba(111,215,255,0.15);
@@ -5065,7 +5150,6 @@ input, select, textarea {
   padding: 6px 10px;
   border-radius: 4px;
   font-size: 0.83rem;
-  max-width: 100%;
 }
 textarea { width: 100%; min-height: 60px; font-family: inherit; }
 .form-row { display: flex; gap: 0.5rem; align-items: center; margin: 0.38rem 0; flex-wrap: wrap; }
@@ -5086,9 +5170,6 @@ a:hover { text-decoration: underline; }
   z-index: 99;
   font-size: 0.9rem;
 }
-@media (max-width: 980px) {
-  .grid-shell { grid-template-columns: 1fr; }
-}
 @media (max-width: 760px) {
   .grid2, .grid3 { grid-template-columns: 1fr; }
   .header-brand { grid-template-columns: 54px 1fr; }
@@ -5097,29 +5178,6 @@ a:hover { text-decoration: underline; }
   table { display: block; width: 100%; overflow-x: auto; }
   th, td { white-space: normal; font-size: 0.78rem; }
 }
-.team-section-toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  list-style: none;
-  padding: 0.6rem 0.85rem;
-  border: 1px solid rgba(111,215,255,0.15);
-  border-radius: 8px;
-  background: rgba(10,15,23,0.6);
-  transition: background 0.15s;
-  cursor: pointer;
-  margin-top: 0;
-}
-.team-section-toggle::-webkit-details-marker { display: none; }
-.team-section-toggle::before {
-  content: '▸';
-  color: var(--accent);
-  font-size: 0.85rem;
-  transition: transform 0.2s;
-  flex-shrink: 0;
-}
-details[open] > .team-section-toggle::before { transform: rotate(90deg); }
-.team-section-toggle:hover { background: rgba(111,215,255,0.07); }
 </style>
 </head>
 <body>
@@ -5130,7 +5188,7 @@ details[open] > .team-section-toggle::before { transform: rotate(90deg); }
     <div>
       <div class="h-kicker">Meridian local control dashboard</div>
       <h1>One product · two modes · one runtime truth</h1>
-      <p class="subtitle">Core — daily actions. Team — governed execution depth.</p>
+      <p class="subtitle">Core is your daily local cockpit. Team exposes governed execution depth with visible authority, treasury, court, and audit controls.</p>
       <div class="mode-strip" id="mode-strip">
         <span class="pill">Loading mode…</span>
       </div>
@@ -5140,61 +5198,116 @@ details[open] > .team-section-toggle::before { transform: rotate(90deg); }
 
 <div class="status-bar" id="status-bar">Loading...</div>
 
-<div class="grid-shell">
-  <section id="core-shell">
-    <div class="h2">Core cockpit</div>
-    <div class="card" id="core-composer-card">
-      <div style="display:flex;justify-content:space-between;gap:0.6rem;align-items:center;flex-wrap:wrap">
-        <strong>Task composer</strong>
-        <span class="empty" id="composer-source" style="font-style:normal">Source: loading...</span>
-      </div>
-      <div class="form-row"><label>Agent</label><select id="task-agent"></select></div>
-      <div class="form-row"><label>Task</label><textarea id="task-description" placeholder="Describe the next action you want Meridian to run..."></textarea></div>
-      <div class="form-row"><label>Amount</label><input id="task-amount" type="number" step="0.01" value="0.01" style="width:120px"></div>
-      <div class="action-row" id="task-buttons">
-        <button onclick="runGovernedTask()">Run Task</button>
-        <button class="secondary" onclick="inspectGovernedTask()">Inspect</button>
-        <button class="secondary" onclick="exportGovernedTask()">Export Audit</button>
-      </div>
-      <div id="task-result" class="empty">No task executed in this session yet.</div>
-      <div class="action-row" id="core-actions" style="margin-top:0.75rem"></div>
-      <div id="core-team-gate" class="empty" style="margin-top:0.4rem"></div>
-    </div>
-    <div class="card" id="runtime-card">Loading runtime status...</div>
-    <div class="grid2">
-      <div class="card" id="connections-card">Loading connection status...</div>
-      <div class="card" id="automation-card">Loading automation status...</div>
-    </div>
-    <div class="card" id="next-steps-card">Loading next actions...</div>
-    <div class="grid2">
-      <div class="card" id="latest-result-card">Loading latest result...</div>
-      <div class="card" id="recent-output-card">Loading recent outputs...</div>
-    </div>
-    <div class="card" id="inspection-card">Loading inspection entry...</div>
-    <div class="grid2">
-      <div class="card" id="browser-research-card">Loading browser/research entry...</div>
-      <div class="card" id="memory-entry-card">Loading memory/recall entry...</div>
-    </div>
-    <div class="grid2">
-      <div class="card" id="schedule-entry-card">Loading schedule entry...</div>
-      <div class="card" id="capabilities-entry-card">Loading capabilities entry...</div>
-    </div>
-    <div class="card" id="audit-card">Loading...</div>
-  </section>
+<div class="mode-layout">
+  <div class="mode-nav" role="tablist" aria-label="Dashboard depth switch">
+    <button id="tab-core" class="mode-tab active" type="button" role="tab" aria-selected="true" aria-controls="panel-core" onclick="setDashboardView('core')">Core</button>
+    <button id="tab-team" class="mode-tab" type="button" role="tab" aria-selected="false" aria-controls="panel-team" onclick="setDashboardView('team')">Team</button>
+  </div>
 
-  <section id="team-shell">
-    <details id="team-details" open>
-      <summary class="h2 team-section-toggle">Team governed operations</summary>
-      <div id="team-mode-note" class="empty">Loading team mode status...</div>
-      <div id="authority-section">Loading...</div>
-      <div class="card" id="treasury-card">Loading...</div>
-      <div id="court-section">Loading...</div>
-      <div class="card" id="ci-card">Loading...</div>
-      <div class="card" id="inst-card">Loading...</div>
-      <div class="card" id="agents-card">Loading...</div>
-    </details>
-  </section>
+  <div class="mode-deck">
+    <section id="panel-core" class="mode-panel" role="tabpanel" aria-labelledby="tab-core">
+      <section id="core-shell">
+        <div class="core-fold">
+          <div class="stack">
+            <div class="card primary" id="core-composer-card">
+              <div style="display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start;flex-wrap:wrap">
+                <div>
+                  <div class="h2" style="margin:0">Core cockpit</div>
+                  <div class="state-line">Daily action first. Browser, research, memory, recall, schedule. Governance stays out of the way until you need Team depth.</div>
+                </div>
+                <span class="empty" id="composer-source" style="font-style:normal">Source: loading...</span>
+              </div>
+              <div class="action-row" id="core-actions" style="margin-top:0.6rem"></div>
+              <div id="core-team-gate" class="empty" style="margin-top:0.4rem"></div>
+            </div>
+            <div class="card subdued" id="next-steps-card">Loading next actions...</div>
+          </div>
+          <div class="stack">
+            <div class="card subdued" id="runtime-card">Loading runtime status...</div>
+            <div class="grid2">
+              <div class="card subdued" id="latest-result-card">Loading latest result...</div>
+              <div class="card subdued" id="recent-output-card">Loading recent outputs...</div>
+            </div>
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="card" id="connections-card">Loading connection status...</div>
+          <div class="card" id="automation-card">Loading automation status...</div>
+        </div>
+        <div class="card" id="inspection-card">Loading inspection entry...</div>
+        <div class="grid2">
+          <div class="card" id="browser-research-card">Loading browser/research entry...</div>
+          <div class="card" id="memory-entry-card">Loading memory/recall entry...</div>
+        </div>
+        <div class="grid2">
+          <div class="card" id="schedule-entry-card">Loading schedule entry...</div>
+          <div class="card" id="capabilities-entry-card">Loading capabilities entry...</div>
+        </div>
+        <div class="card" id="audit-card">Loading...</div>
+        <div class="card" id="inst-card">Loading...</div>
+        <div class="card" id="agents-card">Loading...</div>
+      </section>
+    </section>
+
+    <section id="panel-team" class="mode-panel" role="tabpanel" aria-labelledby="tab-team" hidden>
+      <section id="team-shell">
+        <div class="team-intro">
+          <div class="h2">Team governed depth</div>
+          <p>Use this depth for approvals, treasury, court, and release governance. It should feel entered on purpose, not dumped into Core.</p>
+          <div id="team-mode-note" class="mode-chip team">Loading team mode status...</div>
+        </div>
+        <div class="card primary" id="team-task-card">
+          <div class="h2" style="margin:0">Governed task composer</div>
+          <div class="state-line">Every run here is audited. Amount, agent, and task description are recorded against treasury and proof routes.</div>
+          <div class="form-row"><label>Agent</label><select id="task-agent"></select></div>
+          <div class="form-row"><label>Task</label><textarea id="task-description" placeholder="Describe the governed action you want Meridian to run..."></textarea></div>
+          <div class="form-row"><label>Amount</label><input id="task-amount" type="number" step="0.01" value="0.01" style="width:120px"></div>
+          <div class="action-row" id="task-buttons">
+            <button onclick="runGovernedTask()">Run Task</button>
+            <button class="secondary" onclick="inspectGovernedTask()">Inspect</button>
+            <button class="secondary" onclick="exportGovernedTask()">Export Audit</button>
+          </div>
+          <div id="task-result" class="empty">No task executed in this session yet.</div>
+        </div>
+        <div id="authority-section">Loading...</div>
+        <div class="card" id="treasury-card">Loading...</div>
+        <div id="court-section">Loading...</div>
+        <div class="card" id="ci-card">Loading...</div>
+      </section>
+    </section>
+  </div>
 </div>
+
+<script>
+var dashboardView = (function() {
+  try {
+    var params = new URLSearchParams(window.location.search || '');
+    return params.get('mode') === 'team' ? 'team' : 'core';
+  } catch (e) {
+    return 'core';
+  }
+})();
+function setDashboardView(view) {
+  dashboardView = view === 'team' ? 'team' : 'core';
+  var isTeam = dashboardView === 'team';
+  var panelCore = document.getElementById('panel-core');
+  var panelTeam = document.getElementById('panel-team');
+  var tabCore = document.getElementById('tab-core');
+  var tabTeam = document.getElementById('tab-team');
+  if (panelCore) panelCore.hidden = isTeam;
+  if (panelTeam) panelTeam.hidden = !isTeam;
+  if (tabCore) {
+    tabCore.classList.toggle('active', !isTeam);
+    tabCore.setAttribute('aria-selected', String(!isTeam));
+  }
+  if (tabTeam) {
+    tabTeam.classList.toggle('active', isTeam);
+    tabTeam.setAttribute('aria-selected', String(isTeam));
+  }
+}
+document.addEventListener('DOMContentLoaded', function() { setDashboardView(dashboardView); });
+
+</script>
 
 <div id="toast"></div>
 
@@ -5256,25 +5369,32 @@ function render(data) {
       + '<span class="pill">Runtime: ' + (data.runtime_id || 'unknown') + '</span>';
   }
 
-  // Status bar: 5 items — kill switch, balance, runway, SLO, actor
+  // Status bar: actionable and honest state only
   var ks = (data.authority && data.authority.kill_switch) || {};
+  var sb = '';
+  sb += '<span class="item">Kill switch: ' + (ks.engaged
+    ? '<span class="tag tag-on">ENGAGED</span>' : '<span class="tag tag-off">OFF</span>') + '</span>';
+  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury && data.treasury.balance_usd, 2) + '</strong></span>';
+  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury && data.treasury.runway_usd, 2) + '</strong></span>';
+  sb += '<span class="item">CI Gate: <strong>' + ((data.ci_vertical && data.ci_vertical.preflight) || 'unknown') + '</strong></span>';
+  sb += '<span class="item">Violations: <strong>' + asCount(data.court && data.court.open_violations && data.court.open_violations.length) + ' open</strong></span>';
+  sb += '<span class="item">Approvals: <strong>' + asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) + ' pending</strong></span>';
+  sb += '<span class="item">Lead: <strong>' + ((data.authority && data.authority.sprint_lead && data.authority.sprint_lead.agent_id) || 'none') + '</strong></span>';
+
   var persistence = data.persistence || {};
   var observability = data.observability || {};
+  var dbStatus = (persistence.db && persistence.db.status) || 'unknown';
   var auditTotal = observability.metrics && observability.metrics.audit ? observability.metrics.audit.total_events : 0;
   var monthCostRaw = observability.metrics && observability.metrics.metering ? observability.metrics.metering.total_cost_usd : 0;
   var monthCost = Number(monthCostRaw);
   if (isNaN(monthCost)) monthCost = 0;
   var slo = observability.slo || {};
-  var ksLabel = ks.engaged
-    ? '<span class="tag tag-on">ENGAGED</span>'
-    : '<span class="tag tag-off">off</span>';
-  var sb = '';
-  sb += '<span class="item">Kill switch: ' + ksLabel + '</span>';
-  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury && data.treasury.balance_usd, 2) + '</strong></span>';
-  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury && data.treasury.runway_usd, 2) + '</strong></span>';
+
+  sb += '<span class="item">DB: <strong>' + dbStatus + '</strong></span>';
+  sb += '<span class="item">Obs: <strong>audit ' + asCount(auditTotal) + ' / $' + asMoney(monthCost, 2) + '</strong></span>';
   sb += '<span class="item">SLO: <strong>' + (slo.status || 'unknown') + '</strong></span>';
   if (data.context && data.context.auth && data.context.auth.actor_id) {
-    sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong></span>';
+    sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong> (' + (data.context.auth.role || 'unbound') + ')</span>';
   }
   document.getElementById('status-bar').innerHTML = sb;
 
@@ -5344,25 +5464,12 @@ function render(data) {
   runtimeNotes.push('Source: /api/status (policy + marketplace + treasury).');
   document.getElementById('runtime-card').innerHTML = '<strong>Runtime readiness</strong><div class="form-row" style="margin-top:0.5rem">' + readinessBits.map(function(x){ return '<span class="pill">'+x+'</span>'; }).join('') + '</div><ul style="margin:0.6rem 0 0 1.2rem">' + runtimeNotes.map(function(x){ return '<li>'+x+'</li>'; }).join('') + '</ul>';
 
-  var taskButtons = document.getElementById('task-buttons');
-  if (taskButtons) {
-    if (mode === 'team') {
-      taskButtons.style.display = 'flex';
-    } else {
-      taskButtons.style.display = 'none';
-    }
-  }
   var taskAgentInput = document.getElementById('task-agent');
   var taskDescInput = document.getElementById('task-description');
   var taskAmountInput = document.getElementById('task-amount');
   if (taskAgentInput) taskAgentInput.disabled = mode !== 'team';
   if (taskDescInput) taskDescInput.disabled = mode !== 'team';
   if (taskAmountInput) taskAmountInput.disabled = mode !== 'team';
-
-  var taskResult = document.getElementById('task-result');
-  if (taskResult && mode !== 'team') {
-    taskResult.textContent = 'Core mode active: use browser/research/memory/schedule flows here. Team-governed run/inspect/export is available after switching to Team mode.';
-  }
 
   var coreActions = document.getElementById('core-actions');
   if (coreActions) {
@@ -5374,9 +5481,7 @@ function render(data) {
 
   var composerSource = document.getElementById('composer-source');
   if (composerSource) {
-    composerSource.textContent = mode === 'team'
-      ? 'Team source: /api/team/governed-execution'
-      : 'Core source: local core.sh flows (browse/research/remember/recall/schedule); Team run routes are hidden in Core mode.';
+    composerSource.textContent = 'Core source: local core.sh flows (browse/research/remember/recall/schedule).';
   }
 
   var latestResult = document.getElementById('latest-result-card');
@@ -5477,23 +5582,24 @@ function render(data) {
   }
   document.getElementById('next-steps-card').innerHTML = '<strong>Next recommended actions</strong><ul style="margin:0.6rem 0 0 1.2rem">' + next.map(function(x){ return '<li>'+x+'</li>'; }).join('') + '</ul><div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Derived from live /api/status and mode-aware policy state.</div>';
 
-  var teamDetails = document.getElementById('team-details');
   var teamNote = document.getElementById('team-mode-note');
-  if (teamDetails && teamNote) {
+  if (teamNote) {
     if (mode !== 'team') {
-      teamDetails.open = false;
-      teamNote.innerHTML = 'Team mode is not active. Team governance controls stay collapsed in Core mode to keep daily actions focused.';
+      teamNote.textContent = 'Team mode is currently inactive. Switch onboarding mode to team when governed controls are required.';
+      teamNote.className = 'mode-chip core';
     } else {
       var hasTeamAction = asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) > 0
         || asCount(data.court && data.court.open_violations && data.court.open_violations.length) > 0
         || (data.treasury && data.treasury.above_reserve === false)
         || (ks && ks.engaged);
-      teamDetails.open = hasTeamAction;
-      teamNote.innerHTML = hasTeamAction
-        ? 'Team mode active with actionable governance state. Controls are expanded for immediate action.'
-        : 'Team mode active. No urgent governance blockers; Team controls stay available on demand.';
+      teamNote.textContent = hasTeamAction
+        ? 'Team mode active with actionable governance state.'
+        : 'Team mode active. No urgent governance blockers.';
+      teamNote.className = 'mode-chip team';
     }
   }
+
+  setDashboardView(mode === 'team' ? 'team' : dashboardView);
 
   var coreTeamGate = document.getElementById('core-team-gate');
   if (coreTeamGate) {

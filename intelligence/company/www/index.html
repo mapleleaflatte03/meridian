@@ -35,7 +35,7 @@
   "operatingSystem": "Linux, macOS, Web"
 }
 </script>
-<link rel="stylesheet" href="/assets/meridian.css?v=20260417-oss12">
+<link rel="stylesheet" href="/assets/meridian.css?v=20260408-oss11">
 </head>
 <body class="page-home">
 
@@ -46,14 +46,10 @@
       <img src="/assets/meridian_wordmark.svg" alt="Meridian — Core and Team local-first product" class="brand-wordmark">
     </a>
     <nav class="site-nav">
-      <a href="/loom">Product</a>
-      <a href="/why">Governance</a>
+      <a href="/pilot">Start</a>
       <a href="/proofs">Proofs</a>
-      <a href="/workflows">Workflows</a>
-      <a href="/community">Community</a>
-      <a href="/support">Support</a>
-      <a href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">Docs</a>
-      <a href="/pilot" class="nav-cta">Get Started</a>
+      <a href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">GitHub</a>
+      <a href="/pilot" class="nav-cta">Install</a>
     </nav>
   </div>
 </header>
@@ -61,60 +57,106 @@
 <section class="hero">
   <div class="scan-overlay"></div>
   <div class="container">
-    <div class="hero-shell hero-home hero-single">
+    <div class="hero-shell hero-home">
       <div class="hero-copy">
         <img src="/assets/meridian_lockup.svg" alt="Meridian — Core and Team local-first product" class="hero-lockup">
         <div class="hero-badge">
           <span class="badge-dot"></span>
-          <span>Open-source · local-first · governance built in</span>
+          <span>Local-first runtime · governed depth when needed</span>
         </div>
-        <h1>Run AI agents locally. Every action gets a receipt.</h1>
-        <p class="tagline">One install. Choose Core for daily tasks or Team for governed execution with authority gates, treasury, and court rules. Your agents, your machine, verifiable proof.</p>
+        <h1>One local agent cockpit for daily work.</h1>
+        <p class="tagline">Start in Core for browser, research, memory, and schedule tasks. Enter Team mode only when approvals, treasury, court, and audit actions are required.</p>
         <div class="cta-group">
-          <a class="cta cta-primary cta-glow" href="/pilot">Get Started</a>
-          <a class="cta cta-outline" href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">View on GitHub</a>
-        </div>
-        <div class="hero-install">
-          <code>curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash</code>
+          <a class="cta cta-primary cta-glow" href="/pilot">Install and Start</a>
+          <a class="cta cta-outline" href="/proofs">See live proof posture</a>
         </div>
       </div>
+      <aside class="hero-dossier">
+        <div class="dossier-kicker">Use Meridian in two depths</div>
+        <div class="dossier-block">
+          <span class="dossier-label">Core</span>
+          <strong>Daily cockpit.</strong>
+          <p>Run local work fast with the minimum context needed to act.</p>
+        </div>
+        <div class="dossier-block">
+          <span class="dossier-label">Team</span>
+          <strong>Governed depth.</strong>
+          <p>Open approvals, budget, court, and audit controls only when they matter.</p>
+        </div>
+      </aside>
     </div>
+  </div>
+</section>
+
+<section class="workspace-entry">
+  <div class="workspace-entry-shell">
+    <div class="workspace-entry-main">
+      <h2>Start in under a minute</h2>
+      <p>Install once, run onboarding, then open your local cockpit.</p>
+      <div class="workspace-entry-links">
+        <a href="/pilot">Install guide</a>
+        <a href="http://127.0.0.1:18901" target="_blank" rel="noopener">Open dashboard</a>
+      </div>
+    </div>
+    <aside class="workspace-entry-rail">
+      <div class="rail-kicker">After install</div>
+      <p>Core is default daily use. Team remains available as a deeper governed mode when needed.</p>
+    </aside>
   </div>
 </section>
 
 <div class="container">
 
   <div class="trust-bar reveal">
-    <span>Meridian Core</span>
-    <span>Meridian Team</span>
+    <span>Core daily mode</span>
+    <span>Team governed depth</span>
     <span>One-command install</span>
-    <span>Verifiable proof</span>
-    <span>Open source</span>
   </div>
 
   <section id="why-meridian" class="reveal">
     <h2>Why Meridian</h2>
-    <p class="section-intro compact-copy">Other local agent runtimes give you autonomy. Meridian gives you a Core daily-use path plus Team governed execution depth, with built-in proof that your agents followed the rules.</p>
+    <p class="section-intro compact-copy">Meridian is one local product with two depths: Core for daily action, Team for governed execution when risk and coordination increase.</p>
     <div class="feature-grid">
       <article class="feature-card">
-        <h3>Governance built in</h3>
-        <p>Authority gates, treasury controls, and court rules are part of the runtime, not an afterthought. Every agent action produces a PoGE receipt you can inspect.</p>
+        <h3>Act fast in Core</h3>
+        <p>Use the daily cockpit for browser, research, memory, and scheduling without governance overhead.</p>
       </article>
       <article class="feature-card">
-        <h3>Runs on your machine</h3>
-        <p>Execution and state stay local. No cloud dependency, no opaque remote execution. Core works offline.</p>
+        <h3>Enter Team when needed</h3>
+        <p>Open approvals, treasury, court, and audit controls only when governed decisions are actually required.</p>
       </article>
       <article class="feature-card">
-        <h3>Two modes, one install</h3>
-        <p>Core for daily browser, research, memory, and scheduling. Team adds authority, treasury, court, and audit surfaces when you need them.</p>
+        <h3>Verify every boundary</h3>
+        <p>Inspect runtime proof and policy posture through live routes instead of relying on opaque claims.</p>
       </article>
     </div>
   </section>
 
+  <section class="how-it-works reveal">
+    <h2 id="how-to-contribute" class="section-heading-center">Start path</h2>
+    <div class="steps-grid">
+      <div class="step-card">
+        <div class="step-number">01</div>
+        <h3>Install</h3>
+        <p>Run one command and set up Meridian locally.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">02</div>
+        <h3>Choose mode</h3>
+        <p>Select Core for daily work, or Team for governed depth.</p>
+      </div>
+      <div class="step-card">
+        <div class="step-number">03</div>
+        <h3>Operate</h3>
+        <p>Open your cockpit and run tasks with verifiable runtime signals.</p>
+      </div>
+    </div>
+  </section>
+
   <div class="card small reveal">
-    <p><strong>Install and start in one command</strong></p>
+    <p><strong>Install command</strong></p>
     <div class="sample-box"><code>curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash</code></div>
-    <p class="dim small mt-md">Then open <a href="/pilot">/pilot</a> for the guided onboarding checklist.</p>
+    <p class="dim small mt-md">Then continue at <a href="/pilot">/pilot</a>.</p>
   </div>
 
   <footer class="footer premium-footer">
@@ -122,7 +164,6 @@
       <div class="footer-brand-col">
         <img src="/assets/meridian_lockup.svg" alt="Meridian — Core and Team local-first product" class="footer-lockup">
         <p class="footer-tagline">Run AI agents locally with built-in governance and verifiable proof.</p>
-        <p class="footer-tagline dim small">Open source · local-first · MIT license · no paywall</p>
       </div>
       <div class="footer-nav-col">
         <div class="footer-nav-group">
@@ -137,12 +178,14 @@
           <a href="/why">Why Meridian</a>
           <a href="/proofs">Proofs</a>
           <a href="/workflows">Workflows</a>
+          <a href="/boundary">Boundary</a>
         </div>
         <div class="footer-nav-group">
           <h4>Community</h4>
           <a href="/community">Community Hub</a>
           <a href="/support">Support</a>
           <a href="https://github.com/mapleleaflatte03/meridian/issues" target="_blank" rel="noopener">Contribute</a>
+          <a href="https://github.com/mapleleaflatte03/meridian" target="_blank" rel="noopener">GitHub</a>
         </div>
       </div>
     </div>
@@ -154,6 +197,6 @@
 
 <div class="toast-container" data-toast-container></div>
 
-<script src="/assets/meridian.js?v=20260417-oss12" defer></script>
+<script src="/assets/meridian.js?v=20260408-oss11" defer></script>
 </body>
 </html>

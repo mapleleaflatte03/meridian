@@ -1,25 +1,24 @@
 # Meridian
 
 <p align="center">
-  <img src="intelligence/company/www/assets/logo.png" alt="Meridian — Core and Team local-first product" width="180">
+  <img src="intelligence/company/www/assets/logo.png" alt="Meridian — local-first Core and Team product" width="220">
 </p>
 
 <p align="center">
-  <strong>One product. One install. Two modes.</strong><br>
-  Meridian Core is your daily local agent runtime. Meridian Team adds governed execution depth.
+  <strong>One local agent product with two depths.</strong><br>
+  Meridian Core is the daily cockpit. Meridian Team is the governed depth for approvals, budget, court, and audit.
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/ci.yml?branch=main&style=flat-square" alt="CI">
+  <img src="https://img.shields.io/github/actions/workflow/status/mapleleaflatte03/meridian/ci.yml?branch=main&style=flat-square" alt="CI status">
   <img src="https://img.shields.io/badge/license-MIT-475569?style=flat-square" alt="MIT">
-  <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="Stars">
+  <img src="https://img.shields.io/github/stars/mapleleaflatte03/meridian?style=flat-square" alt="GitHub stars">
 </p>
 
 <p align="center">
   <a href="https://app.welliam.codes">Website</a> ·
-  <a href="https://app.welliam.codes/pilot">Get Started</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a> ·
-  <a href="ROADMAP.md">Roadmap</a>
+  <a href="https://app.welliam.codes/pilot">Install</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
 ## Install
@@ -28,21 +27,21 @@
 curl -fsSL https://raw.githubusercontent.com/mapleleaflatte03/meridian/main/scripts/install-full.sh | bash
 ```
 
-Then run onboarding:
+## Onboarding
 
 ```bash
 cd ~/meridian
-./scripts/onboard.sh          # interactive — choose Core or Team
+./scripts/onboard.sh
 ```
 
-Non-interactive:
+Choose your mode in onboarding:
 
-```bash
-MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" \
-  ./scripts/onboard.sh --non-interactive --mode core
-```
+- **Core** — daily local work
+- **Team** — governed execution depth
 
-## Core Daily Use
+The selected mode is persisted in `runtime/onboard_state.json`.
+
+## First commands
 
 ```bash
 ./scripts/core.sh browse https://example.com
@@ -52,64 +51,94 @@ MERIDIAN_INST_NAME="My Org" MERIDIAN_AGENT_NAME="Assistant" \
 ./scripts/core.sh inspect
 ```
 
-## Team Governed Execution
+## Team mode
 
-Team routes are Basic-auth-gated and require `--mode team` in onboarding. See [`examples/team-governed-execution.sh`](examples/team-governed-execution.sh) for a runnable flow.
+Team mode keeps Core behavior and adds governed execution routes in the local dashboard. These routes are Basic-auth-gated and require onboarding with `--mode team`.
 
-After `./scripts/dev-up.sh`:
-
-```bash
-# Resolve Basic-auth credentials written by dev-up.sh
-WORKSPACE_USER="$(awk -F': *' '/^user:/ {print $2; exit}' runtime/workspace_credentials)"
-WORKSPACE_PASS="$(awk -F': *' '/^pass:/ {print $2; exit}' runtime/workspace_credentials)"
-
-# Run governed execution slice (auth-gated, team mode required)
-curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
-  -X POST http://127.0.0.1:18901/api/team/governed-execution \
-  -H 'Content-Type: application/json' \
-  -d '{"agent_id":"atlas","task_description":"governed memo","amount_usd":0.01}'
-```
+Runnable example: [`examples/team-governed-execution.sh`](examples/team-governed-execution.sh)
 
 ## Architecture
 
-```
-Meridian (platform)
-├── loom/        — Local agent runtime: sessions, channels, memory, skills, proof (Rust)
-├── kernel/      — Governance engine: Institution, Authority, Treasury, Court (Python)
-└── intelligence/ — Interface layer: dashboards, proofs, workflows, operator tooling (Python)
-```
+Meridian is split into three layers:
 
-## Developer Commands
+- `loom/` — local agent runtime
+- `kernel/` — governance engine
+- `intelligence/` — website, dashboard, proofs, workflows, operator surfaces
+
+## Why Meridian
+
+- **Core first** — daily local work without governance overload
+- **Team when needed** — approvals, treasury, court, and audit remain available as deeper control
+- **Proof visible** — inspect runtime and policy posture through live routes
+- **Local-first** — execution and state stay on your machine
+
+## Developer commands
 
 ```bash
-# Start/stop local workspace + gateway
-./scripts/dev-up.sh && ./scripts/dev-down.sh
+./scripts/dev-up.sh
+./scripts/dev-down.sh
 
-# Supervisor (auto-restart 18901/19001/8266)
-./scripts/dev-supervisor.sh status
-
-# Run tests
 cargo test --manifest-path loom/Cargo.toml --workspace
 cd kernel && python3 -m unittest discover -s kernel/tests -p 'test_*.py'
 cd intelligence && python3 -m unittest -v test_gateway_brain_router.py
 ```
 
-## Governance, Benchmark, and Migration
+## Governance, benchmark, and migration
 
-- [Why Meridian](https://app.welliam.codes/why) — architecture rationale and governance model
-- [Proofs](https://app.welliam.codes/proofs) — live proof posture dashboard
-- [Benchmark lane](scripts/benchmark_meridian.sh) — cold-start and RSS comparison
-- [Migration guide](docs/MIGRATION_FROM_CLAW.md) — concept mapping from Claw-family CLIs
-- [Onboarding contract](docs/ONBOARDING_CONTRACT.md) — ready-to-run gate
+- [Why Meridian](https://app.welliam.codes/why)
+- [Proofs](https://app.welliam.codes/proofs)
+- [Benchmark lane](scripts/benchmark_meridian.sh)
+- [Migration guide](docs/MIGRATION_FROM_CLAW.md)
+- [Onboarding contract](docs/ONBOARDING_CONTRACT.md)
+
+## Dev and Maintenance Commands
+
+These are developer/maintenance commands. **First-time users: start with `./scripts/onboard.sh` above, not these.**
+
+```bash
+# Start/stop local workspace + gateway (run after onboarding)
+./scripts/dev-up.sh
+./scripts/dev-down.sh
+
+# Supervisor (auto-restart 18901/19001/8266)
+./scripts/dev-supervisor.sh status
+
+# Install only (without auto-start stack)
+MERIDIAN_AUTO_START_STACK=0 ./scripts/bootstrap_full.sh
+
+# Loom tests
+cargo test --manifest-path loom/Cargo.toml --workspace
+
+# Kernel tests
+cd kernel && python3 -m unittest discover -s kernel/tests -p 'test_*.py'
+
+# Intelligence tests
+cd intelligence && python3 -m unittest -v test_gateway_brain_router.py
+```
+
+## Non-Goals (Locked)
+
+- No paywall gate for core runtime/governance usage
+- No mandatory commercial checkout path in onboarding
+- No closed-source governance module hidden from community review
 
 ## Licenses
 
-- Root: MIT ([`LICENSE`](LICENSE))
+- Monorepo root: MIT ([`LICENSE`](LICENSE))
 - `kernel/`: Apache-2.0 ([`kernel/LICENSE`](kernel/LICENSE))
 - `loom/` and `intelligence/`: MIT
 
-Open source. No paywall for runtime usage. No closed governance module. See [`docs/MESSAGE_CONTRACT.md`](docs/MESSAGE_CONTRACT.md).
+Canonical source is this monorepo. Legacy repos (`meridian-loom`, `meridian-kernel`, `meridian-intelligence`) are archived mirrors. See [`docs/REPO_MIGRATION_MAP.md`](docs/REPO_MIGRATION_MAP.md).
 
 ## Contribute
 
-[`CONTRIBUTING.md`](CONTRIBUTING.md) · [Issues](https://github.com/mapleleaflatte03/meridian/issues) · [Roadmap](ROADMAP.md) · [Sponsors](https://github.com/sponsors/mapleleaflatte03)
+- [`CONTRIBUTING.md`](CONTRIBUTING.md)
+- [Issue templates](.github/ISSUE_TEMPLATE)
+- [Roadmap](ROADMAP.md)
+- [Community map](docs/COMMUNITY_MAP.md)
+
+Optional support: [GitHub Sponsors](https://github.com/sponsors/mapleleaflatte03) · [Sustainability policy](docs/SUSTAINABILITY.md)
+
+---
+
+*Meridian positioning contract: [`docs/MESSAGE_CONTRACT.md`](docs/MESSAGE_CONTRACT.md)*
