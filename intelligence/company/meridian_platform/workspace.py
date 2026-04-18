@@ -5118,6 +5118,45 @@ h1 {
 .card { background: var(--card); border: 1px solid rgba(111,215,255,0.12); border-radius: 10px; padding: 1rem; }
 .card.compact { padding: 0.75rem; }
 .card + .card { margin-top: 0.85rem; }
+
+/* Task composer styles */
+.task-composer input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(111,215,255,0.15);
+}
+.composer-hints .pill {
+  transition: all 0.15s ease;
+}
+.composer-hints .pill:hover {
+  background: rgba(111,215,255,0.15);
+  transform: translateY(-1px);
+}
+
+/* Quick entry grouping */
+#quick-entry-card > div > div {
+  min-width: 100px;
+}
+
+/* Responsive improvements */
+@media (max-width: 760px) {
+  .task-composer input {
+    font-size: 16px; /* Prevent zoom on iOS */
+  }
+  .composer-hints {
+    gap: 0.3rem !important;
+  }
+  .composer-hints .pill {
+    padding: 2px 6px;
+    font-size: 0.7rem;
+  }
+  #quick-entry-card > div {
+    gap: 1rem !important;
+  }
+  #quick-entry-card > div > div {
+    min-width: 80px;
+  }
+}
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
 .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.85rem; }
 @media (max-width: 760px) {
@@ -5224,15 +5263,34 @@ a:hover { text-decoration: underline; }
       <section id="core-shell">
         <!-- Primary Action Area -->
         <div class="card primary" id="core-composer-card">
-          <div style="display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start;flex-wrap:wrap">
+          <div class="core-header" style="display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:0.75rem">
             <div>
               <div class="h2" style="margin:0">Core cockpit</div>
-              <div class="state-line">Daily local actions: browser, research, memory, schedule. Team depth available when you need governance.</div>
+              <div class="state-line">Run daily local tasks: browse, research, remember, schedule.</div>
             </div>
-            <span class="empty" id="composer-source" style="font-style:normal">Source: loading...</span>
+            <span class="empty" id="composer-source" style="font-style:normal;font-size:0.75rem;color:var(--dim)">Local mode</span>
           </div>
+
+          <!-- Task Composer -->
+          <div class="task-composer" style="margin-bottom:0.75rem">
+            <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+              <input type="text" id="core-task-input" placeholder="Enter a task (e.g., browse https://example.com, research 'topic', remember note_name 'content')..." style="flex:1;padding:0.5rem 0.75rem;border:1px solid rgba(111,215,255,0.25);border-radius:6px;background:rgba(10,14,21,0.6);color:var(--fg);font-size:0.9rem">
+              <button onclick="runCoreTask()" style="white-space:nowrap">Run</button>
+            </div>
+            <div class="composer-hints" style="display:flex;gap:0.5rem;flex-wrap:wrap;font-size:0.75rem;color:var(--dim)">
+              <span>Try:</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('browse https://')">browse</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('research ')">research</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('remember ')">remember</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('recall ')">recall</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('schedule ')">schedule</span>
+              <span class="pill" style="cursor:pointer" onclick="fillTask('inspect')">inspect</span>
+            </div>
+          </div>
+
           <div class="action-row" id="core-actions" style="margin-top:0.6rem"></div>
-          <div id="core-team-gate" class="empty" style="margin-top:0.4rem"></div>
+          <div id="core-team-gate" class="empty" style="margin-top:0.4rem;font-size:0.8rem"></div>
+          <div id="core-task-result" style="margin-top:0.5rem;display:none"></div>
         </div>
 
         <!-- Core Fold: Next Actions + Runtime Status -->
@@ -5249,15 +5307,32 @@ a:hover { text-decoration: underline; }
         </div>
 
         <!-- Quick Entry Points -->
-        <div class="card" id="quick-entry-card">
-          <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
-            <strong>Quick actions:</strong>
-            <span id="browser-research-card" style="display:contents"></span>
-            <span id="memory-entry-card" style="display:contents"></span>
-            <span id="schedule-entry-card" style="display:contents"></span>
-            <span id="capabilities-entry-card" style="display:contents"></span>
-            <span id="automation-card" style="display:contents"></span>
-            <span id="inspection-card" style="display:contents"></span>
+        <div class="card compact" id="quick-entry-card">
+          <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Browse & Research</span>
+              <span id="browser-research-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Memory</span>
+              <span id="memory-entry-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Schedule</span>
+              <span id="schedule-entry-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Capabilities</span>
+              <span id="capabilities-entry-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Inspect</span>
+              <span id="inspection-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:0.3rem">
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Queue</span>
+              <span id="automation-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
+            </div>
           </div>
         </div>
 
@@ -5504,7 +5579,7 @@ function render(data) {
 
   var composerSource = document.getElementById('composer-source');
   if (composerSource) {
-    composerSource.textContent = 'Core source: local core.sh flows (browse/research/remember/recall/schedule).';
+    composerSource.innerHTML = 'Local mode &middot; <a href="#" onclick="showCoreHelp();return false" style="color:var(--accent)">Help</a>';
   }
 
   var latestResult = document.getElementById('latest-result-card');
@@ -5533,36 +5608,36 @@ function render(data) {
 
   var inspectionCard = document.getElementById('inspection-card');
   if (inspectionCard) {
-    inspectionCard.innerHTML = '<a href="/api/audit" target="_blank" rel="noopener">Audit</a> <a href="/api/context" target="_blank" rel="noopener">Auth</a> <a href="/api/marketplace" target="_blank" rel="noopener">Marketplace</a>';
+    inspectionCard.innerHTML = '<a href="/api/audit">Audit</a> <a href="/api/context">Auth</a> <a href="/api/marketplace">Market</a>';
   }
 
   var browserResearchCard = document.getElementById('browser-research-card');
   if (browserResearchCard) {
-    browserResearchCard.innerHTML = '<a href="http://127.0.0.1:8266" target="_blank" rel="noopener">Gateway</a> <a href="/api/runtime-proof" target="_blank" rel="noopener">Proofs</a> <a href="/api/workflows/showcase" target="_blank" rel="noopener">Workflows</a>';
+    browserResearchCard.innerHTML = '<a href="http://127.0.0.1:8266">Gateway</a> <a href="/api/runtime-proof">Proofs</a> <a href="/api/workflows/showcase">Workflows</a>';
   }
 
   var memoryEntryCard = document.getElementById('memory-entry-card');
   if (memoryEntryCard) {
-    memoryEntryCard.innerHTML = '<span class="pill">remember</span> <span class="pill">recall</span> <a href="/api/memory/head" target="_blank" rel="noopener">Head</a>';
+    memoryEntryCard.innerHTML = '<span class="pill" onclick="fillTask(\'remember \')" style="cursor:pointer">remember</span> <span class="pill" onclick="fillTask(\'recall \')" style="cursor:pointer">recall</span> <a href="/api/memory/head">Head</a>';
   }
 
   var scheduleEntryCard = document.getElementById('schedule-entry-card');
   if (scheduleEntryCard) {
-    scheduleEntryCard.innerHTML = '<span class="pill">schedule</span> <span class="pill">schedules</span> <a href="/api/alerts" target="_blank" rel="noopener">Alerts</a>';
+    scheduleEntryCard.innerHTML = '<span class="pill" onclick="fillTask(\'schedule \')" style="cursor:pointer">schedule</span> <span class="pill" onclick="fillTask(\'schedules\')" style="cursor:pointer">list</span> <a href="/api/alerts">Alerts</a>';
   }
 
   var capabilitiesEntryCard = document.getElementById('capabilities-entry-card');
   if (capabilitiesEntryCard) {
-    capabilitiesEntryCard.innerHTML = '<span class="pill">cap list</span> <span class="pill">cap run</span>';
+    capabilitiesEntryCard.innerHTML = '<span class="pill" onclick="fillTask(\'cap list\')" style="cursor:pointer">cap list</span> <span class="pill" onclick="fillTask(\'cap run \')" style="cursor:pointer">cap run</span>';
   }
 
-  // Consolidated automation card for quick-entry
+  // Queue status in quick-entry
   var automationCard = document.getElementById('automation-card');
   if (automationCard) {
     var autoQueued = asCount(data.queue_count);
     var autoPending = asCount(data.pending_delivery_count);
     var autoDelivered = asCount(data.delivered_count);
-    automationCard.innerHTML = '<span title="Queued: ' + autoQueued + '">Queue:' + autoQueued + '</span> <span title="Pending: ' + autoPending + '">Pend:' + autoPending + '</span> <span title="Delivered: ' + autoDelivered + '">Done:' + autoDelivered + '</span>';
+    automationCard.innerHTML = '<span class="pill" title="Queued">Q:' + autoQueued + '</span> <span class="pill" title="Pending">P:' + autoPending + '</span> <span class="pill" title="Delivered">D:' + autoDelivered + '</span>';
   }
 
   var agentSel = document.getElementById('task-agent');
@@ -5585,24 +5660,45 @@ function render(data) {
   var deliveryTargets = subscriptions.targets || [];
 
   var next = [];
-  if (!data.agents || data.agents.length === 0) {
-    next.push('No agents registered yet. Run onboarding and register your first agent.');
-  }
-  if (!deliveryTargets.length) {
-    next.push('No delivery channel connected yet; external delivery/export stays unavailable until configured.');
-  }
-  if (policyState === 'blocked' && !hasExecutionEvidence) {
-    next.push('Execution route is blocked and no execution evidence exists yet: ' + policyReason + '.');
-  }
+
+  // Always show Core capabilities first
   if (mode === 'core') {
-    next.push('Use Core now: browse/research/memory/schedule/capability flows from this cockpit.');
+    next.push('<strong>Core works locally now.</strong> Use the task composer above or click the quick action pills.');
   } else {
-    next.push('Team mode active: open Team governed operations when approval, treasury, or court actions are needed.');
+    next.push('<strong>Team mode active.</strong> Governed execution controls are available in the Team tab.');
   }
-  if (next.length === 0) {
-    next.push('System ready for daily Core actions.');
+
+  // Agent status
+  if (!data.agents || data.agents.length === 0) {
+    next.push('Run <code>./scripts/onboard.sh --mode core</code> to create your first agent.');
+  } else {
+    next.push('Agents ready: ' + data.agents.length + ' registered. Core tasks run without agent configuration.');
   }
-  document.getElementById('next-steps-card').innerHTML = '<strong>Next recommended actions</strong><ul style="margin:0.6rem 0 0 1.2rem">' + next.map(function(x){ return '<li>'+x+'</li>'; }).join('') + '</ul><div style="margin-top:0.55rem;font-size:0.8rem;color:var(--dim)">Derived from live /api/status and mode-aware policy state.</div>';
+
+  // Delivery channels
+  if (!deliveryTargets.length) {
+    next.push('<span style="color:var(--dim)">No delivery channels connected yet.</span> Core still works locally; external export requires configuration.');
+  } else {
+    next.push('Delivery channels: ' + deliveryTargets.length + ' connected.');
+  }
+
+  // Execution route
+  if (policyState === 'blocked') {
+    if (!hasExecutionEvidence && policyReason === 'no_active_execution_route_configured') {
+      next.push('Execution route: not configured. Core local tasks work; governed execution requires Team setup.');
+    } else if (!hasExecutionEvidence) {
+      next.push('Execution route: blocked (' + policyReason + ').');
+    }
+  } else if (policyState === 'ok') {
+    next.push('Execution route: healthy.');
+  }
+
+  // Treasury warning
+  if (data.treasury && !data.treasury.above_reserve) {
+    next.push('<span style="color:var(--orange)">Treasury below reserve.</span> Budget-gated phases blocked until resolved.');
+  }
+
+  document.getElementById('next-steps-card').innerHTML = '<strong>What you can do now</strong><ul style="margin:0.6rem 0 0 1.2rem;font-size:0.85rem">' + next.map(function(x){ return '<li style="margin-bottom:0.3rem">' + x + '</li>'; }).join('') + '</ul><div style="margin-top:0.55rem;font-size:0.75rem;color:var(--dim)">Live from /api/status</div>';
 
   var teamNote = document.getElementById('team-mode-note');
   if (teamNote) {
@@ -5897,6 +5993,75 @@ function render(data) {
   }
   cv += '<div style="margin-top:0.5rem;font-size:0.8rem;color:var(--dim)">Pipeline phases execute in order: research -> write -> QA -> execute -> compress -> deliver -> score</div>';
   document.getElementById('ci-card').innerHTML = cv;
+}
+
+// ── Core task composer ─────────────────────────────────────────────────────
+
+function fillTask(prefix) {
+  var input = document.getElementById('core-task-input');
+  if (input) {
+    input.value = prefix;
+    input.focus();
+  }
+}
+
+function runCoreTask() {
+  var input = document.getElementById('core-task-input');
+  var resultDiv = document.getElementById('core-task-result');
+  if (!input || !resultDiv) return;
+
+  var task = input.value.trim();
+  if (!task) {
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<span style="color:var(--orange)">Enter a task to run.</span>';
+    return;
+  }
+
+  resultDiv.style.display = 'block';
+  resultDiv.innerHTML = '<span style="color:var(--dim)">Running: ' + task + '...</span>';
+
+  // Parse core commands and call appropriate API
+  var parts = task.split(/\s+/);
+  var command = parts[0].toLowerCase();
+  var args = parts.slice(1).join(' ');
+
+  api('POST', '/api/core/run', { command: command, args: args })
+    .then(function(r) {
+      resultDiv.innerHTML = '<span style="color:' + (r.ok ? 'var(--green)' : 'var(--orange)') + '">' + (r.output || r.message || r.error || 'Done') + '</span>';
+      refresh();
+    })
+    .catch(function(e) {
+      // Fallback: show command for CLI execution
+      resultDiv.innerHTML = '<span style="color:var(--dim)">Copy to terminal: <code class="pill" style="cursor:pointer" onclick="copyToClipboard(this)">./scripts/core.sh ' + task + '</code></span>';
+    });
+}
+
+function copyToClipboard(el) {
+  var text = el.textContent;
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(text).then(function() { toast('Copied'); });
+  } else {
+    toast('Copy: ' + text);
+  }
+}
+
+function showCoreHelp() {
+  var resultDiv = document.getElementById('core-task-result');
+  if (resultDiv) {
+    resultDiv.style.display = 'block';
+    resultDiv.innerHTML = '<div style="background:rgba(10,14,21,0.8);padding:0.75rem;border-radius:6px;border:1px solid rgba(111,215,255,0.2)">'
+      + '<strong style="color:var(--accent)">Core commands</strong><ul style="margin:0.5rem 0 0 1rem;font-size:0.8rem;color:var(--dim)">'
+      + '<li><strong>browse [url]</strong> — open and analyze web pages</li>'
+      + '<li><strong>research [query]</strong> — search and summarize</li>'
+      + '<li><strong>remember [name] [content]</strong> — save to memory</li>'
+      + '<li><strong>recall [name]</strong> — retrieve from memory</li>'
+      + '<li><strong>schedule [name] [seconds]</strong> — schedule task</li>'
+      + '<li><strong>schedules</strong> — list scheduled tasks</li>'
+      + '<li><strong>cap list</strong> — list capabilities</li>'
+      + '<li><strong>cap run [name]</strong> — run capability</li>'
+      + '<li><strong>inspect</strong> — system status</li>'
+      + '</ul></div>';
+  }
 }
 
 // ── Action handlers ─────────────────────────────────────────────────────────
