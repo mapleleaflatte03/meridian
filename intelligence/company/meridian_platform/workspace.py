@@ -5240,17 +5240,14 @@ a:hover { text-decoration: underline; }
   <div class="header-brand">
     <img src="/assets/logo.png" alt="Meridian logo" class="brand-logo" onerror="this.style.display='none'">
     <div>
-      <div class="h-kicker">Meridian local control dashboard</div>
-      <h1>One product · two modes · one runtime truth</h1>
-      <p class="subtitle">Core is your daily local cockpit. Team exposes governed execution depth with visible authority, treasury, court, and audit controls.</p>
-      <div class="mode-strip" id="mode-strip">
-        <span class="pill">Loading mode…</span>
-      </div>
+      <div class="h-kicker">Local cockpit</div>
+      <h1>Meridian workspace</h1>
+      <p class="subtitle" id="identity-line">Loading identity…</p>
     </div>
   </div>
 </div>
 
-<div class="status-bar" id="status-bar">Loading...</div>
+<div class="status-bar" id="status-bar" aria-label="Primary status summary">Loading…</div>
 
 <div class="mode-layout">
   <div class="mode-nav" role="tablist" aria-label="Dashboard depth switch">
@@ -5261,24 +5258,15 @@ a:hover { text-decoration: underline; }
   <div class="mode-deck">
     <section id="panel-core" class="mode-panel" role="tabpanel" aria-labelledby="tab-core">
       <section id="core-shell">
-        <!-- Primary Action Area -->
+        <!-- Primary Action Area: one composer, one explainer line, one hint row -->
         <div class="card primary" id="core-composer-card">
-          <div class="core-header" style="display:flex;justify-content:space-between;gap:0.6rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:0.75rem">
-            <div>
-              <div class="h2" style="margin:0">Core cockpit</div>
-              <div class="state-line">Run daily local tasks: browse, research, remember, schedule.</div>
-            </div>
-            <span class="empty" id="composer-source" style="font-style:normal;font-size:0.75rem;color:var(--dim)">Local mode</span>
-          </div>
-
-          <!-- Task Composer -->
-          <div class="task-composer" style="margin-bottom:0.75rem">
+          <div class="task-composer">
             <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
-              <input type="text" id="core-task-input" placeholder="Type a Core command (e.g., browse https://example.com, research 'topic', remember note 'content')..." style="flex:1;padding:0.5rem 0.75rem;border:1px solid rgba(111,215,255,0.25);border-radius:6px;background:rgba(10,14,21,0.6);color:var(--fg);font-size:0.9rem">
+              <input type="text" id="core-task-input" placeholder="Type a Core command — browse, research, remember, recall, schedule, cap, inspect" style="flex:1;padding:0.65rem 0.85rem;border:1px solid rgba(111,215,255,0.25);border-radius:6px;background:rgba(10,14,21,0.6);color:var(--fg);font-size:0.95rem">
               <button onclick="runCoreTask()" style="white-space:nowrap">Build CLI</button>
             </div>
-            <div class="composer-hints" style="display:flex;gap:0.5rem;flex-wrap:wrap;font-size:0.75rem;color:var(--dim)">
-              <span>Try:</span>
+            <div class="state-line" id="composer-source" style="font-size:0.8rem;color:var(--dim);margin-top:0.15rem">Local CLI composer · runs via printed command, not auto-execute.</div>
+            <div class="composer-hints" style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-top:0.55rem">
               <span class="pill" style="cursor:pointer" onclick="fillTask('browse https://')">browse</span>
               <span class="pill" style="cursor:pointer" onclick="fillTask('research ')">research</span>
               <span class="pill" style="cursor:pointer" onclick="fillTask('remember ')">remember</span>
@@ -5288,30 +5276,32 @@ a:hover { text-decoration: underline; }
               <span class="pill" style="cursor:pointer" onclick="fillTask('inspect')">inspect</span>
             </div>
           </div>
-
-          <div class="action-row" id="core-actions" style="margin-top:0.6rem"></div>
+          <div class="action-row" id="core-actions" style="margin-top:0.85rem"></div>
           <div id="core-team-gate" class="empty" style="margin-top:0.4rem;font-size:0.8rem"></div>
-          <div id="core-task-result" style="margin-top:0.5rem;display:none"></div>
+          <div id="core-task-result" style="margin-top:0.6rem;display:none"></div>
         </div>
 
-        <!-- Core Fold: Next Actions + Runtime Status -->
-        <div class="core-fold">
+        <!-- Everything below the fold: calmer secondary sections, in priority order -->
+        <div class="h2" style="margin-top:1.4rem">Signals</div>
+        <div class="status-bar" id="signals-overview" aria-label="Secondary signals"></div>
+
+        <div class="core-fold" style="margin-top:0.75rem">
           <div class="stack">
-            <div class="card subdued" id="next-steps-card">Loading next actions...</div>
-            <div class="card compact" id="runtime-card">Loading runtime status...</div>
+            <div class="card subdued" id="next-steps-card">Loading next actions…</div>
+            <div class="card compact" id="runtime-card">Loading runtime status…</div>
           </div>
           <div class="stack">
-            <div class="card compact" id="latest-result-card">Loading latest result...</div>
-            <div class="card compact" id="recent-output-card">Loading recent outputs...</div>
-            <div class="card compact" id="connections-card">Loading connection status...</div>
+            <div class="card compact" id="latest-result-card">Loading latest result…</div>
+            <div class="card compact" id="recent-output-card">Loading recent outputs…</div>
+            <div class="card compact" id="connections-card">Loading connection status…</div>
           </div>
         </div>
 
-        <!-- Quick Entry Points -->
+        <div class="h2" style="margin-top:1.4rem">Operations</div>
         <div class="card compact" id="quick-entry-card">
           <div style="display:flex;gap:1.5rem;flex-wrap:wrap;align-items:flex-start;">
             <div style="display:flex;flex-direction:column;gap:0.3rem">
-              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Browse & Research</span>
+              <span style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--dim)">Browse &amp; research</span>
               <span id="browser-research-card" style="display:flex;gap:0.5rem;flex-wrap:wrap"></span>
             </div>
             <div style="display:flex;flex-direction:column;gap:0.3rem">
@@ -5337,13 +5327,11 @@ a:hover { text-decoration: underline; }
           </div>
         </div>
 
-        <!-- Audit Trail -->
-        <div class="card compact" id="audit-card">Loading...</div>
+        <div class="card compact" id="audit-card" style="margin-top:0.75rem">Loading…</div>
 
-        <!-- Institution and Agents -->
-        <div class="grid2">
-          <div class="card" id="inst-card">Loading...</div>
-          <div class="card" id="agents-card">Loading...</div>
+        <div class="grid2" style="margin-top:0.75rem">
+          <div class="card" id="inst-card">Loading…</div>
+          <div class="card" id="agents-card">Loading…</div>
         </div>
       </section>
     </section>
@@ -5351,27 +5339,36 @@ a:hover { text-decoration: underline; }
     <section id="panel-team" class="mode-panel" role="tabpanel" aria-labelledby="tab-team" hidden>
       <section id="team-shell">
         <div class="team-intro">
-          <div class="h2">Team governed depth</div>
-          <p>Use this depth for approvals, treasury, court, and release governance. It should feel entered on purpose, not dumped into Core.</p>
-          <div id="team-mode-note" class="mode-chip team">Loading team mode status...</div>
+          <div class="h-kicker">Team · governed depth</div>
+          <p class="subtitle" id="team-mode-note">Loading team mode status…</p>
         </div>
+
+        <!-- Governed composer: one clear action -->
         <div class="card primary" id="team-task-card">
           <div class="h2" style="margin:0">Governed task composer</div>
-          <div class="state-line">Every run here is audited. Amount, agent, and task description are recorded against treasury and proof routes.</div>
+          <div class="state-line">Every run is audited. Amount, agent, and task description are recorded against treasury and proof routes.</div>
           <div class="form-row"><label>Agent</label><select id="task-agent"></select></div>
-          <div class="form-row"><label>Task</label><textarea id="task-description" placeholder="Describe the governed action you want Meridian to run..."></textarea></div>
+          <div class="form-row"><label>Task</label><textarea id="task-description" placeholder="Describe the governed action you want Meridian to run…"></textarea></div>
           <div class="form-row"><label>Amount</label><input id="task-amount" type="number" step="0.01" value="0.01" style="width:120px"></div>
           <div class="action-row" id="task-buttons">
-            <button onclick="runGovernedTask()">Run Task</button>
+            <button onclick="runGovernedTask()">Run task</button>
             <button class="secondary" onclick="inspectGovernedTask()">Inspect</button>
-            <button class="secondary" onclick="exportGovernedTask()">Export Audit</button>
+            <button class="secondary" onclick="exportGovernedTask()">Export audit</button>
           </div>
           <div id="task-result" class="empty">No task executed in this session yet.</div>
         </div>
-        <div id="authority-section">Loading...</div>
-        <div class="card" id="treasury-card">Loading...</div>
-        <div id="court-section">Loading...</div>
-        <div class="card" id="ci-card">Loading...</div>
+
+        <!-- Approvals & delegations group -->
+        <div class="h2" style="margin-top:1.4rem">Approvals &amp; delegations</div>
+        <div id="authority-section">Loading…</div>
+
+        <!-- Treasury · Court · Audit group -->
+        <div class="h2" style="margin-top:1.4rem">Treasury · court · audit</div>
+        <div class="grid2">
+          <div class="card" id="treasury-card">Loading…</div>
+          <div class="card" id="ci-card">Loading…</div>
+        </div>
+        <div id="court-section" style="margin-top:0.75rem">Loading…</div>
       </section>
     </section>
   </div>
@@ -5458,44 +5455,54 @@ function render(data) {
   currentContext = data.context || null;
   var mode = String(data.product_mode || 'core').toLowerCase();
 
-  var modeStrip = document.getElementById('mode-strip');
-  if (modeStrip) {
-    var coreLive = mode === 'core' ? 'pill live' : 'pill';
-    var teamLive = mode === 'team' ? 'pill live' : 'pill';
-    modeStrip.innerHTML = ''
-      + '<span class="' + coreLive + '">Core mode</span>'
-      + '<span class="' + teamLive + '">Team mode</span>'
-      + '<span class="pill">Runtime: ' + (data.runtime_id || 'unknown') + '</span>';
+  // Identity line: one sentence under the title
+  var identityEl = document.getElementById('identity-line');
+  if (identityEl) {
+    var actor = (data.context && data.context.auth && data.context.auth.actor_id) || 'anonymous';
+    var role = (data.context && data.context.auth && data.context.auth.role) || 'unbound';
+    var runtimeLabel = data.runtime_id || 'runtime';
+    identityEl.textContent = actor + ' · ' + role + ' · ' + runtimeLabel;
   }
 
-  // Status bar: actionable and honest state only
-  var ks = (data.authority && data.authority.kill_switch) || {};
-  var sb = '';
-  sb += '<span class="item">Kill switch: ' + (ks.engaged
-    ? '<span class="tag tag-on">ENGAGED</span>' : '<span class="tag tag-off">OFF</span>') + '</span>';
-  sb += '<span class="item">Balance: <strong>$' + asMoney(data.treasury && data.treasury.balance_usd, 2) + '</strong></span>';
-  sb += '<span class="item">Runway: <strong>$' + asMoney(data.treasury && data.treasury.runway_usd, 2) + '</strong></span>';
-  sb += '<span class="item">CI Gate: <strong>' + ((data.ci_vertical && data.ci_vertical.preflight) || 'unknown') + '</strong></span>';
-  sb += '<span class="item">Violations: <strong>' + asCount(data.court && data.court.open_violations && data.court.open_violations.length) + ' open</strong></span>';
-  sb += '<span class="item">Approvals: <strong>' + asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) + ' pending</strong></span>';
-  sb += '<span class="item">Lead: <strong>' + ((data.authority && data.authority.sprint_lead && data.authority.sprint_lead.agent_id) || 'none') + '</strong></span>';
-
+  // Primary status bar: runtime health, actor, treasury summary only (three chips)
   var persistence = data.persistence || {};
   var observability = data.observability || {};
   var dbStatus = (persistence.db && persistence.db.status) || 'unknown';
+  var slo = observability.slo || {};
+  var sloStatus = slo.status || 'unknown';
+  var runtimeHealthy = dbStatus === 'ok' && sloStatus === 'ok';
+  var runtimeTag = runtimeHealthy
+    ? '<span class="tag tag-live">HEALTHY</span>'
+    : '<span class="tag tag-warn">CHECK</span>';
+  var actorLabel = (data.context && data.context.auth && data.context.auth.actor_id) || 'anonymous';
+  var actorRole = (data.context && data.context.auth && data.context.auth.role) || 'unbound';
+  var balanceStr = asMoney(data.treasury && data.treasury.balance_usd, 2);
+  var runwayStr = asMoney(data.treasury && data.treasury.runway_usd, 2);
+
+  var primary = '';
+  primary += '<span class="item">Runtime: ' + runtimeTag + '</span>';
+  primary += '<span class="item">Actor: <strong>' + actorLabel + '</strong> (' + actorRole + ')</span>';
+  primary += '<span class="item">Treasury: <strong>$' + balanceStr + '</strong> · runway $' + runwayStr + '</span>';
+  document.getElementById('status-bar').innerHTML = primary;
+
+  // Secondary signals (below the fold): everything else demoted here, no chip cemetery
+  var ks = (data.authority && data.authority.kill_switch) || {};
   var auditTotal = observability.metrics && observability.metrics.audit ? observability.metrics.audit.total_events : 0;
   var monthCostRaw = observability.metrics && observability.metrics.metering ? observability.metrics.metering.total_cost_usd : 0;
   var monthCost = Number(monthCostRaw);
   if (isNaN(monthCost)) monthCost = 0;
-  var slo = observability.slo || {};
-
-  sb += '<span class="item">DB: <strong>' + dbStatus + '</strong></span>';
-  sb += '<span class="item">Obs: <strong>audit ' + asCount(auditTotal) + ' / $' + asMoney(monthCost, 2) + '</strong></span>';
-  sb += '<span class="item">SLO: <strong>' + (slo.status || 'unknown') + '</strong></span>';
-  if (data.context && data.context.auth && data.context.auth.actor_id) {
-    sb += '<span class="item">Actor: <strong>' + data.context.auth.actor_id + '</strong> (' + (data.context.auth.role || 'unbound') + ')</span>';
-  }
-  document.getElementById('status-bar').innerHTML = sb;
+  var secondary = '';
+  secondary += '<span class="item">Kill switch: ' + (ks.engaged
+    ? '<span class="tag tag-on">ENGAGED</span>' : '<span class="tag tag-off">OFF</span>') + '</span>';
+  secondary += '<span class="item">CI gate: <strong>' + ((data.ci_vertical && data.ci_vertical.preflight) || 'unknown') + '</strong></span>';
+  secondary += '<span class="item">Violations: <strong>' + asCount(data.court && data.court.open_violations && data.court.open_violations.length) + ' open</strong></span>';
+  secondary += '<span class="item">Approvals: <strong>' + asCount(data.authority && data.authority.pending_approvals && data.authority.pending_approvals.length) + ' pending</strong></span>';
+  secondary += '<span class="item">Lead: <strong>' + ((data.authority && data.authority.sprint_lead && data.authority.sprint_lead.agent_id) || 'none') + '</strong></span>';
+  secondary += '<span class="item">DB: <strong>' + dbStatus + '</strong></span>';
+  secondary += '<span class="item">SLO: <strong>' + sloStatus + '</strong></span>';
+  secondary += '<span class="item">Obs: <strong>audit ' + asCount(auditTotal) + ' / $' + asMoney(monthCost, 2) + '</strong></span>';
+  var secondaryEl = document.getElementById('signals-overview');
+  if (secondaryEl) secondaryEl.innerHTML = secondary;
 
   // Core-first cards
   var runtimeState = data.runtime_core || {};
