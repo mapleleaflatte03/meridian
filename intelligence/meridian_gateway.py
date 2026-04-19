@@ -4630,6 +4630,8 @@ def _memory_entry_recency_bonus(entry: dict[str, Any]) -> int:
         return 4
     if age_seconds <= 7 * 24 * 3600:
         return 2
+    if age_seconds <= 21 * 24 * 3600:
+        return 1
     return 0
 
 
@@ -4769,19 +4771,24 @@ def _matching_successful_output_memory_key(
     candidate_key = str(candidate.get("key") or "").strip()
     if not candidate_content:
         return ""
+    candidate_hash = hashlib.sha256(candidate_content.encode("utf-8")).hexdigest()
     for existing_key, raw in list(entries_state.items()):
         record = dict(raw or {})
         if str(record.get("category") or "").strip().lower() != "successful_output":
             continue
         if str(existing_key or "").strip() == candidate_key:
             continue
-        if str(record.get("content") or "").strip() != candidate_content:
-            continue
-        if str(record.get("origin_agent") or "").strip().lower() != candidate_origin:
-            continue
-        if tuple(sorted(_memory_entry_skills(record))) != candidate_skills:
-            continue
-        return str(existing_key).strip()
+        existing_content = str(record.get("content") or "").strip()
+        if existing_content == candidate_content:
+            if str(record.get("origin_agent") or "").strip().lower() != candidate_origin:
+                continue
+            if tuple(sorted(_memory_entry_skills(record))) != candidate_skills:
+                continue
+            return str(existing_key).strip()
+        existing_hash = str(record.get("content_hash") or "").strip()
+        if existing_hash and candidate_hash[:16] == existing_hash[:16]:
+            if str(record.get("origin_agent") or "").strip().lower() == candidate_origin:
+                return str(existing_key).strip()
     return ""
 
 
@@ -5360,7 +5367,7 @@ def _memory_entry_score(
         if lowered_skills and source_skills.intersection(lowered_skills):
             score += 20
         elif lowered_skills and source_skills:
-            score -= 40
+            score -= 15
         if session_key and str(entry.get("source_session_key") or "").strip() == str(session_key or "").strip():
             score += 6
         if _request_wants_protocol_artifact(request) and source_skills.intersection({"protocol-deal-hoi"}):
@@ -5372,9 +5379,12 @@ def _memory_entry_score(
         score += _memory_entry_recency_bonus(entry)
         if str(entry.get("source_quality_status") or "").strip().lower() == "success":
             score += 4
-    score += min(int(entry.get("accepted_count") or 0), 8)
-    score += min(int(entry.get("memory_value_score") or 0), 8)
-    score -= min(max(0, int(entry.get("failure_count") or 0)), 6)
+    if request_tokens and content_lowered:
+        content_token_hits = sum(1 for token in request_tokens if token in content_lowered)
+        score += min(content_token_hits * 3, 12)
+    score += min(int(entry.get("accepted_count") or 0), 10)
+    score += min(int(entry.get("memory_value_score") or 0), 10)
+    score -= min(max(0, int(entry.get("failure_count") or 0)), 8)
     return score
 
 
