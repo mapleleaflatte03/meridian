@@ -636,7 +636,10 @@ def _team_route_fallback(agent_id: str) -> dict[str, Any]:
 
 
 def _loom_manager_defaults() -> dict[str, str]:
-    manager_meta = brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint="")
+    try:
+        manager_meta = brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint="")
+    except brain_router.RoutePolicyError:
+        manager_meta = {}
     provider_profile = str(manager_meta.get("provider_profile") or "manager_primary").strip() or "manager_primary"
     model = str(manager_meta.get("model") or "").strip()
     manifest_path = Path(LOOM_ROOT) / "state" / "onboard.json"
@@ -2041,7 +2044,18 @@ def _run_codex_exec(*, system_prompt: str, user_prompt: str, model: str, timeout
 
 
 def _manager_exec_metadata(model: str = "") -> dict[str, str]:
-    return brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint=model)
+    try:
+        return brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint=model)
+    except brain_router.RoutePolicyError:
+        return {
+            "provider_profile": "manager_primary",
+            "model": model,
+            "transport_kind": "cli_session",
+            "auth_mode": "none",
+            "source": "",
+            "route_id": "",
+            "auth_profile": "",
+        }
 
 
 def _telegram_help_text() -> str:
