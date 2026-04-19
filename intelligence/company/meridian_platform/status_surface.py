@@ -41,7 +41,7 @@ OBSERVABILITY_SNAPSHOT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
 
 
 def _utc_now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _iso_utc(dt_value):

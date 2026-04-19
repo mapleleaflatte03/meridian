@@ -61,7 +61,7 @@ BLOCK_MATRIX = _econ_auth_mod.BLOCK_MATRIX
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _default_org_id():
@@ -227,7 +227,7 @@ def delegate(from_agent_id, to_agent_id, scopes, duration_hours=24, org_id=None)
     org_id = _resolve_org_id(org_id)
     queue = _load_queue(org_id)
     delegation_id = f'dlg_{uuid.uuid4().hex[:8]}'
-    expires = (datetime.datetime.utcnow() +
+    expires = (datetime.datetime.now(datetime.timezone.utc) +
                datetime.timedelta(hours=duration_hours)).strftime('%Y-%m-%dT%H:%M:%SZ')
     queue['delegations'][delegation_id] = {
         'id': delegation_id,

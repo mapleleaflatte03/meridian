@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import re
@@ -191,7 +192,6 @@ def _route_allowed(route: dict[str, Any]) -> tuple[bool, str]:
         return False, str(route.get("disable_reason") or "all routes disabled by billing/auth/cooldown").strip()
     cooldown = str(route.get("cooldown_until") or "").strip()
     if cooldown:
-        import datetime as _dt
         try:
             deadline = _dt.datetime.fromisoformat(cooldown.replace("Z", "+00:00"))
             if _dt.datetime.now(_dt.timezone.utc) < deadline:

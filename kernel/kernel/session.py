@@ -36,7 +36,7 @@ import uuid
 
 
 def _now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _now_ts():

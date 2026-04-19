@@ -45,12 +45,12 @@ def load_ledger(org_id=None):
         return json.load(f)
 
 def save_ledger(data, org_id=None):
-    data['updatedAt'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    data['updatedAt'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     with open(_ledger_path(org_id), 'w') as f:
         json.dump(data, f, indent=2)
 
 def append_transaction(entry, org_id=None):
-    entry['ts'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    entry['ts'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     with open(_tx_path(org_id), 'a') as f:
         f.write(json.dumps(entry) + '\n')
 
@@ -108,7 +108,7 @@ def cmd_record(args):
 
     agent['reputation_units'] = clamp(old_rep + rep_delta)
     agent['authority_units'] = clamp(old_auth + auth_delta)
-    agent['last_scored_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    agent['last_scored_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     agent['last_score_reason'] = args.note or args.event
 
     save_ledger(data, org_id)
@@ -188,7 +188,7 @@ def cmd_epoch(args):
                 agent['authority_units'] = clamp(old - epoch['auth_decay_per_epoch'])
                 print(f"  AUTH decay: {aid} {old} → {agent['authority_units']}")
         epoch['number'] += 1
-        epoch['started_at'] = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        epoch['started_at'] = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         save_ledger(data, org_id)
         append_transaction({
             'type': 'epoch_advance',

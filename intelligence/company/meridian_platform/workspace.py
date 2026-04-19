@@ -699,7 +699,7 @@ _session_authority = SessionAuthority(revocation_file=_session_revocation_file)
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 ROLE_RANK = {

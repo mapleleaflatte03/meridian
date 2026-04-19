@@ -44,7 +44,7 @@ DEFAULT_POLICY = {
 
 
 def _now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _parse_timestamp(timestamp: str) -> datetime.datetime | None:

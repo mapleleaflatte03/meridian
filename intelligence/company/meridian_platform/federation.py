@@ -35,7 +35,7 @@ FEDERATION_HTTP_TIMEOUT_SECONDS = max(
 
 
 def _now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _b64url_encode(data: bytes) -> str:

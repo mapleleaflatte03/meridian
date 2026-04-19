@@ -94,7 +94,7 @@ AUTO_LIFT_RULES = [
 ]
 
 def now_ts():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 def load_ledger(org_id=None):
     path = _ledger_path(org_id)

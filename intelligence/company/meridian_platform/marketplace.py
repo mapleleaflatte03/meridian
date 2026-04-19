@@ -36,7 +36,7 @@ _USD_QUANT = Decimal('0.0001')
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _marketplace_path(org_id=None):

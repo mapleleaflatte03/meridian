@@ -83,7 +83,7 @@ MAX_TTL_SECONDS = 24 * 3600
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _parse_ts(value):

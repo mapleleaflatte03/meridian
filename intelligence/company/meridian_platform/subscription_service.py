@@ -144,11 +144,11 @@ BRIEF_PREVIEW_LIMIT = 280
 
 
 def now_ts():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def now_dt():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _load_base_wallet_address():
