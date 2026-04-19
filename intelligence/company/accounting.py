@@ -41,7 +41,7 @@ from capsule import ensure_accounting_aliases, owner_ledger_path as capsule_owne
 import accounting_store
 
 def now_ts():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 def load_json(path, default=None):
     if os.path.exists(path):
