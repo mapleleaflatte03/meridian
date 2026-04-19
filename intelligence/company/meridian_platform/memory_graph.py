@@ -44,7 +44,8 @@ def _parse_ts(value):
     if not raw:
         return None
     try:
-        return datetime.datetime.strptime(raw, '%Y-%m-%dT%H:%M:%SZ')
+        return datetime.datetime.strptime(raw, '%Y-%m-%dT%H:%M:%SZ').replace(
+            tzinfo=datetime.timezone.utc)
     except ValueError:
         return None
 

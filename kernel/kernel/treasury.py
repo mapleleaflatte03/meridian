@@ -128,7 +128,8 @@ def _now():
 
 
 def _parse_ts(value):
-    return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(
+        tzinfo=datetime.timezone.utc)
 
 
 def _budget_reservations_path(org_id=None):

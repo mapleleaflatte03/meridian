@@ -287,7 +287,8 @@ class FederationEnvelopeClaims:
     @property
     def is_expired(self):
         try:
-            expires = datetime.datetime.strptime(self.expires_at, '%Y-%m-%dT%H:%M:%SZ')
+            expires = datetime.datetime.strptime(self.expires_at, '%Y-%m-%dT%H:%M:%SZ').replace(
+                tzinfo=datetime.timezone.utc)
         except (ValueError, TypeError):
             return True
         return _now() >= expires
