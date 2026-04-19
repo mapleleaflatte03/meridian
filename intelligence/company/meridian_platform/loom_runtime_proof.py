@@ -51,7 +51,7 @@ RECURSIVE_FALLBACK_TAG = b"POGE_SINGLE_FALLBACK_v1\x00"
 
 
 def _now() -> str:
-    return _dt.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return _dt.datetime.now(_dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _sha256(*parts: bytes) -> bytes:

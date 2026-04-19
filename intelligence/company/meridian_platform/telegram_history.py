@@ -43,7 +43,7 @@ class ImportedMessage:
 
 
 def _now() -> str:
-    return dt.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _session_path(session_key: str, *, loom_root: str | Path | None = None) -> Path:
