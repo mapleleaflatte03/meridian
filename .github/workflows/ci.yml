@@ -123,5 +123,9 @@ jobs:
 
       # Outcome-based UI anatomy checks. No longer enforces legacy homepage
       # section IDs; instead protects structural truth, semantic truth, and focus.
+      # API status check is skipped in CI because no gateway server runs in this
+      # job; the onboarding-ready-lane validates the full live stack separately.
       - name: UI anatomy contract gate
         run: ./scripts/acceptance_ui_anatomy_lane.sh
+        env:
+          MERIDIAN_ALLOW_API_SKIP: '1'

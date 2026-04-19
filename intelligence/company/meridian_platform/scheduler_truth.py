@@ -37,7 +37,7 @@ DELIVERY_DIR = os.path.join(preferred_loom_root(), 'state', 'channels', 'deliver
 def _fmt_ms(ms):
     if not ms:
         return ''
-    return dt.datetime.utcfromtimestamp(ms / 1000).strftime('%Y-%m-%dT%H:%M:%SZ')
+    return dt.datetime.fromtimestamp(ms / 1000, tz=dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def load_jobs():
