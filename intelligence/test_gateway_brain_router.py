@@ -23,9 +23,17 @@ if str(WORKSPACE) not in sys.path:
     sys.path.insert(0, str(WORKSPACE))
 
 
+class _SafeStub(types.ModuleType):
+    """Module stub that returns safe no-ops for any missing attribute."""
+    def __getattr__(self, name):
+        if name.startswith("__") and name.endswith("__"):
+            raise AttributeError(name)
+        return lambda *_a, **_kw: {}
+
+
 def _install_mcp_server_stub() -> None:
     if "company.mcp_server" not in sys.modules:
-        stub = types.ModuleType("company.mcp_server")
+        stub = _SafeStub("company.mcp_server")
 
         def _unsupported(*_args, **_kwargs):
             raise RuntimeError("company.mcp_server stub invoked unexpectedly")
@@ -38,19 +46,20 @@ def _install_mcp_server_stub() -> None:
         sys.modules["company.mcp_server"] = stub
 
     if "accounting" not in sys.modules:
-        accounting = types.ModuleType("accounting")
+        accounting = _SafeStub("accounting")
         accounting.append_tx = lambda *_args, **_kwargs: None
         accounting.load_ledger = lambda *_args, **_kwargs: {"treasury": {"cash_usd": 0.0}}
         accounting.save_ledger = lambda *_args, **_kwargs: None
         sys.modules["accounting"] = accounting
 
     if "audit" not in sys.modules:
-        audit = types.ModuleType("audit")
+        audit = _SafeStub("audit")
         audit.log_event = lambda *_args, **_kwargs: None
+        audit.query_events = lambda *_args, **_kwargs: []
+        audit.stats = lambda *_args, **_kwargs: {}
         sys.modules["audit"] = audit
 
     if "capsule" not in sys.modules:
-        capsule = types.ModuleType("capsule")
         base = Path(tempfile.gettempdir()) / "meridian-intelligence-tests"
         base.mkdir(parents=True, exist_ok=True)
         ledger_path = base / "ledger.json"
@@ -62,19 +71,26 @@ def _install_mcp_server_stub() -> None:
             org_dir.mkdir(parents=True, exist_ok=True)
             return str(org_dir / filename)
 
+        capsule = _SafeStub("capsule")
         capsule.ensure_treasury_aliases = lambda *_args, **_kwargs: {"ledger": str(ledger_path)}
         capsule.ledger_path = lambda *_args, **_kwargs: str(ledger_path)
+        capsule.revenue_path = lambda *_args, **_kwargs: str(base / "revenue.json")
         capsule.capsule_path = _capsule_path
+        capsule.capsule_dir = lambda org_id=None, *_a, **_kw: str(base / str(org_id or "org_test"))
+        capsule.ensure_capsule = lambda org_id=None, *_a, **_kw: str(base / str(org_id or "org_test"))
+        capsule.resolve_org_id = lambda org_id=None, *_a, **_kw: str(org_id or "org_test")
+        capsule.default_org_id = lambda *_a, **_kw: "org_test"
+        capsule._normalize_ledger_payload = lambda payload=None, *_a, **_kw: payload or {"treasury": {"cash_usd": 0.0}}
         sys.modules["capsule"] = capsule
 
     if "court" not in sys.modules:
-        court = types.ModuleType("court")
+        court = _SafeStub("court")
         court.file_violation = lambda *_args, **_kwargs: {}
         court.get_restrictions = lambda *_args, **_kwargs: {}
         sys.modules["court"] = court
 
     if "warrants" not in sys.modules:
-        warrants = types.ModuleType("warrants")
+        warrants = _SafeStub("warrants")
         warrants.issue_warrant = lambda *_args, **_kwargs: {}
         warrants.mark_warrant_executed = lambda *_args, **_kwargs: {}
         warrants.review_warrant = lambda *_args, **_kwargs: {}
@@ -82,13 +98,13 @@ def _install_mcp_server_stub() -> None:
         sys.modules["warrants"] = warrants
 
     if "loom_runtime_client" not in sys.modules:
-        runtime_client = types.ModuleType("loom_runtime_client")
+        runtime_client = _SafeStub("loom_runtime_client")
         runtime_client.estimate_capability_cost_usd = lambda *_args, **_kwargs: 0.0
         runtime_client.format_estimated_cost_usd = lambda *_args, **_kwargs: "$0.00"
         sys.modules["loom_runtime_client"] = runtime_client
 
     if "loom_runtime_discovery" not in sys.modules:
-        runtime_discovery = types.ModuleType("loom_runtime_discovery")
+        runtime_discovery = _SafeStub("loom_runtime_discovery")
         runtime_discovery.preferred_loom_bin = lambda *_args, **_kwargs: "/usr/bin/loom"
         runtime_discovery.preferred_loom_root = lambda *_args, **_kwargs: str(
             Path(tempfile.gettempdir()) / "meridian-intelligence-tests"
@@ -99,13 +115,13 @@ def _install_mcp_server_stub() -> None:
         sys.modules["loom_runtime_discovery"] = runtime_discovery
 
     if "session_history" not in sys.modules:
-        session_history = types.ModuleType("session_history")
+        session_history = _SafeStub("session_history")
         session_history.append_session_event = lambda *_args, **_kwargs: None
         session_history.load_session_events = lambda *_args, **_kwargs: []
         sys.modules["session_history"] = session_history
 
     if "subscription_service" not in sys.modules:
-        subscription_service = types.ModuleType("subscription_service")
+        subscription_service = _SafeStub("subscription_service")
         subscription_service.public_checkout_offer = lambda *_args, **_kwargs: {}
         subscription_service.subscription_summary = lambda *_args, **_kwargs: {}
         sys.modules["subscription_service"] = subscription_service
