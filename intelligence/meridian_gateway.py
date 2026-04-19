@@ -11656,14 +11656,20 @@ class WebAPIAdapter(ChannelAdapter):
                         self._send_json(404, {"status": "error", "output": "not_found"})
                         return
                     suffix = asset_path.suffix.lower()
-                    if suffix == '.png':
-                        content_type = 'image/png'
-                    elif suffix == '.svg':
-                        content_type = 'image/svg+xml; charset=utf-8'
-                    elif suffix in ('.jpg', '.jpeg'):
-                        content_type = 'image/jpeg'
-                    else:
-                        content_type = 'application/octet-stream'
+                    _MIME_MAP = {
+                        '.png': 'image/png',
+                        '.svg': 'image/svg+xml; charset=utf-8',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.css': 'text/css; charset=utf-8',
+                        '.js': 'text/javascript; charset=utf-8',
+                        '.json': 'application/json; charset=utf-8',
+                        '.woff2': 'font/woff2',
+                        '.woff': 'font/woff',
+                        '.ico': 'image/x-icon',
+                        '.webp': 'image/webp',
+                    }
+                    content_type = _MIME_MAP.get(suffix, 'application/octet-stream')
                     body = asset_path.read_bytes()
                     self.send_response(200)
                     self._send_cors_headers()
@@ -11848,7 +11854,7 @@ class WebAPIAdapter(ChannelAdapter):
                     proxied = _workspace_api_get_json(proxied_path)
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
                     return
-                self._send_json(404, {"status": "error", "output": "not_found"})
+                self._send_json(404, {"status": "error", "output": "not_found", "path": request_path})
 
             def do_POST(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)

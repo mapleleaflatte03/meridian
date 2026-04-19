@@ -1466,7 +1466,7 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
 
 /* ── Responsive ── */
 @media (max-width: 640px) {
-  :root { --header-h: 158px; }
+  :root { --header-h: 128px; }
   .header-inner {
     padding: 0.6rem 0.8rem 0.65rem;
     gap: 0.56rem;
@@ -2317,7 +2317,7 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   }
 }
 @media (max-width: 480px) {
-  :root { --header-h: 146px; }
+  :root { --header-h: 118px; }
   .site-nav { gap: 0.45rem; }
   .site-nav a { font-size: 0.65rem; letter-spacing: 0.06em; min-height: 34px; }
   .steps-grid {
