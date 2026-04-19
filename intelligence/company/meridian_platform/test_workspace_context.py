@@ -381,6 +381,10 @@ class LiveWorkspaceContextTests(unittest.TestCase):
                     'incident_count': 0,
                     'created_at': '2026-03-22T00:00:00Z',
                     'last_active_at': '2026-03-22T00:00:00Z',
+                    'runtime_binding': {
+                        'runtime_id': 'loom_native',
+                        'runtime_label': 'Meridian Loom Runtime',
+                    },
                 },
             },
         }

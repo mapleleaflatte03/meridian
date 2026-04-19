@@ -7004,7 +7004,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             return self._json(_commitment_snapshot(org_id))
         elif path == '/api/cases':
             return self._json(_case_snapshot(org_id))
-        elif path == '/api/ci-vertical':
+        elif path in ('/api/ci-vertical', '/api/ci'):
             reg = load_registry()
             lead_id, _ = get_sprint_lead(org_id)
             return self._json(_ci_vertical_status(reg, lead_id, org_id))
