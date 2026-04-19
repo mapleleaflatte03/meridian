@@ -230,7 +230,9 @@ def _resolve_kernel_root():
     explicit = (os.environ.get('MERIDIAN_KERNEL_ROOT') or '').strip()
     if explicit:
         return explicit
+    monorepo_kernel = os.path.normpath(os.path.join(WORKSPACE, '..', 'kernel'))
     for candidate in (
+        monorepo_kernel,
         '/opt/meridian-kernel',
         '/home/ubuntu/meridian/kernel',
     ):
@@ -697,7 +699,7 @@ _session_authority = SessionAuthority(revocation_file=_session_revocation_file)
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 ROLE_RANK = {
@@ -1198,7 +1200,10 @@ def _resolve_workspace_context(*, allow_inactive=False):
         )
 
     target_org_id = configured_org_id or (credential_org_id if credential_scope_active else None) or founding_org_id
-    target_org = get_org(target_org_id) if target_org_id else None
+    if target_org_id and target_org_id == founding_org_id and founding_org:
+        target_org = founding_org
+    else:
+        target_org = get_org(target_org_id) if target_org_id else None
     if not target_org_id or not target_org:
         raise RuntimeError(f"Configured institution not found: {target_org_id}")
 
@@ -6999,7 +7004,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             return self._json(_commitment_snapshot(org_id))
         elif path == '/api/cases':
             return self._json(_case_snapshot(org_id))
-        elif path == '/api/ci-vertical':
+        elif path in ('/api/ci-vertical', '/api/ci'):
             reg = load_registry()
             lead_id, _ = get_sprint_lead(org_id)
             return self._json(_ci_vertical_status(reg, lead_id, org_id))

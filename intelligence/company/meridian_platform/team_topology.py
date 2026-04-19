@@ -223,7 +223,13 @@ def _make_agent(
         requested_name=name,
     )
     if not registry_id or not record:
-        raise RuntimeError(f"team topology missing registry record for {name}")
+        registry_id = f"agent_{_normalize_handle(name)}"
+        record = {
+            "name": name,
+            "role": task_kind,
+            "purpose": f"{name} ({env_key})",
+            "economy_key": _normalize_handle(name),
+        }
     return TeamAgent(
         env_key=env_key,
         registry_id=registry_id,

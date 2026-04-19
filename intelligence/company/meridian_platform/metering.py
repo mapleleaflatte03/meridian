@@ -29,7 +29,7 @@ MAX_LOG_SIZE = 10 * 1024 * 1024
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _today():
@@ -105,7 +105,7 @@ def budget_check(org_id, cost_usd):
 
 def summary(org_id, period='month'):
     """Return usage summary for an org."""
-    now = datetime.datetime.utcnow()
+    now = datetime.datetime.now(datetime.timezone.utc)
     if period == 'day':
         since = now.replace(hour=0, minute=0, second=0).strftime('%Y-%m-%dT%H:%M:%SZ')
     elif period == 'week':

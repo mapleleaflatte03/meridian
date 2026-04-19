@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import datetime as _dt
 import json
 import os
 import re
@@ -189,6 +190,17 @@ def _route_allowed(route: dict[str, Any]) -> tuple[bool, str]:
         return False, "route exists but violates treasury policy"
     if route.get("disabled"):
         return False, str(route.get("disable_reason") or "all routes disabled by billing/auth/cooldown").strip()
+    cooldown = str(route.get("cooldown_until") or "").strip()
+    if cooldown:
+        try:
+            deadline = _dt.datetime.fromisoformat(cooldown.replace("Z", "+00:00"))
+            if _dt.datetime.now(_dt.timezone.utc) < deadline:
+                return False, f"route in cooldown until {cooldown}"
+        except (ValueError, TypeError):
+            pass
+    if str(route.get("last_health") or "").strip() == "blocked":
+        reason = str(route.get("last_health_reason") or "route health is blocked").strip()
+        return False, reason
     return True, ""
 
 
@@ -323,19 +335,23 @@ def _update_policy_failure(plan: dict[str, Any], *, detail: str, failover_trace:
     )
 
 
-def _route_chain_from_policy(plan: dict[str, Any]) -> list[dict[str, Any]]:
+def _route_chain_from_policy(plan: dict[str, Any], *, _cached_policy: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     if str(plan.get("policy_source") or "") != "institution_policy":
         return [plan]
     org_id = str(plan.get("policy_org_id") or os.environ.get("MERIDIAN_WORKSPACE_ORG_ID") or os.environ.get("MERIDIAN_ORG_ID") or "").strip()
     if not org_id:
         return [plan]
-    policy = institution_brain_policy.load_policy(org_id)
+    policy = _cached_policy or institution_brain_policy.load_policy(org_id)
     chain: list[dict[str, Any]] = []
+    skipped: list[dict[str, str]] = []
     for route in institution_brain_policy.resolve_route_chain(policy):
-        allowed, _reason = _route_allowed(route)
+        allowed, reason = _route_allowed(route)
         if not allowed:
+            skipped.append({"route_id": str(route.get("route_id") or ""), "reason": reason})
             continue
-        chain.append(_policy_route_to_plan(route, policy, model_hint=str(plan.get("model") or "").strip()))
+        converted = _policy_route_to_plan(route, policy, model_hint=str(plan.get("model") or "").strip())
+        converted["_skipped_routes"] = skipped
+        chain.append(converted)
     return chain or [plan]
 
 
@@ -856,7 +872,12 @@ def execute_manager(
     except RoutePolicyError as exc:
         return exc.as_result()
 
-    route_chain = _route_chain_from_policy(initial_plan)
+    cached_policy = None
+    if str(initial_plan.get("policy_source") or "") == "institution_policy":
+        org_id = str(initial_plan.get("policy_org_id") or env.get("MERIDIAN_WORKSPACE_ORG_ID") or env.get("MERIDIAN_ORG_ID") or "").strip()
+        if org_id:
+            cached_policy = institution_brain_policy.load_policy(org_id)
+    route_chain = _route_chain_from_policy(initial_plan, _cached_policy=cached_policy)
     route_failover_trace: list[dict[str, Any]] = []
     for index, plan in enumerate(route_chain):
         result = _execute_single_plan(
@@ -870,6 +891,13 @@ def execute_manager(
         )
         result["failover_trace"] = list(route_failover_trace) + list(result.get("failover_trace") or [])
         if result.get("ok"):
+            result["route_decision"] = {
+                "selected_index": index,
+                "chain_length": len(route_chain),
+                "skipped_routes": list(plan.get("_skipped_routes") or []),
+                "route_id": str(plan.get("policy_route_id") or ""),
+                "provider_profile": str(plan.get("profile_name") or ""),
+            }
             return result
 
         if str(plan.get("policy_source") or "") == "institution_policy" and index + 1 < len(route_chain):

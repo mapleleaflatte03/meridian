@@ -95,7 +95,7 @@ RAND_CAP = {'rep': 3, 'auth': 4}
 # -- helpers ------------------------------------------------------------------
 
 def now_ts():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 def clamp(v, lo=0, hi=100):
     return max(lo, min(hi, v))
@@ -247,7 +247,7 @@ def detect_outcomes(jobs, report_text, brief_text):
     return outcomes
 
 def _today():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%d')
 
 # -- scoring ------------------------------------------------------------------
 

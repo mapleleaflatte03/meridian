@@ -86,7 +86,7 @@ class SessionValidateTests(unittest.TestCase):
         parts = token.split('.')
         payload_bytes = _b64url_decode(parts[0])
         payload = json.loads(payload_bytes)
-        past = (datetime.datetime.utcnow() - datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        past = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         payload['expires_at'] = past
         expired_payload = json.dumps(payload, separators=(',', ':')).encode()
         # Re-sign with correct key to make a validly-signed but expired token
@@ -139,13 +139,13 @@ class SessionClaimsTests(unittest.TestCase):
         self.assertEqual(d['role'], 'owner')
 
     def test_is_expired_returns_true_for_past(self):
-        past = (datetime.datetime.utcnow() - datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        past = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         claims = SessionClaims('ses_a', 'org_a', 'user_1', 'owner',
                                '2026-01-01T00:00:00Z', past)
         self.assertTrue(claims.is_expired)
 
     def test_is_expired_returns_false_for_future(self):
-        future = (datetime.datetime.utcnow() + datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        future = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)).strftime('%Y-%m-%dT%H:%M:%SZ')
         claims = SessionClaims('ses_a', 'org_a', 'user_1', 'owner',
                                '2026-01-01T00:00:00Z', future)
         self.assertFalse(claims.is_expired)

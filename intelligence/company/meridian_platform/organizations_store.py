@@ -128,7 +128,7 @@ def save_orgs(orgs_file: str, data: dict[str, Any]) -> dict[str, Any]:
     directory = os.path.dirname(orgs_file)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    payload['updatedAt'] = updated_at or datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    payload['updatedAt'] = updated_at or datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     with open(orgs_file, 'w') as f:
         json.dump(payload, f, indent=2)
     with _connect(db_path) as conn:

@@ -21,7 +21,7 @@ AlertHook = Callable[[dict[str, Any]], Any]
 
 
 def _now() -> str:
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _append_jsonl(path: str, record: dict[str, Any]) -> None:

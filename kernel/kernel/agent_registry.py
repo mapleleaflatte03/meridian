@@ -56,7 +56,7 @@ INCIDENT_CRITICAL_THRESHOLD = 5
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _runtime_binding_runtime(runtime_id):

@@ -41,7 +41,7 @@ OBSERVABILITY_SNAPSHOT_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
 
 
 def _utc_now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _iso_utc(dt_value):
@@ -68,7 +68,9 @@ def _parse_iso_timestamp(timestamp):
     except ValueError:
         return None
     if parsed.tzinfo is not None:
-        parsed = parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        parsed = parsed.astimezone(datetime.timezone.utc)
+    else:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
     return parsed
 
 
@@ -157,7 +159,7 @@ def _file_snapshot(path, *, kind, owner, append_only=False, role='canonical'):
         })
         return snapshot
     stat = os.stat(path)
-    modified_at = datetime.datetime.utcfromtimestamp(stat.st_mtime)
+    modified_at = datetime.datetime.fromtimestamp(stat.st_mtime, tz=datetime.timezone.utc)
     snapshot.update({
         'status': 'present',
         'exists': True,

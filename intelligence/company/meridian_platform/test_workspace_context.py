@@ -88,7 +88,7 @@ class LiveWorkspaceContextTests(unittest.TestCase):
             'db': {'status': 'absent', 'reason': 'stubbed for unit tests'},
             'seams': [],
         }
-        self.workspace.status_surface.observability_snapshot = lambda org_id=None: {
+        self.workspace.status_surface.observability_snapshot = lambda org_id=None, **kwargs: {
             'backend': 'file-backed-jsonl',
             'metrics': {
                 'audit': {'total_events': 0},
@@ -381,6 +381,10 @@ class LiveWorkspaceContextTests(unittest.TestCase):
                     'incident_count': 0,
                     'created_at': '2026-03-22T00:00:00Z',
                     'last_active_at': '2026-03-22T00:00:00Z',
+                    'runtime_binding': {
+                        'runtime_id': 'loom_native',
+                        'runtime_label': 'Meridian Loom Runtime',
+                    },
                 },
             },
         }
@@ -775,6 +779,11 @@ class LiveWorkspaceContextTests(unittest.TestCase):
                     'name': 'New Institution',
                     'owner_id': 'user_new_owner',
                     'plan': 'pro',
+                    'brain_route_type': 'cli_session',
+                    'brain_provider_profile': 'default',
+                    'brain_provider_entry_id': 'default',
+                    'brain_auth_profile': 'none',
+                    'brain_cli_bin': '/usr/local/bin/loom',
                 }
 
         with mock.patch.object(self.workspace, 'provision_institution', return_value={
@@ -4445,6 +4454,7 @@ class LiveWorkspaceContextTests(unittest.TestCase):
         }
         self.workspace.mark_warrant_executed = lambda *args, **kwargs: calls.append(kwargs)
         self.workspace.log_event = lambda *args, **kwargs: None
+        self.workspace._blocking_case_for_delivery = lambda **_kw: None
 
         delivery, _snapshot = self.workspace._deliver_federation_envelope(
             'org_founding',

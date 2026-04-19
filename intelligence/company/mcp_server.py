@@ -190,7 +190,7 @@ def _load_research_cache() -> dict[str, dict]:
 def _save_research_cache(entries: dict[str, dict]) -> None:
     os.makedirs(os.path.dirname(RESEARCH_CACHE_FILE), exist_ok=True)
     payload = {
-        'updated_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'updated_at': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'entries': entries,
     }
     tmp_path = f'{RESEARCH_CACHE_FILE}.tmp'
@@ -1196,7 +1196,7 @@ def append_mcp_settlement_event(event: str, tool_name: str, product: str,
                                 details: dict | None = None):
     context = _resolve_mcp_context()
     entry = {
-        'ts': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'ts': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
         'event': event,
         'tool_name': tool_name,
         'product': product,
@@ -1278,7 +1278,7 @@ def record_revenue(product: str, amount_usd: float, payment_ref: str = '', tool_
         context = _resolve_mcp_context()
         # Direct import instead of subprocess
         sys.path.insert(0, ECONOMY_DIR)
-        now = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+        now = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         from revenue import record_external_customer_payment
 
         client_id = payment_ref[:8] if payment_ref else 'mcp-anon'
@@ -1355,7 +1355,7 @@ def record_revenue(product: str, amount_usd: float, payment_ref: str = '', tool_
         try:
             log_path = _payment_events_log_path()
             with open(log_path, 'a') as f:
-                f.write(f"{datetime.datetime.utcnow().isoformat()}Z FAILED ${amount_usd:.2f} product={product} error={e}\n")
+                f.write(f"{datetime.datetime.now(datetime.timezone.utc).isoformat()}Z FAILED ${amount_usd:.2f} product={product} error={e}\n")
         except Exception:
             pass
         return {'status': 'failed', 'error': str(e), 'product': product}

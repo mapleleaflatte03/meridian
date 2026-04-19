@@ -36,7 +36,7 @@ import uuid
 
 
 def _now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _now_ts():
@@ -83,7 +83,8 @@ class SessionClaims:
     def is_expired(self):
         try:
             exp = datetime.datetime.strptime(self.expires_at,
-                                             '%Y-%m-%dT%H:%M:%SZ')
+                                             '%Y-%m-%dT%H:%M:%SZ').replace(
+                                                 tzinfo=datetime.timezone.utc)
             return _now() >= exp
         except (ValueError, TypeError):
             return True

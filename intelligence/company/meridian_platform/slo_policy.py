@@ -44,7 +44,7 @@ DEFAULT_POLICY = {
 
 
 def _now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _parse_timestamp(timestamp: str) -> datetime.datetime | None:
@@ -56,7 +56,7 @@ def _parse_timestamp(timestamp: str) -> datetime.datetime | None:
         return None
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=datetime.timezone.utc)
-    return parsed.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+    return parsed.astimezone(datetime.timezone.utc)
 
 
 def _objective_status_rank(status: str) -> int:

@@ -6,7 +6,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-WORKSPACE = Path('/home/ubuntu/.meridian/workspace')
+_THIS_DIR = Path(__file__).resolve().parent
+_INSTALLED_WORKSPACE = Path('/home/ubuntu/.meridian/workspace')
+WORKSPACE = _THIS_DIR if (_THIS_DIR / 'meridian_gateway.py').exists() else _INSTALLED_WORKSPACE
 if str(WORKSPACE) not in sys.path:
     sys.path.insert(0, str(WORKSPACE))
 

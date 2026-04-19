@@ -41,7 +41,7 @@ _FEDERATED_RECEIPT_TAG = b'FEDERATED_MARKETPLACE_v1\x00'
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _catalog_path(org_id=None):

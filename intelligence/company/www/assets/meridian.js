@@ -726,7 +726,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       return;
     }
     if (!items || !items.length) {
-      target.innerHTML = '<div class="live-chart-empty">No live data available.</div>';
+      target.innerHTML = '<div class="live-chart-empty">No live data available yet. The dashboard refreshes every 15 seconds.</div>';
       return;
     }
     var max = 1;
@@ -936,7 +936,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
           setCaption(shell, 'runtime', staleLabel);
         } else {
           ['runtime', 'queue', 'proof'].forEach(function (name) {
-            setCaption(shell, name, 'Live data unavailable: ' + (error.message || 'unable to load host snapshot.'));
+            setCaption(shell, name, 'Live data unavailable. Check that the Meridian gateway is running, or try refreshing.');
           });
           renderLoadingChart(shell.querySelector('[data-live-chart="runtime"]'));
           renderLoadingChart(shell.querySelector('[data-live-chart="queue"]'));

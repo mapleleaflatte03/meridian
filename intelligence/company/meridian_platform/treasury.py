@@ -87,11 +87,12 @@ _phase_spec.loader.exec_module(_phase_mod)
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _parse_ts(value):
-    return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(
+        tzinfo=datetime.timezone.utc)
 
 
 def _safe_parse_ts(value):
@@ -415,7 +416,7 @@ def _read_only_revenue_summary(org_id=None):
 
 def get_spend_summary(org_id, period_days=30):
     """Aggregate spend from metering.jsonl."""
-    since = (datetime.datetime.utcnow() -
+    since = (datetime.datetime.now(datetime.timezone.utc) -
              datetime.timedelta(days=period_days)).strftime('%Y-%m-%dT%H:%M:%SZ')
     total = get_spend(org_id, since=since)
     return {

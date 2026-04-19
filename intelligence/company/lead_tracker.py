@@ -39,7 +39,7 @@ ACTIVE_STAGES = {"new", "contacted", "replied", "scoping", "pilot_active", "wait
 
 
 def now_ts():
-    return dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _default_state():

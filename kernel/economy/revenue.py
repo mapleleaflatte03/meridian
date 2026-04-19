@@ -80,7 +80,7 @@ ADVANCE_MAP  = {s: ORDER_STATES[i+1] for i, s in enumerate(ORDER_STATES[:-1])}
 NON_CUSTOMER_PRODUCTS = {'owner-capital-contribution'}
 
 def now_ts():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _write_json_atomic(path, data):
@@ -188,7 +188,7 @@ def reclassified_order_ids(transactions=None, org_id=None):
 def recent_customer_payment_metrics(since_days=7, transactions=None, org_id=None):
     transactions = transactions if transactions is not None else load_transactions(org_id)
     cutoff = (
-        datetime.datetime.utcnow() - datetime.timedelta(days=since_days)
+        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=since_days)
     ).strftime('%Y-%m-%dT%H:%M:%SZ')
     reclassified = reclassified_order_ids(transactions, org_id=org_id)
     total = 0

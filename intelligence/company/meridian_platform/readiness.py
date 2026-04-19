@@ -544,7 +544,7 @@ def collect():
         verdict = "READY_FOR_CONTROLLED_DELIVERY_CHECK"
 
     return {
-        "checked_at": dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "checked_at": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "verdict": verdict,
         "runtime": {
             "health_ok": _health_ok(runtime_health),

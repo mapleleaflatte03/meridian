@@ -136,7 +136,10 @@ class WorkspaceSideHustleRouteTest(unittest.TestCase):
                     'settled_by': 'ops_lead',
                     'estimated_cost_usd': 0.15,
                 },
-                meridian_root=os.environ.get('MERIDIAN_ROOT', ''),
+                meridian_root=(
+                    os.environ.get('MERIDIAN_ROOT', '')
+                    or os.path.abspath(os.path.join(workspace.WORKSPACE, '..'))
+                ),
             )
             self.assertEqual(handler.response['data']['team_mode'], 'team')
 

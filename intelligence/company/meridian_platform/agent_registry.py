@@ -50,7 +50,7 @@ INCIDENT_CRITICAL_THRESHOLD = 5
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def runtime_binding_for_org(org_id, context_source='agent_registry', runtime_binding=None):

@@ -68,7 +68,7 @@ def _normalize_compatibility_mode(value):
 
 
 def _now():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _load_json(path, default):

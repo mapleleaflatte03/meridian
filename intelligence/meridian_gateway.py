@@ -636,7 +636,10 @@ def _team_route_fallback(agent_id: str) -> dict[str, Any]:
 
 
 def _loom_manager_defaults() -> dict[str, str]:
-    manager_meta = brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint="")
+    try:
+        manager_meta = brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint="")
+    except brain_router.RoutePolicyError:
+        manager_meta = {}
     provider_profile = str(manager_meta.get("provider_profile") or "manager_primary").strip() or "manager_primary"
     model = str(manager_meta.get("model") or "").strip()
     manifest_path = Path(LOOM_ROOT) / "state" / "onboard.json"
@@ -2041,7 +2044,18 @@ def _run_codex_exec(*, system_prompt: str, user_prompt: str, model: str, timeout
 
 
 def _manager_exec_metadata(model: str = "") -> dict[str, str]:
-    return brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint=model)
+    try:
+        return brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint=model)
+    except brain_router.RoutePolicyError:
+        return {
+            "provider_profile": "manager_primary",
+            "model": model,
+            "transport_kind": "cli_session",
+            "auth_mode": "none",
+            "source": "",
+            "route_id": "",
+            "auth_profile": "",
+        }
 
 
 def _telegram_help_text() -> str:
@@ -4616,6 +4630,8 @@ def _memory_entry_recency_bonus(entry: dict[str, Any]) -> int:
         return 4
     if age_seconds <= 7 * 24 * 3600:
         return 2
+    if age_seconds <= 21 * 24 * 3600:
+        return 1
     return 0
 
 
@@ -4755,19 +4771,24 @@ def _matching_successful_output_memory_key(
     candidate_key = str(candidate.get("key") or "").strip()
     if not candidate_content:
         return ""
+    candidate_hash = hashlib.sha256(candidate_content.encode("utf-8")).hexdigest()
     for existing_key, raw in list(entries_state.items()):
         record = dict(raw or {})
         if str(record.get("category") or "").strip().lower() != "successful_output":
             continue
         if str(existing_key or "").strip() == candidate_key:
             continue
-        if str(record.get("content") or "").strip() != candidate_content:
-            continue
-        if str(record.get("origin_agent") or "").strip().lower() != candidate_origin:
-            continue
-        if tuple(sorted(_memory_entry_skills(record))) != candidate_skills:
-            continue
-        return str(existing_key).strip()
+        existing_content = str(record.get("content") or "").strip()
+        if existing_content == candidate_content:
+            if str(record.get("origin_agent") or "").strip().lower() != candidate_origin:
+                continue
+            if tuple(sorted(_memory_entry_skills(record))) != candidate_skills:
+                continue
+            return str(existing_key).strip()
+        existing_hash = str(record.get("content_hash") or "").strip()
+        if existing_hash and candidate_hash[:16] == existing_hash[:16]:
+            if str(record.get("origin_agent") or "").strip().lower() == candidate_origin:
+                return str(existing_key).strip()
     return ""
 
 
@@ -5346,7 +5367,7 @@ def _memory_entry_score(
         if lowered_skills and source_skills.intersection(lowered_skills):
             score += 20
         elif lowered_skills and source_skills:
-            score -= 40
+            score -= 15
         if session_key and str(entry.get("source_session_key") or "").strip() == str(session_key or "").strip():
             score += 6
         if _request_wants_protocol_artifact(request) and source_skills.intersection({"protocol-deal-hoi"}):
@@ -5358,9 +5379,12 @@ def _memory_entry_score(
         score += _memory_entry_recency_bonus(entry)
         if str(entry.get("source_quality_status") or "").strip().lower() == "success":
             score += 4
-    score += min(int(entry.get("accepted_count") or 0), 8)
-    score += min(int(entry.get("memory_value_score") or 0), 8)
-    score -= min(max(0, int(entry.get("failure_count") or 0)), 6)
+    if request_tokens and content_lowered:
+        content_token_hits = sum(1 for token in request_tokens if token in content_lowered)
+        score += min(content_token_hits * 3, 12)
+    score += min(int(entry.get("accepted_count") or 0), 10)
+    score += min(int(entry.get("memory_value_score") or 0), 10)
+    score -= min(max(0, int(entry.get("failure_count") or 0)), 8)
     return score
 
 
@@ -11632,14 +11656,20 @@ class WebAPIAdapter(ChannelAdapter):
                         self._send_json(404, {"status": "error", "output": "not_found"})
                         return
                     suffix = asset_path.suffix.lower()
-                    if suffix == '.png':
-                        content_type = 'image/png'
-                    elif suffix == '.svg':
-                        content_type = 'image/svg+xml; charset=utf-8'
-                    elif suffix in ('.jpg', '.jpeg'):
-                        content_type = 'image/jpeg'
-                    else:
-                        content_type = 'application/octet-stream'
+                    _MIME_MAP = {
+                        '.png': 'image/png',
+                        '.svg': 'image/svg+xml; charset=utf-8',
+                        '.jpg': 'image/jpeg',
+                        '.jpeg': 'image/jpeg',
+                        '.css': 'text/css; charset=utf-8',
+                        '.js': 'text/javascript; charset=utf-8',
+                        '.json': 'application/json; charset=utf-8',
+                        '.woff2': 'font/woff2',
+                        '.woff': 'font/woff',
+                        '.ico': 'image/x-icon',
+                        '.webp': 'image/webp',
+                    }
+                    content_type = _MIME_MAP.get(suffix, 'application/octet-stream')
                     body = asset_path.read_bytes()
                     self.send_response(200)
                     self._send_cors_headers()
@@ -11824,7 +11854,7 @@ class WebAPIAdapter(ChannelAdapter):
                     proxied = _workspace_api_get_json(proxied_path)
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
                     return
-                self._send_json(404, {"status": "error", "output": "not_found"})
+                self._send_json(404, {"status": "error", "output": "not_found", "path": request_path})
 
             def do_POST(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)

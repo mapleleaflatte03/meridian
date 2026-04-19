@@ -25,11 +25,11 @@ def _session_path(session_key: str, *, loom_root: str | Path | None = None) -> P
 
 
 def _now_iso() -> str:
-    return dt.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _now_ms() -> int:
-    return int(dt.datetime.utcnow().timestamp() * 1000)
+    return int(dt.datetime.now(dt.timezone.utc).timestamp() * 1000)
 
 
 def load_session_events(session_key: str, *, loom_root: str | Path | None = None) -> dict[str, Any]:

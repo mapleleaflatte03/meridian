@@ -49,11 +49,11 @@ LOCK_FILE = '.subscriptions.lock'
 
 
 def now_ts():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def now_dt():
-    return datetime.datetime.utcnow()
+    return datetime.datetime.now(datetime.timezone.utc)
 
 
 def _subscription_paths(org_id=None):
@@ -184,7 +184,8 @@ def _subscription_delivery_eligible(sub, *, org_id=None, now=None):
         return False
     expires_at = (sub.get('expires_at') or '').strip()
     if expires_at:
-        expires = datetime.datetime.strptime(expires_at, '%Y-%m-%dT%H:%M:%SZ')
+        expires = datetime.datetime.strptime(expires_at, '%Y-%m-%dT%H:%M:%SZ').replace(
+            tzinfo=datetime.timezone.utc)
         if expires < now:
             return False
     if sub.get('plan') != 'trial' and (

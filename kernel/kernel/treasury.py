@@ -124,11 +124,12 @@ _RUNTIME_BUDGET_RESERVATIONS_FILE = 'runtime_budget_reservations.json'
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 def _parse_ts(value):
-    return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ')
+    return datetime.datetime.strptime(value, '%Y-%m-%dT%H:%M:%SZ').replace(
+        tzinfo=datetime.timezone.utc)
 
 
 def _budget_reservations_path(org_id=None):
@@ -666,7 +667,7 @@ def get_revenue_summary(org_id=None):
 
 def get_spend_summary(org_id, period_days=30):
     """Aggregate spend from metering.jsonl."""
-    since = (datetime.datetime.utcnow() -
+    since = (datetime.datetime.now(datetime.timezone.utc) -
              datetime.timedelta(days=period_days)).strftime('%Y-%m-%dT%H:%M:%SZ')
     total = get_spend(org_id, since=since)
     return {
@@ -818,7 +819,7 @@ def reserve_runtime_budget(agent_id, estimated_cost_usd, *, org_id=None, action=
     reservation_id = f'bud_{uuid.uuid4().hex[:12]}'
     now = _now()
     expires_at = (
-        datetime.datetime.utcnow() + datetime.timedelta(seconds=max(1, int(lease_seconds or 0)))
+        datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=max(1, int(lease_seconds or 0)))
     ).strftime('%Y-%m-%dT%H:%M:%SZ')
     reservation = {
         'reservation_id': reservation_id,
@@ -879,7 +880,7 @@ def commit_runtime_budget(reservation_id, actual_cost_usd=None, *, org_id=None, 
     effective_org_id = org_id or reservation.get('org_id')
 
     expires_at = _reservation_datetime(reservation.get('expires_at'))
-    if expires_at and datetime.datetime.utcnow() > expires_at:
+    if expires_at and datetime.datetime.now(datetime.timezone.utc) > expires_at:
         raise PermissionError(f'Reservation {reservation_id} expired at {reservation.get("expires_at")}')
 
     estimated = float(reservation.get('estimated_cost_usd', 0.0) or 0.0)
@@ -1008,7 +1009,7 @@ def expire_runtime_budget_reservations(org_id=None, now=None):
     """Expire any reservations whose lease has ended."""
     now_dt = None
     if now is None:
-        now_dt = datetime.datetime.utcnow()
+        now_dt = datetime.datetime.now(datetime.timezone.utc)
     elif isinstance(now, str):
         now_dt = _parse_ts(now)
     else:

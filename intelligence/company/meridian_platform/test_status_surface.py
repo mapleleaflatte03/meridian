@@ -106,7 +106,7 @@ class StatusSurfaceTests(unittest.TestCase):
 
     def test_observability_snapshot_summarizes_file_backed_metrics(self):
         with tempfile.TemporaryDirectory() as tmp:
-            now = datetime.datetime.utcnow().replace(microsecond=0)
+            now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
             audit_ts = (now - datetime.timedelta(minutes=5)).strftime('%Y-%m-%dT%H:%M:%SZ')
             metering_ts = (now - datetime.timedelta(minutes=4)).strftime('%Y-%m-%dT%H:%M:%SZ')
             orgs_path = os.path.join(tmp, 'organizations.json')
