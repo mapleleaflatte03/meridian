@@ -275,12 +275,41 @@ _PROTOCOL_DEFAULTS = {
 }
 
 
+_CACHED_DEFAULT_ORG_ID = None
+_CACHED_ORGS_MTIME = None
+
 def _default_org_id():
+    global _CACHED_DEFAULT_ORG_ID, _CACHED_ORGS_MTIME
     try:
         from organizations import load_orgs
-        for oid, org in load_orgs().get('organizations', {}).items():
+        try:
+            from organizations import ORGS_FILE
+            from organizations_store import db_path_for_file
+            db_path = db_path_for_file(ORGS_FILE)
+
+            current_mtime = None
+            if os.path.exists(db_path):
+                current_mtime = os.path.getmtime(db_path)
+            elif os.path.exists(ORGS_FILE):
+                current_mtime = os.path.getmtime(ORGS_FILE)
+
+            if current_mtime == _CACHED_ORGS_MTIME and _CACHED_ORGS_MTIME is not None:
+                return _CACHED_DEFAULT_ORG_ID
+
+            _CACHED_ORGS_MTIME = current_mtime
+            _CACHED_DEFAULT_ORG_ID = None
+        except Exception:
+            # If cache checking fails, reset cache and proceed to load normally
+            _CACHED_ORGS_MTIME = None
+            _CACHED_DEFAULT_ORG_ID = None
+
+        orgs = load_orgs().get('organizations', {})
+        for oid, org in orgs.items():
             if org.get('slug') == 'meridian':
-                return oid
+                _CACHED_DEFAULT_ORG_ID = oid
+                break
+
+        return _CACHED_DEFAULT_ORG_ID
     except Exception:
         pass
     return None
@@ -1903,11 +1932,7 @@ def main():
         org_id = args.org_id
         if not org_id:
             try:
-                from organizations import load_orgs
-                for oid, org in load_orgs().get('organizations', {}).items():
-                    if org.get('slug') == 'meridian':
-                        org_id = oid
-                        break
+                org_id = _default_org_id()
             except Exception:
                 pass
         if org_id:
