@@ -72,6 +72,25 @@ class TreasuryCapsuleTests(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.capsule_dir, ignore_errors=True)
 
+    def test_get_balance(self):
+        with mock.patch.object(treasury, 'load_ledger') as mock_load_ledger:
+            mock_load_ledger.return_value = {
+                'treasury': {
+                    'cash_usd': 123.45
+                }
+            }
+            balance = treasury.get_balance(self.org_id)
+            mock_load_ledger.assert_called_once_with(self.org_id)
+            self.assertEqual(balance, 123.45)
+
+    def test_get_balance_missing_key(self):
+        with mock.patch.object(treasury, 'load_ledger') as mock_load_ledger:
+            mock_load_ledger.return_value = {
+                'treasury': {}
+            }
+            with self.assertRaises(KeyError):
+                treasury.get_balance(self.org_id)
+
     def test_contribute_owner_capital_writes_only_to_capsule(self):
         result = treasury.contribute_owner_capital(
             7.5,
