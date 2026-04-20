@@ -199,6 +199,58 @@ class AccountingServiceTests(unittest.TestCase):
         self.assertAlmostEqual(ledger['treasury']['owner_capital_contributed_usd'], 3.0, places=2)
         self.assertAlmostEqual(ledger['treasury']['owner_draws_usd'], 2.5, places=2)
 
+    def test_contribute_capital(self):
+        org_id = 'org_contribute'
+        self._write_ledger(org_id, {
+            'treasury': {
+                'cash_usd': 5.0,
+                'reserve_floor_usd': 10.0,
+                'owner_capital_contributed_usd': 0.0,
+            }
+        })
+
+        # We start with default empty owner ledger.
+
+        result = self.service.contribute_capital(15.0, note='initial capital', by='owner_user', org_id=org_id)
+
+        self.assertEqual(result['amount_usd'], 15.0)
+        self.assertEqual(result['cash_after_usd'], 20.0)
+        self.assertEqual(result['reserve_floor_usd'], 10.0)
+        self.assertEqual(result['entry_count'], 1)
+
+        owner = self._read_json(org_id, 'owner_ledger.json')
+        self.assertEqual(owner['capital_contributed_usd'], 15.0)
+        self.assertEqual(len(owner['entries']), 1)
+        self.assertEqual(owner['entries'][0]['type'], 'capital_contribution')
+        self.assertEqual(owner['entries'][0]['amount_usd'], 15.0)
+        self.assertEqual(owner['entries'][0]['note'], 'initial capital')
+        self.assertEqual(owner['entries'][0]['by'], 'owner_user')
+
+        ledger = self._read_json(org_id, 'ledger.json')
+        self.assertEqual(ledger['treasury']['cash_usd'], 20.0)
+        self.assertEqual(ledger['treasury']['owner_capital_contributed_usd'], 15.0)
+        self.assertIn('updatedAt', ledger)
+
+        tx_path = self._capsule_path(org_id, 'transactions.jsonl')
+        with open(tx_path) as f:
+            tx_lines = [json.loads(line) for line in f if line.strip()]
+
+        self.assertEqual(len(tx_lines), 1)
+        self.assertEqual(tx_lines[0]['type'], 'treasury_deposit')
+        self.assertEqual(tx_lines[0]['deposit_type'], 'owner_capital')
+        self.assertEqual(tx_lines[0]['amount_usd'], 15.0)
+        self.assertEqual(tx_lines[0]['cash_after'], 20.0)
+        self.assertEqual(tx_lines[0]['note'], 'initial capital')
+        self.assertEqual(tx_lines[0]['by'], 'owner_user')
+
+    def test_contribute_capital_invalid_amount(self):
+        org_id = 'org_invalid_contribute'
+        with self.assertRaisesRegex(ValueError, 'Capital contribution must be greater than 0'):
+            self.service.contribute_capital(0.0, org_id=org_id)
+
+        with self.assertRaisesRegex(ValueError, 'Capital contribution must be greater than 0'):
+            self.service.contribute_capital(-5.0, org_id=org_id)
+
 
 if __name__ == '__main__':
     unittest.main()
