@@ -328,10 +328,10 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         item.approval_required ? '<span class="operator-chip operator-chip-action">Approval required</span>' : '<span class="operator-chip">Delivery allowed</span>'
       ].join(' ');
       var actionButtons = ['approve', 'stale', 'revoke', 'unresolved'].map(function (decision) {
-        return '<button type="button" class="operator-action" data-queue-id="' + escapeHtml(item.queue_id) + '" data-decision="' + decision + '">' + escapeHtml(decision) + '</button>';
+        return '<button type="button" class="operator-action" data-queue-id="' + escapeHtml(item.queue_id) + '" data-decision="' + decision + '" aria-label="' + escapeHtml(decision) + ' queue item ' + escapeHtml(item.queue_id) + '">' + escapeHtml(decision) + '</button>';
       }).join('');
       return '<tr>' +
-        '<td data-label="Select" class="operator-select-cell"><input type="checkbox" data-queue-select="' + escapeHtml(item.queue_id) + '"></td>' +
+        '<td data-label="Select" class="operator-select-cell"><input type="checkbox" aria-label="Select queue item ' + escapeHtml(item.queue_id) + '" data-queue-select="' + escapeHtml(item.queue_id) + '"></td>' +
         '<td data-label="Question"><strong>' + escapeHtml(item.question_text || item.question_id) + '</strong><div class="operator-meta">' + questionMeta + '</div>' + noteMeta + '</td>' +
         '<td data-label="State"><span class="' + badgeClass(bucket) + '">' + escapeHtml(bucket) + '</span><div class="operator-meta">Gate: ' + escapeHtml(item.approval_gate_status || 'unknown') + '</div></td>' +
         '<td data-label="Evidence"><code>' + escapeHtml(item.evidence_key || 'none') + '</code><div class="operator-meta">Status: ' + escapeHtml(item.evidence_status || 'none') + '</div></td>' +
