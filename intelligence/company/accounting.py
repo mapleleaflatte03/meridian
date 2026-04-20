@@ -34,7 +34,7 @@ if MERIDIAN_PLATFORM_DIR not in sys.path:
     sys.path.insert(0, MERIDIAN_PLATFORM_DIR)
 
 import capsule
-from capsule import ensure_treasury_aliases, ledger_path as capsule_ledger_path
+from capsule import ledger_path as capsule_ledger_path
 from capsule import transactions_path as capsule_transactions_path
 from capsule import ensure_accounting_aliases, owner_ledger_path as capsule_owner_ledger_path
 
