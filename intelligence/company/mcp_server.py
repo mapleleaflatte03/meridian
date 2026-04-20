@@ -98,7 +98,7 @@ except ImportError:
 
 # Constitutional OS primitives
 try:
-    from authority import check_authority as _authority_check, is_kill_switch_engaged as _kill_switch_check
+    from authority import is_kill_switch_engaged as _kill_switch_check
     from treasury import check_budget as _treasury_check_budget
     CONSTITUTIONAL_ENABLED = True
 except ImportError:
