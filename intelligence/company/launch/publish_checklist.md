@@ -1,5 +1,8 @@
 # Publish Checklist
 
+**Prereq**: 8 provider credentials set per [CREDENTIALS.md](./CREDENTIALS.md).
+Copy [`.env.publish.example`](./.env.publish.example) → `.env.publish`, fill, `source` it.
+
 1. Verify live pages:
    - `/demo`
    - `/proofs`

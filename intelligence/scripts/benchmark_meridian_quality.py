@@ -238,39 +238,59 @@ def measure_codebase_complexity() -> dict[str, Any]:
 
 
 def run_test_suite_timing() -> dict[str, Any]:
-    """Metric 7: Test suite execution time."""
+    """Metric 7: Test suite execution time.
+
+    Uses the stdlib unittest runner (same path CI takes) so the metric is
+    recorded on hosts without pytest installed. Falls back to a
+    'skipped' verdict if the runner cannot even start — never silent 0/0.
+    """
+    test_modules = [
+        "test_gateway_brain_router",
+        "test_gateway_team_route",
+        "company.meridian_platform.test_workspace_context",
+        "company.meridian_platform.test_side_hustle_workspace",
+    ]
     start = time.monotonic()
-    result = subprocess.run(
-        [
-            sys.executable, "-m", "pytest",
-            "test_gateway_brain_router.py",
-            "test_gateway_team_route.py",
-            "company/meridian_platform/test_workspace_context.py",
-            "company/meridian_platform/test_side_hustle_workspace.py",
-            "--tb=no", "-q",
-        ],
-        capture_output=True,
-        text=True,
-        cwd=str(INTELLIGENCE_ROOT),
-        timeout=120,
-    )
+    try:
+        result = subprocess.run(
+            [sys.executable, "-m", "unittest", *test_modules],
+            capture_output=True,
+            text=True,
+            cwd=str(INTELLIGENCE_ROOT),
+            timeout=180,
+        )
+    except FileNotFoundError as exc:
+        elapsed = time.monotonic() - start
+        return {
+            "metric": "test_suite_timing",
+            "elapsed_seconds": round(elapsed, 2),
+            "passed": 0,
+            "failed": 0,
+            "warnings": 0,
+            "exit_code": None,
+            "verdict": f"skipped: runner unavailable ({exc})",
+        }
     elapsed = time.monotonic() - start
 
-    passed = 0
-    failed = 0
-    for line in result.stdout.splitlines():
-        match = re.search(r"(\d+) passed", line)
-        if match:
-            passed = int(match.group(1))
-        match = re.search(r"(\d+) failed", line)
-        if match:
-            failed = int(match.group(1))
+    combined = result.stdout + result.stderr
+    ran_match = re.search(r"Ran (\d+) tests", combined)
+    total = int(ran_match.group(1)) if ran_match else 0
+    failures = re.search(r"failures=(\d+)", combined)
+    errors = re.search(r"errors=(\d+)", combined)
+    failed = (int(failures.group(1)) if failures else 0) + (
+        int(errors.group(1)) if errors else 0
+    )
+    passed = max(total - failed, 0)
+    warnings = len(
+        re.findall(r"(?:DeprecationWarning|UserWarning|FutureWarning)", combined)
+    )
 
-    warnings = 0
-    for line in result.stdout.splitlines():
-        match = re.search(r"(\d+) warning", line)
-        if match:
-            warnings = int(match.group(1))
+    if total == 0:
+        verdict = "skipped: runner produced no summary (check module paths)"
+    else:
+        verdict = (
+            f"{passed} passed, {failed} failed, {warnings} warnings in {elapsed:.2f}s"
+        )
 
     return {
         "metric": "test_suite_timing",
@@ -279,7 +299,7 @@ def run_test_suite_timing() -> dict[str, Any]:
         "failed": failed,
         "warnings": warnings,
         "exit_code": result.returncode,
-        "verdict": f"{passed} passed, {failed} failed, {warnings} warnings in {elapsed:.2f}s",
+        "verdict": verdict,
     }
 
 
@@ -308,10 +328,17 @@ def main() -> int:
         print(f"  verdict: {metric.get('verdict', 'N/A')}")
 
     out_dir = INTELLIGENCE_ROOT / "output" / "benchmark"
+    history_dir = out_dir / "history"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "latest.json"
-    out_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    print(f"\nFull report: {out_path}")
+    history_dir.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(report, indent=2) + "\n"
+    latest_path = out_dir / "latest.json"
+    latest_path.write_text(payload, encoding="utf-8")
+    stamp = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+    archive_path = history_dir / f"benchmark_{stamp}.json"
+    archive_path.write_text(payload, encoding="utf-8")
+    print(f"\nFull report: {latest_path}")
+    print(f"Archive:     {archive_path}")
     print("=" * 60)
     return 0
 
