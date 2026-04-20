@@ -58,6 +58,7 @@ def _install_mcp_server_stub() -> None:
             ledger_path.write_text('{"treasury":{"cash_usd":0.0}}\n', encoding="utf-8")
         capsule.ensure_treasury_aliases = lambda *_args, **_kwargs: {"ledger": str(ledger_path)}
         capsule.ledger_path = lambda *_args, **_kwargs: str(ledger_path)
+        capsule.capsule_path = lambda *_args, **_kwargs: str(ledger_path)
         sys.modules["capsule"] = capsule
 
     if "court" not in sys.modules:

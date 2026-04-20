@@ -218,7 +218,7 @@ def _normalize_store(data, org_id):
                 record = dict(item)
                 record['job_id'] = record.get('job_id') or job_id
                 jobs[record['job_id']] = record
-    for job_id, record in list(jobs.items()):
+    for job_id, record in jobs.items():
         record = dict(record or {})
         record['request'] = _execution_request_snapshot(record)
         record['gap'] = _execution_gap_snapshot(record, record['request'])

@@ -129,7 +129,7 @@ def _normalize_store(data, org_id):
                 record = dict(item)
                 record['execution_id'] = record.get('execution_id') or execution_id
                 records[record['execution_id']] = record
-    for execution_id, record in list(records.items()):
+    for execution_id, record in records.items():
         record = dict(record or {})
         record['state'] = _normalize_state(record.get('state') or record.get('execution_state') or '')
         record['execution_state'] = record.get('execution_state') or record['state']
