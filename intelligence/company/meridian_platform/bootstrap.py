@@ -15,7 +15,7 @@ import sys
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, PLATFORM_DIR)
 
-from organizations import load_orgs, save_orgs, create_org, _now, DEFAULT_POLICY_DEFAULTS
+from organizations import load_orgs, save_orgs, create_org, DEFAULT_POLICY_DEFAULTS
 from agent_registry import (
     load_registry,
     save_registry,
