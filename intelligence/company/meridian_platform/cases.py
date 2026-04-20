@@ -9,8 +9,6 @@ that live cross-host dispute execution is enabled.
 from __future__ import annotations
 
 import datetime
-import json
-import os
 import uuid
 
 from capsule import capsule_path
