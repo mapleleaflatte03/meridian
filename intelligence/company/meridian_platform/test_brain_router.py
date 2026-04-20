@@ -5,7 +5,6 @@ import sys
 import unittest
 import urllib.error
 from pathlib import Path
-from unittest import mock
 
 PLATFORM_DIR = Path(__file__).resolve().parent
 if str(PLATFORM_DIR) not in sys.path:
