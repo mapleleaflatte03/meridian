@@ -6691,8 +6691,10 @@ def _build_trust_ops_operator_snapshot(
     selected_questionnaire = dict(questionnaires_map.get(selected_questionnaire_id) or {})
     selected_projection: dict[str, Any] | None = None
     if selected_questionnaire:
+        # Cache target ID to avoid repeated lookups and string operations in list comprehension
+        target_questionnaire_id = str(selected_questionnaire.get("questionnaire_id") or "").strip()
         selected_projection = {
-            "questionnaire_id": str(selected_questionnaire.get("questionnaire_id") or "").strip(),
+            "questionnaire_id": target_questionnaire_id,
             "approval_gate_status": str(selected_questionnaire.get("approval_gate_status") or "").strip(),
             "final_delivery_allowed": bool(selected_questionnaire.get("final_delivery_allowed")),
             "pending_approval_count": int(selected_questionnaire.get("pending_approval_count") or 0),
@@ -6702,8 +6704,7 @@ def _build_trust_ops_operator_snapshot(
             "approval_queue_entries": [
                 dict(entry)
                 for entry in queue_entries
-                if str(entry.get("questionnaire_id") or "").strip()
-                == str(selected_questionnaire.get("questionnaire_id") or "").strip()
+                if str(entry.get("questionnaire_id") or "").strip() == target_questionnaire_id
             ],
         }
         for question in [dict(item) for item in list(selected_questionnaire.get("questions") or []) if isinstance(item, dict)]:
