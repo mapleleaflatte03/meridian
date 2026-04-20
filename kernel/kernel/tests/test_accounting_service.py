@@ -106,6 +106,60 @@ class AccountingServiceTests(unittest.TestCase):
         self.assertEqual(owner_b['expenses_paid_usd'], 1.5)
         self.assertNotEqual(owner_a['entries'], owner_b['entries'])
 
+    def test_accounting_snapshot_structure_and_computations(self):
+        org_id = 'org_snapshot_test'
+
+        self._write_ledger(org_id, {
+            'treasury': {
+                'cash_usd': 50.0,
+                'reserve_floor_usd': 10.0,
+                'owner_capital_contributed_usd': 20.0,
+                'owner_draws_usd': 5.0,
+            }
+        })
+
+        entries = [{'type': f'dummy_{i}'} for i in range(25)]
+        with open(self._capsule_path(org_id, 'owner_ledger.json'), 'w') as f:
+            json.dump({
+                'capital_contributed_usd': 20.0,
+                'expenses_paid_usd': 15.0,
+                'reimbursements_received_usd': 5.0,
+                'draws_taken_usd': 5.0,
+                'entries': entries,
+                'owner': 'Test Owner',
+                '_meta': {'bound_org_id': org_id, 'custom_meta': 'value'},
+            }, f, indent=2)
+
+        snap = self.service.accounting_snapshot(org_id)
+
+        self.assertEqual(snap['bound_org_id'], org_id)
+        self.assertEqual(snap['management_mode'], 'capsule_owned_service')
+        self.assertTrue(snap['mutation_enabled'])
+        self.assertEqual(snap['storage_model'], 'capsule_owned_owner_ledger')
+        self.assertEqual(snap['boundary_name'], 'accounting')
+        self.assertEqual(snap['identity_model'], 'session')
+
+        self.assertTrue(snap['canonical_path'].endswith('owner_ledger.json'))
+        self.assertTrue(snap['treasury_path'].endswith('ledger.json'))
+
+        self.assertIn('/api/accounting/expense', snap['mutation_paths'])
+        self.assertIn('/api/accounting/reimburse', snap['mutation_paths'])
+        self.assertIn('/api/accounting/draw', snap['mutation_paths'])
+
+        self.assertEqual(snap['summary']['capital_contributed_usd'], 20.0)
+        self.assertEqual(snap['summary']['expenses_paid_usd'], 15.0)
+        self.assertEqual(snap['summary']['reimbursements_received_usd'], 5.0)
+        self.assertEqual(snap['summary']['draws_taken_usd'], 5.0)
+        self.assertEqual(snap['summary']['unreimbursed_expenses_usd'], 10.0)
+        self.assertEqual(snap['summary']['entry_count'], 25)
+
+        self.assertEqual(snap['owner'], 'Test Owner')
+        self.assertEqual(snap['meta']['custom_meta'], 'value')
+
+        self.assertEqual(len(snap['entries_tail']), 20)
+        self.assertEqual(snap['entries_tail'][0]['type'], 'dummy_5')
+        self.assertEqual(snap['entries_tail'][-1]['type'], 'dummy_24')
+
     def test_journal_behavior_records_all_flows(self):
         org_id = 'org_journal'
         self._write_ledger(org_id, {
