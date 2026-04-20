@@ -22,7 +22,6 @@ import organizations_store
 import observability_store
 import accounting_store
 import cases_store
-import pilot_intake
 import slo_policy
 import alerting
 
