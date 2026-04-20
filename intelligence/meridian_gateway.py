@@ -1789,7 +1789,7 @@ def _atlas_should_use_internal_analysis(plan: dict[str, Any], request: str) -> b
     lowered = str(request or "").strip().lower()
     skill_names = {
         str(item.get("name") or "").strip().lower()
-        for item in list(plan.get("skills") or [])
+        for item in (plan.get("skills") or [])
         if isinstance(item, dict)
     }
     if reason in {
@@ -2276,7 +2276,7 @@ def _decision_grade_route_score(request: str, skill_bundle: dict[str, Any]) -> d
     token_count = len(tokens)
     short_prompt = token_count <= 6 and len(stripped.split()) <= 10
     actionable = _request_is_actionable(stripped)
-    matched_skills = [dict(item) for item in list(skill_bundle.get("matches") or []) if isinstance(item, dict)]
+    matched_skills = [dict(item) for item in (skill_bundle.get("matches") or []) if isinstance(item, dict)]
     skill_names = [str(item.get("name") or "").strip() for item in matched_skills if str(item.get("name") or "").strip()]
     sorted_scores = sorted((int(item.get("score") or 0) for item in matched_skills), reverse=True)
     top_skill_score = sorted_scores[0] if sorted_scores else 0
@@ -2395,7 +2395,7 @@ def _route_decision_trace_payload(
     load_snapshot = dict(routing_score.get("load_snapshot") or {})
     workers = [
         str(item or "").strip().upper()
-        for item in list(plan.get("workers") or [])
+        for item in (plan.get("workers") or [])
         if str(item or "").strip()
     ]
     return {
@@ -2423,7 +2423,7 @@ def _route_decision_trace_payload(
                 "team_margin_default": int(adaptive_thresholds.get("team_margin_default") or 0),
                 "direct_guard_confidence": int(adaptive_thresholds.get("direct_guard_confidence") or 0),
                 "load_tier": str(adaptive_thresholds.get("load_tier") or "").strip(),
-                "notes": [str(note or "").strip() for note in list(adaptive_thresholds.get("notes") or []) if str(note or "").strip()],
+                "notes": [str(note or "").strip() for note in (adaptive_thresholds.get("notes") or []) if str(note or "").strip()],
             },
             "load_snapshot": {
                 "pending_count": int(load_snapshot.get("pending_count") or 0),
@@ -3254,7 +3254,7 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
 def _qa_gate_allows_manager_fastpath(steps: list[dict[str, Any]]) -> bool:
     qa_steps = [
         step
-        for step in list(steps or [])
+        for step in (steps or [])
         if str(step.get("task_kind") or "").strip() == "qa_gate"
         and _step_effective_status(step) == "ok"
     ]
@@ -3437,7 +3437,7 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
     plan = _team_route_plan(request, session_key)
     skill_names = [
         str(item.get("name") or "").strip()
-        for item in list(plan.get("skills") or [])
+        for item in (plan.get("skills") or [])
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     ]
     routing_score = dict(plan.get("routing_score") or {})
@@ -3533,7 +3533,7 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
         steps.append(step)
         final_job_id = str(step.get("request_id") or final_job_id).strip()
     answer = _manager_synthesis(request, session_key, steps, plan)
-    skill_names = [str(item.get("name") or "").strip() for item in list(plan.get("skills") or []) if str(item.get("name") or "").strip()]
+    skill_names = [str(item.get("name") or "").strip() for item in (plan.get("skills") or []) if str(item.get("name") or "").strip()]
     lowered_skill_names = {item.strip().lower() for item in skill_names}
     repair_warnings: list[str] = []
     answer, repair_warnings = _repair_manager_answer(request, answer, steps, skill_names)
@@ -4337,7 +4337,7 @@ def _record_skill_quality(
         record["last_status"] = normalized_status
         record["last_session_key"] = session_key
         record["last_recorded_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-        record["last_reasons"] = [str(item).strip() for item in list(reasons or []) if str(item).strip()][:8]
+        record["last_reasons"] = [str(item).strip() for item in (reasons or []) if str(item).strip()][:8]
         state[name] = record
     _save_skill_quality_state(state)
 
@@ -4515,7 +4515,7 @@ def _run_loom_memory_command(args: list[str]) -> dict[str, Any]:
 def _memory_entry_skills(entry: dict[str, Any]) -> list[str]:
     return [
         str(item or "").strip().lower()
-        for item in list(entry.get("source_skill_names") or [])
+        for item in (entry.get("source_skill_names") or [])
         if str(item or "").strip()
     ]
 
@@ -4523,7 +4523,7 @@ def _memory_entry_skills(entry: dict[str, Any]) -> list[str]:
 def _memory_support_delivery_fingerprints(record: dict[str, Any]) -> list[str]:
     return [
         str(item or "").strip()
-        for item in list(record.get("support_delivery_fingerprints") or [])
+        for item in (record.get("support_delivery_fingerprints") or [])
         if str(item or "").strip()
     ]
 
@@ -4947,7 +4947,7 @@ def _memory_preferred_origin_task_groups(
     request: str,
     skill_names: list[str] | None = None,
 ) -> list[tuple[set[str], int]]:
-    lowered_skills = {str(item or "").strip().lower() for item in list(skill_names or []) if str(item or "").strip()}
+    lowered_skills = {str(item or "").strip().lower() for item in (skill_names or []) if str(item or "").strip()}
     groups: list[tuple[set[str], int]] = []
     if _request_is_customer_research(request, list(lowered_skills)) or lowered_skills.intersection({"scan-doi-thu", "safe-web-research"}):
         groups.append(({"research"}, 24))
@@ -4967,11 +4967,11 @@ def _memory_preferred_origin_task_groups(
 
 def _memory_delivery_origin_details(delivery_event: dict[str, Any]) -> tuple[str, str]:
     artifact_source = str(delivery_event.get("artifact_source") or "").strip().lower()
-    contributors = [item for item in list(delivery_event.get("contributors") or []) if isinstance(item, dict)]
+    contributors = [item for item in (delivery_event.get("contributors") or []) if isinstance(item, dict)]
     if artifact_source == "salvage_template":
         return str(TEAM_TOPOLOGY.manager.handle or "").strip().lower(), "manage"
     request_text = str(delivery_event.get("request_text") or "").strip()
-    skill_names = [str(item or "").strip().lower() for item in list(delivery_event.get("skills_used") or []) if str(item or "").strip()]
+    skill_names = [str(item or "").strip().lower() for item in (delivery_event.get("skills_used") or []) if str(item or "").strip()]
     if artifact_source == "manager_response":
         for task_kinds, min_fit_score in _memory_preferred_origin_task_groups(request_text, skill_names):
             origin_agent, origin_task_kind = _memory_best_origin_contributor_details(
@@ -4999,7 +4999,7 @@ def _delivery_memory_entry_from_event(delivery_event: Any) -> dict[str, Any] | N
     if not bool(delivery_event.get("final_artifact_usable")):
         return None
     request_text = str(delivery_event.get("request_text") or "").strip()
-    skill_names = [str(item).strip().lower() for item in list(delivery_event.get("skills_used") or []) if str(item).strip()]
+    skill_names = [str(item).strip().lower() for item in (delivery_event.get("skills_used") or []) if str(item).strip()]
     raw_text = str(delivery_event.get("text") or "").strip()
     if not raw_text:
         return None
@@ -5050,7 +5050,7 @@ def _sync_successful_output_memory(state: dict[str, Any]) -> None:
         reverse=True,
     )[: max(8, MEMORY_HISTORY_SCAN_LIMIT)]
     history_state = state.setdefault("history_sync", {})
-    seen_event_ids = [str(item).strip() for item in list(history_state.get("event_ids") or []) if str(item).strip()]
+    seen_event_ids = [str(item).strip() for item in (history_state.get("event_ids") or []) if str(item).strip()]
     seen_set = set(seen_event_ids)
     max_mtime_ns = max((item.stat().st_mtime_ns for item in history_files), default=0)
     if int(history_state.get("source_mtime_ns") or 0) == int(max_mtime_ns) and seen_event_ids:
@@ -5062,7 +5062,7 @@ def _sync_successful_output_memory(state: dict[str, Any]) -> None:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
-        for event in list(payload.get("events") or []):
+        for event in (payload.get("events") or []):
             if not isinstance(event, dict):
                 continue
             event_id = str(event.get("event_id") or "").strip()
@@ -5336,12 +5336,12 @@ def _memory_entry_score(
     session_key: str = "",
 ) -> int:
     request_tokens = set(_request_tokens(request))
-    entry_tokens = {str(item).strip().lower() for item in list(entry.get("tokens") or []) if str(item).strip()}
+    entry_tokens = {str(item).strip().lower() for item in (entry.get("tokens") or []) if str(item).strip()}
     overlap = request_tokens & entry_tokens
     heading = str(entry.get("heading") or "").strip().lower()
     category = str(entry.get("category") or "").strip().lower()
     content_lowered = _ascii_fold(str(entry.get("content") or "")).lower()
-    lowered_skills = {str(item or "").strip().lower() for item in list(skill_names or []) if str(item or "").strip()}
+    lowered_skills = {str(item or "").strip().lower() for item in (skill_names or []) if str(item or "").strip()}
     source_skills = set(_memory_entry_skills(entry))
     score = len(overlap) * 8
     if category == "markdown_section":
@@ -5391,7 +5391,7 @@ def _memory_entry_score(
 def _memory_packet_delivery_entries(memory_packet: dict[str, Any] | None) -> list[dict[str, Any]]:
     packet = dict(memory_packet or {})
     entries: list[dict[str, Any]] = []
-    for item in list(packet.get("entries") or []):
+    for item in (packet.get("entries") or []):
         if not isinstance(item, dict):
             continue
         entries.append(
@@ -5404,7 +5404,7 @@ def _memory_packet_delivery_entries(memory_packet: dict[str, Any] | None) -> lis
                 "origin_agent": str(item.get("origin_agent") or "").strip().lower(),
                 "source_skill_names": [
                     str(skill or "").strip().lower()
-                    for skill in list(item.get("source_skill_names") or [])
+                    for skill in (item.get("source_skill_names") or [])
                     if str(skill or "").strip()
                 ],
                 "source_quality_status": str(item.get("source_quality_status") or "").strip().lower(),
@@ -5417,7 +5417,7 @@ def _memory_entry_packet_eligible(entry: dict[str, Any], skill_names: list[str] 
     category = str(entry.get("category") or "").strip().lower()
     if category != "successful_output":
         return True
-    lowered_skills = {str(item or "").strip().lower() for item in list(skill_names or []) if str(item or "").strip()}
+    lowered_skills = {str(item or "").strip().lower() for item in (skill_names or []) if str(item or "").strip()}
     source_skills = set(_memory_entry_skills(entry))
     if lowered_skills and source_skills and not lowered_skills.intersection(source_skills):
         return False
@@ -5512,12 +5512,12 @@ def _record_memory_recall_outcome(
     memory_packet: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     packet = dict(memory_packet or {})
-    keys = [str(item.get("key") or "").strip() for item in list(packet.get("entries") or []) if str(item.get("key") or "").strip()]
+    keys = [str(item.get("key") or "").strip() for item in (packet.get("entries") or []) if str(item.get("key") or "").strip()]
     state = _load_memory_recall_state()
     session_packets = state.setdefault("session_packets", {})
     remembered = dict(session_packets.get(session_key) or {})
     if not keys:
-        keys = [str(item).strip() for item in list(remembered.get("keys") or []) if str(item).strip()]
+        keys = [str(item).strip() for item in (remembered.get("keys") or []) if str(item).strip()]
     if not keys:
         return None
     normalized_quality = str(quality_status or "partial").strip().lower()
@@ -5649,16 +5649,16 @@ def _trust_evidence_entry_score(
     session_key: str = "",
 ) -> int:
     request_tokens = set(_request_tokens(request))
-    entry_tokens = {str(item).strip().lower() for item in list(entry.get("tokens") or []) if str(item).strip()}
-    topic_tags = {str(item).strip().lower() for item in list(entry.get("topic_tags") or []) if str(item).strip()}
+    entry_tokens = {str(item).strip().lower() for item in (entry.get("tokens") or []) if str(item).strip()}
+    topic_tags = {str(item).strip().lower() for item in (entry.get("topic_tags") or []) if str(item).strip()}
     source_skills = {
         str(item).strip().lower()
-        for item in list(entry.get("source_skill_names") or [])
+        for item in (entry.get("source_skill_names") or [])
         if str(item).strip()
     }
     lowered_skills = {
         str(item).strip().lower()
-        for item in list(skill_names or [])
+        for item in (skill_names or [])
         if str(item).strip()
     }
     kind = str(entry.get("kind") or "").strip().lower()
@@ -5689,7 +5689,7 @@ def _trust_evidence_entry_score(
 def _trust_evidence_packet_delivery_entries(trust_packet: dict[str, Any] | None) -> list[dict[str, Any]]:
     packet = dict(trust_packet or {})
     entries: list[dict[str, Any]] = []
-    for item in list(packet.get("entries") or []):
+    for item in (packet.get("entries") or []):
         if not isinstance(item, dict):
             continue
         entries.append(
@@ -5703,12 +5703,12 @@ def _trust_evidence_packet_delivery_entries(trust_packet: dict[str, Any] | None)
                 "origin_task_kind": str(item.get("origin_task_kind") or "").strip().lower(),
                 "topic_tags": [
                     str(tag).strip().lower()
-                    for tag in list(item.get("topic_tags") or [])
+                    for tag in (item.get("topic_tags") or [])
                     if str(tag).strip()
                 ],
                 "source_skill_names": [
                     str(skill).strip().lower()
-                    for skill in list(item.get("source_skill_names") or [])
+                    for skill in (item.get("source_skill_names") or [])
                     if str(skill).strip()
                 ],
             }
@@ -5771,12 +5771,12 @@ def _build_trust_evidence_packet(
             "origin_task_kind": str(item.get("origin_task_kind") or "").strip().lower(),
             "topic_tags": [
                 str(tag).strip().lower()
-                for tag in list(item.get("topic_tags") or [])
+                for tag in (item.get("topic_tags") or [])
                 if str(tag).strip()
             ],
             "source_skill_names": [
                 str(skill).strip().lower()
-                for skill in list(item.get("source_skill_names") or [])
+                for skill in (item.get("source_skill_names") or [])
                 if str(skill).strip()
             ],
             "content": str(item.get("content") or "").strip(),
@@ -5822,7 +5822,7 @@ def _delivery_trust_evidence_entry_from_event(delivery_event: Any) -> dict[str, 
     request_text = str(delivery_event.get("request_text") or "").strip()
     skill_names = [
         str(item).strip().lower()
-        for item in list(delivery_event.get("skills_used") or [])
+        for item in (delivery_event.get("skills_used") or [])
         if str(item).strip()
     ]
     lowered_skills = set(skill_names)
@@ -5947,12 +5947,12 @@ def _remember_trust_evidence(delivery_event: Any) -> list[dict[str, Any]]:
             "origin_task_kind": str(record.get("origin_task_kind") or "").strip().lower(),
             "topic_tags": [
                 str(tag).strip().lower()
-                for tag in list(record.get("topic_tags") or [])
+                for tag in (record.get("topic_tags") or [])
                 if str(tag).strip()
             ],
             "source_skill_names": [
                 str(skill).strip().lower()
-                for skill in list(record.get("source_skill_names") or [])
+                for skill in (record.get("source_skill_names") or [])
                 if str(skill).strip()
             ],
             "content_updated": bool(changed),
@@ -6161,7 +6161,7 @@ def _review_trust_evidence_entry(
         try:
             extra_details["court_restrictions"] = [
                 str(item).strip().lower()
-                for item in list(court_get_restrictions(origin_agent, org_id=LOOM_ORG_ID) or [])
+                for item in (court_get_restrictions(origin_agent, org_id=LOOM_ORG_ID) or [])
                 if str(item).strip()
             ]
         except Exception:
@@ -6258,7 +6258,7 @@ def _questionnaire_support_snapshot(
     shared_topics = question_topics.intersection(
         {
             str(tag).strip().lower()
-            for tag in list(best.get("topic_tags") or [])
+            for tag in (best.get("topic_tags") or [])
             if str(tag).strip()
         }
     )
@@ -6299,14 +6299,14 @@ def _questionnaire_support_snapshot(
         "best_evidence_origin_agent": str(best.get("origin_agent") or "").strip().lower(),
         "best_evidence_topic_tags": [
             str(tag).strip().lower()
-            for tag in list(best.get("topic_tags") or [])
+            for tag in (best.get("topic_tags") or [])
             if str(tag).strip()
         ],
     }
 
 
 def _rollup_trust_questionnaire(questionnaire: dict[str, Any]) -> dict[str, Any]:
-    questions = [dict(item) for item in list(questionnaire.get("questions") or []) if isinstance(item, dict)]
+    questions = [dict(item) for item in (questionnaire.get("questions") or []) if isinstance(item, dict)]
     critical_questions = [item for item in questions if bool(item.get("critical"))]
     pending_questions = [item for item in questions if bool(item.get("approval_required"))]
     pending_critical = [item for item in pending_questions if bool(item.get("critical"))]
@@ -6339,7 +6339,7 @@ def _rollup_trust_questionnaire(questionnaire: dict[str, Any]) -> dict[str, Any]
 def _sync_trust_approval_queue(state: dict[str, Any], questionnaire: dict[str, Any]) -> list[dict[str, Any]]:
     queue_state = state.setdefault("approval_queue", {})
     queue_entries: list[dict[str, Any]] = []
-    for question in list(questionnaire.get("questions") or []):
+    for question in (questionnaire.get("questions") or []):
         if not isinstance(question, dict):
             continue
         queue_id = str(
@@ -6360,7 +6360,7 @@ def _sync_trust_approval_queue(state: dict[str, Any], questionnaire: dict[str, A
         queue_record["critical"] = bool(question.get("critical"))
         queue_record["topic_tags"] = [
             str(tag).strip().lower()
-            for tag in list(question.get("topic_tags") or [])
+            for tag in (question.get("topic_tags") or [])
             if str(tag).strip()
         ]
         queue_record["evidence_key"] = str(question.get("evidence_key") or "").strip()
@@ -6422,7 +6422,7 @@ def _build_questionnaire_state(
     questionnaire["request_text"] = request_text
     questionnaire["skill_names"] = [
         str(item).strip().lower()
-        for item in list(skill_names or [])
+        for item in (skill_names or [])
         if str(item).strip()
     ]
     questionnaire["trust_evidence_keys"] = _trust_evidence_packet_keys(trust_packet)
@@ -6436,7 +6436,7 @@ def _build_questionnaire_state(
 
 
 def _render_questionnaire_answer_pack(questionnaire: dict[str, Any]) -> str:
-    questions = [dict(item) for item in list(questionnaire.get("questions") or []) if isinstance(item, dict)]
+    questions = [dict(item) for item in (questionnaire.get("questions") or []) if isinstance(item, dict)]
     approved_lines: list[str] = []
     draft_lines: list[str] = []
     open_lines: list[str] = []
@@ -6608,7 +6608,7 @@ def _build_trust_ops_operator_snapshot(
         questionnaire = dict(questionnaires_map.get(qid) or {})
         if normalized_questionnaire_id and qid != normalized_questionnaire_id:
             continue
-        questions = [dict(question) for question in list(questionnaire.get("questions") or []) if isinstance(question, dict)]
+        questions = [dict(question) for question in (questionnaire.get("questions") or []) if isinstance(question, dict)]
         question_id = str(item.get("question_id") or "").strip()
         question = next(
             (question for question in questions if str(question.get("question_id") or "").strip() == question_id),
@@ -6671,7 +6671,7 @@ def _build_trust_ops_operator_snapshot(
                 "pending_approval_count": int(item.get("pending_approval_count") or 0),
                 "critical_count": int(item.get("critical_count") or 0),
                 "source_session_key": str(item.get("source_session_key") or "").strip(),
-                "question_count": len([question for question in list(item.get("questions") or []) if isinstance(question, dict)]),
+                "question_count": len([question for question in (item.get("questions") or []) if isinstance(question, dict)]),
                 "final_delivery_allowed": bool(item.get("final_delivery_allowed")),
             }
             for item in questionnaires_map.values()
@@ -6707,7 +6707,7 @@ def _build_trust_ops_operator_snapshot(
                 if str(entry.get("questionnaire_id") or "").strip() == target_questionnaire_id
             ],
         }
-        for question in [dict(item) for item in list(selected_questionnaire.get("questions") or []) if isinstance(item, dict)]:
+        for question in [dict(item) for item in (selected_questionnaire.get("questions") or []) if isinstance(item, dict)]:
             selected_projection["questions"].append(
                 {
                     "question_id": str(question.get("question_id") or "").strip(),
@@ -6759,7 +6759,7 @@ def _review_trust_approval_queue(
     questionnaire = dict(questionnaires.get(questionnaire_id) or {})
     if not questionnaire:
         return None
-    questions = [dict(item) for item in list(questionnaire.get("questions") or []) if isinstance(item, dict)]
+    questions = [dict(item) for item in (questionnaire.get("questions") or []) if isinstance(item, dict)]
     question_id = str(queue_record.get("question_id") or "").strip()
     evidence_state = _load_trust_evidence_state()
     updated_question: dict[str, Any] | None = None
@@ -6876,7 +6876,7 @@ def _review_trust_approval_queue(
         try:
             extra_details["court_restrictions"] = [
                 str(item).strip().lower()
-                for item in list(court_get_restrictions(origin_agent, org_id=LOOM_ORG_ID) or [])
+                for item in (court_get_restrictions(origin_agent, org_id=LOOM_ORG_ID) or [])
                 if str(item).strip()
             ]
         except Exception:
@@ -6948,7 +6948,7 @@ def _review_trust_approval_queue_bulk(
         return None
     seen: set[str] = set()
     normalized_ids: list[str] = []
-    for raw_queue_id in list(queue_ids or []):
+    for raw_queue_id in (queue_ids or []):
         queue_id = str(raw_queue_id or "").strip()
         if not queue_id or queue_id in seen:
             continue
@@ -7043,7 +7043,7 @@ def _apply_security_questionnaire_workflow(
         "rendered_artifact": _render_questionnaire_answer_pack(questionnaire),
         "approval_queue_entries": [
             dict(item)
-            for item in list(questionnaire.get("approval_queue_entries") or [])
+            for item in (questionnaire.get("approval_queue_entries") or [])
             if isinstance(item, dict)
         ],
         "approval_gate_status": str(questionnaire.get("approval_gate_status") or "").strip(),
@@ -7059,7 +7059,7 @@ def _atlas_memory_research_block(
     entries = [dict(item) for item in list(dict(memory_packet or {}).get("entries") or []) if isinstance(item, dict)]
     if not entries:
         return ""
-    lowered_skills = {str(item or "").strip().lower() for item in list(skill_names or []) if str(item or "").strip()}
+    lowered_skills = {str(item or "").strip().lower() for item in (skill_names or []) if str(item or "").strip()}
     ranked = sorted(
         entries,
         key=lambda item: (
@@ -7282,7 +7282,7 @@ def _eligible_user_session_for_economy(session_key: str, skill_names: list[str] 
         return False
     if not (normalized.startswith("web_api:") or normalized.startswith("telegram:")):
         return False
-    return bool([str(item or "").strip() for item in list(skill_names or []) if str(item or "").strip()])
+    return bool([str(item or "").strip() for item in (skill_names or []) if str(item or "").strip()])
 
 
 def _economy_handle_for_agent_id(agent_id: str) -> str:
@@ -7312,7 +7312,7 @@ def _apply_user_session_delta(agent: dict[str, Any], rep_delta: int, auth_delta:
 
 
 def _artifact_source_from_repairs(repair_warnings: list[str]) -> str:
-    lowered = {str(item or "").strip().lower() for item in list(repair_warnings or [])}
+    lowered = {str(item or "").strip().lower() for item in (repair_warnings or [])}
     if "manager_response_repaired_from_best_worker_artifact" in lowered:
         return "worker_artifact"
     if "manager_response_repaired_from_worker_artifact" in lowered:
@@ -7344,7 +7344,7 @@ def _build_delivery_fingerprint(
         "delivery": _normalize_delivery_fingerprint_text(delivery_text),
         "skills": sorted(
             str(item or "").strip().lower()
-            for item in list(skill_names or [])
+            for item in (skill_names or [])
             if str(item or "").strip()
         ),
         "artifact_source": str(artifact_source or "").strip().lower(),
@@ -7368,7 +7368,7 @@ def _delivery_contributors_snapshot(
             else str(final_artifact or "").strip()
         )
         normalized_final_artifact = _normalize_delivery_fingerprint_text(coerced_final_artifact)
-    for step in list(steps or []):
+    for step in (steps or []):
         agent_id = str(step.get("agent_id") or "").strip()
         warnings = _step_warning_texts(step)[:6]
         raw_result = _step_result_text(step)
@@ -7447,7 +7447,7 @@ def _contributor_support_level(contributor: dict[str, Any]) -> str:
 
 
 def _contributors_show_writer_issue(contributors: list[dict[str, Any]]) -> bool:
-    for contributor in list(contributors or []):
+    for contributor in (contributors or []):
         if str(contributor.get("task_kind") or "").strip().lower() != "write":
             continue
         if not bool(contributor.get("usable_artifact")):
@@ -7462,7 +7462,7 @@ def _contributors_show_writer_issue(contributors: list[dict[str, Any]]) -> bool:
 
 
 def _delivery_warning_texts(event: dict[str, Any]) -> list[str]:
-    return [str(item).strip() for item in list(event.get("warnings") or []) if str(item).strip()]
+    return [str(item).strip() for item in (event.get("warnings") or []) if str(item).strip()]
 
 
 def _delivery_has_only_recoverable_warnings(event: dict[str, Any]) -> bool:
@@ -7505,7 +7505,7 @@ def _remember_user_session_agent_outcome(
 
 def _recent_bad_outcome_count(outcomes: list[dict[str, Any]]) -> int:
     count = 0
-    for item in list(outcomes or []):
+    for item in (outcomes or []):
         if not isinstance(item, dict):
             continue
         if not bool(item.get("sanction_relevant")):
@@ -7580,7 +7580,7 @@ def _build_user_session_court_candidates(
         matches_shape = bool(contributor.get("artifact_matches_shape"))
         matches_final_artifact = bool(contributor.get("matches_final_artifact"))
         hard_blocker_count = int(contributor.get("hard_blocker_count") or 0)
-        warnings = [str(item).strip() for item in list(contributor.get("warnings") or []) if str(item).strip()]
+        warnings = [str(item).strip() for item in (contributor.get("warnings") or []) if str(item).strip()]
         restrictions = court_get_restrictions(agent_key, org_id=LOOM_ORG_ID) or []
 
         candidate: dict[str, Any] | None = None
@@ -7733,7 +7733,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
         return None
 
     payload = load_session_events(session_key, loom_root=LOOM_ROOT) or {}
-    events = [event for event in list(payload.get("events") or []) if isinstance(event, dict)]
+    events = [event for event in (payload.get("events") or []) if isinstance(event, dict)]
     delivery_event = next(
         (event for event in reversed(events) if str(event.get("event_id") or "") == delivery_event_id),
         None,
@@ -7741,7 +7741,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
     if not delivery_event:
         return None
 
-    skill_names = [str(item).strip() for item in list(delivery_event.get("skills_used") or []) if str(item).strip()]
+    skill_names = [str(item).strip() for item in (delivery_event.get("skills_used") or []) if str(item).strip()]
     lowered_skill_names = {item.lower() for item in skill_names}
     if not _eligible_user_session_for_economy(session_key, skill_names):
         return None
@@ -7771,7 +7771,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
     quality_status = str(delivery_event.get("status") or "partial").strip().lower()
     if quality_status not in {"success", "partial", "failure"}:
         quality_status = "partial"
-    contributors = [item for item in list(delivery_event.get("contributors") or []) if isinstance(item, dict)]
+    contributors = [item for item in (delivery_event.get("contributors") or []) if isinstance(item, dict)]
     research_skill_active = (
         "scan-doi-thu" in lowered_skill_names
         or "safe-web-research" in lowered_skill_names
@@ -7906,7 +7906,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
         elif task_kind == "verify" and qa_pass and quality_status == "success":
             add_delta(agent_key, 1, 1, "verification_supported_delivery")
 
-    memory_entries = [item for item in list(delivery_event.get("memory_entries") or []) if isinstance(item, dict)]
+    memory_entries = [item for item in (delivery_event.get("memory_entries") or []) if isinstance(item, dict)]
     for memory_entry in memory_entries:
         origin_agent = str(memory_entry.get("origin_agent") or "").strip().lower()
         if not origin_agent or origin_agent not in agents:
@@ -7919,7 +7919,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
         source_quality_status = str(memory_entry.get("source_quality_status") or "").strip().lower()
         source_skill_names = {
             str(item or "").strip().lower()
-            for item in list(memory_entry.get("source_skill_names") or [])
+            for item in (memory_entry.get("source_skill_names") or [])
             if str(item or "").strip()
         }
         same_skill = bool(lowered_skill_names.intersection(source_skill_names))
@@ -7965,7 +7965,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
                 auth_penalty = max(auth_penalty, -1)
             add_delta(origin_agent, rep_penalty, auth_penalty, "memory_recall_failed_delivery")
 
-    evidence_entries = [item for item in list(delivery_event.get("evidence_entries") or []) if isinstance(item, dict)]
+    evidence_entries = [item for item in (delivery_event.get("evidence_entries") or []) if isinstance(item, dict)]
     for evidence_entry in evidence_entries:
         origin_agent = str(evidence_entry.get("origin_agent") or "").strip().lower()
         if not origin_agent or origin_agent not in agents:
@@ -7974,7 +7974,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
         approval_status = str(evidence_entry.get("approval_status") or "").strip().lower()
         source_skill_names = {
             str(item or "").strip().lower()
-            for item in list(evidence_entry.get("source_skill_names") or [])
+            for item in (evidence_entry.get("source_skill_names") or [])
             if str(item or "").strip()
         }
         same_skill = bool(lowered_skill_names.intersection(source_skill_names))
@@ -8001,7 +8001,7 @@ def _score_user_session_delivery(session_key: str, delivery_event_id: str) -> di
         None,
     )
     if isinstance(evidence_update_event, dict):
-        for evidence_entry in list(evidence_update_event.get("evidence_entries") or []):
+        for evidence_entry in (evidence_update_event.get("evidence_entries") or []):
             if not isinstance(evidence_entry, dict):
                 continue
             origin_agent = str(evidence_entry.get("origin_agent") or "").strip().lower()
@@ -8152,7 +8152,7 @@ def _step_result_text(step: dict[str, Any]) -> str:
 
 
 def _step_warning_texts(step: dict[str, Any]) -> list[str]:
-    return [str(item).strip() for item in list(step.get("warnings") or []) if str(item).strip()]
+    return [str(item).strip() for item in (step.get("warnings") or []) if str(item).strip()]
 
 
 def _step_effective_status(step: dict[str, Any]) -> str:
@@ -8382,7 +8382,7 @@ def _best_usable_step_artifact(
 ) -> str:
     best_artifact = ""
     best_score = -1000
-    for step in list(steps or []):
+    for step in (steps or []):
         raw_text = _step_result_text(step)
         artifact = _coerce_request_specific_artifact(raw_text, request)
         if not artifact:
@@ -9834,7 +9834,7 @@ def _request_is_security_questionnaire(request: str, skills_used: list[str] | No
     lowered = str(request or "").strip().lower()
     if not lowered:
         return False
-    lowered_skills = {str(item or "").strip().lower() for item in list(skills_used or [])}
+    lowered_skills = {str(item or "").strip().lower() for item in (skills_used or [])}
     if "security-questionnaire" in lowered_skills:
         return True
     if _request_wants_protocol_artifact(request):
@@ -9859,7 +9859,7 @@ def _request_is_ai_stack_watch(request: str, skills_used: list[str] | None = Non
     lowered = str(request or "").strip().lower()
     if not lowered:
         return False
-    lowered_skills = {str(item or "").strip().lower() for item in list(skills_used or [])}
+    lowered_skills = {str(item or "").strip().lower() for item in (skills_used or [])}
     if "ai-stack-watch" in lowered_skills:
         return True
     if _request_wants_protocol_artifact(request):
@@ -9889,7 +9889,7 @@ def _request_is_ai_stack_watch(request: str, skills_used: list[str] | None = Non
 def _request_is_customer_research(request: str, skills_used: list[str] | None = None) -> bool:
     lowered = str(request or "").strip().lower()
     tokens = set(_request_tokens(request))
-    lowered_skills = {str(item or "").strip().lower() for item in list(skills_used or [])}
+    lowered_skills = {str(item or "").strip().lower() for item in (skills_used or [])}
     if _request_wants_protocol_artifact(request):
         return False
     if _request_is_security_questionnaire(request, list(lowered_skills)) or _request_is_ai_stack_watch(request, list(lowered_skills)):
