@@ -7,7 +7,6 @@ import argparse
 import datetime as dt
 import hashlib
 import json
-import re
 from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
