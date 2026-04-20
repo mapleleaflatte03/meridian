@@ -164,7 +164,7 @@ import os
 import sys
 import threading
 import time
-from http.server import HTTPServer, ThreadingHTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from urllib import error as urllib_error, request as urllib_request
 from urllib.parse import urlparse, parse_qs
 
