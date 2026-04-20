@@ -63,7 +63,7 @@ _update_reserve_floor = _accounting_mod.update_reserve_floor
 
 # Import platform metering
 sys.path.insert(0, PLATFORM_DIR)
-from metering import get_spend, summary as metering_summary
+from metering import get_spend
 import commitments
 from agent_registry import (
     check_budget as _agent_check_budget,
