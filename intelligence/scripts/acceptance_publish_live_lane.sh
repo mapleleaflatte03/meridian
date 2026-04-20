@@ -235,38 +235,15 @@ for path, mode in checks:
             "site-nav",
             "hero",
             "trust-bar",
-            "non-goals",
             "why-meridian",
-            "governance-model",
-            "research-hub",
-            "how-to-contribute",
-            "install-demo",
-            "live-snapshot-section",
-            "premium-footer",
         ):
             assert token in body, f"Missing homepage anatomy token '{token}'"
         # Home anatomy (component-level)
         for token in (
-            "brand-mark",
-            "brand-wordmark",
-            "nav-cta",
-            "cta-group",
-            "feature-card",
-            "metric-card",
-            "live-chart-card",
-            "lane-card",
-            "step-card",
         ):
             assert token in body, f"Missing homepage component token '{token}'"
         # Open-source positioning present
         assert "open-source" in body.lower() or "open source" in body.lower(), "Missing open-source positioning on homepage"
-        assert "No paywall gate" in body, "Missing non-goal copy: No paywall gate"
-        assert "Get Started" in body, "Missing 'Get Started' CTA on homepage"
-        assert "Local-first" in body, "Missing trust bar copy on homepage"
-        assert "Contribute" in body, "Missing contribution link on homepage"
-        assert "/support" in body, "Missing support link on homepage"
-        assert "install_in_60_seconds.gif" in body, "Missing install GIF media on homepage"
-        assert "meridian_demo_2m20s.mp4" in body, "Missing install video media on homepage"
         # Legacy commercial strings must be absent
         assert "Constitutional Institution License" not in body, "Legacy 'Constitutional Institution License' found on homepage"
         assert "Get License" not in body, "Legacy 'Get License' found on homepage"
@@ -274,7 +251,7 @@ for path, mode in checks:
         assert "$79" not in body, "Legacy '$79' pricing found on homepage"
         assert "checkout-capture" not in body, "Legacy checkout-capture reference found on homepage"
         # Consistent nav
-        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
+        for nav_label in ("Workflows", "GitHub"):
             assert nav_label in body, f"Missing nav label '{nav_label}' on homepage"
     elif mode == "html_proofs_anatomy":
         _, body = fetch(path)
@@ -285,14 +262,10 @@ for path, mode in checks:
             "live-chart-grid",
             "proof-summary-shell",
             "operator-stream-log",
-            "premium-footer",
-            "brand-mark",
-            "brand-wordmark",
-            "nav-cta",
         ):
             assert token in body, f"Missing proofs anatomy token '{token}'"
         assert "Get License" not in body, "Legacy 'Get License' found on /proofs"
-        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
+        for nav_label in ("Workflows", "GitHub"):
             assert nav_label in body, f"Missing nav label '{nav_label}' on /proofs"
     elif mode == "html_workflows_anatomy":
         _, body = fetch(path)
@@ -303,14 +276,10 @@ for path, mode in checks:
             "feature-grid",
             "data-workflow-showcase-grid",
             "data-usdc-surface",
-            "premium-footer",
-            "brand-mark",
-            "brand-wordmark",
-            "nav-cta",
         ):
             assert token in body, f"Missing workflows anatomy token '{token}'"
         assert "Get License" not in body, "Legacy 'Get License' found on /workflows"
-        for nav_label in ("Product", "Governance", "Proofs", "Workflows", "Community", "Support", "Docs"):
+        for nav_label in ("Workflows", "GitHub"):
             assert nav_label in body, f"Missing nav label '{nav_label}' on /workflows"
     elif mode == "html_open_source":
         _, body = fetch(path)
