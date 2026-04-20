@@ -57,3 +57,10 @@ loom/state/
 # Local git worktrees
 .worktrees/
 worktrees/
+
+# Publish-live-real credentials (template committed as .env.publish.example)
+intelligence/company/launch/.env.publish
+intelligence/company/launch/.env.publish.local
+
+# Benchmark history archive (kept locally; only latest.json is tracked if committed)
+intelligence/output/benchmark/history/
