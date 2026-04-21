@@ -45,12 +45,15 @@ Files **created or mutated by running the system** — marketplace bids, court v
 
 Primary locations:
 - `kernel/economy/` — economy runtime state (marketplace, courts, wallets, payments, etc.)
+- `kernel/agent_registry.json` and bundled runtime registry paths such as `kernel/kernel/agent_registry.json`
 - `loom/agents/` — agent runtime configs and state
 - `loom/context/` — runtime context snapshots
 - `loom/providers/` — provider connection state
 - `loom/state/` — general loom runtime state
 - `runtime/` — top-level runtime artifacts
+- `state/` — local caches, replay traces, and temporary proof artifacts
 - `output/` — generated output artifacts
+- `artifacts/**/live_*.png` — generated screenshots and proof captures
 
 Full list of gitignored runtime files in `kernel/economy/`:
 
@@ -87,6 +90,12 @@ owner_ledger.json
 Data imported when running with `MERIDIAN_INSTALL_MODE=demo` or `MERIDIAN_INSTALL_MODE=maintainer`. This data is **opt-in only** and is never part of the default user-mode install.
 
 These files may be present locally after running a seeded install. They must not be committed unless they are static fixture files checked into a dedicated `seed/` or `fixtures/` directory that is clearly labeled as demo data.
+
+---
+
+### 4A. User-Local Config (Out Of Repo)
+
+Files such as `~/.meridian/.env` and `~/.meridian/.env.gateway` are user-local configuration, not repository state. They are allowed inputs to the product runtime but must never be copied into tracked repo files or PRs.
 
 ---
 
@@ -140,6 +149,7 @@ No new code or state should reference these repositories.
 | `loom/templates/` | Source — static templates |
 | `loom/examples/` | Source — example configs |
 | `runtime/` | Runtime state — gitignored |
+| `state/` | Runtime state — gitignored |
 | `output/` | Runtime state — gitignored |
 | `docs/**` | Source — documentation |
 | `scripts/**` | Source — tooling scripts |

@@ -41,6 +41,13 @@ Choose your mode in onboarding:
 
 The selected mode is persisted in `runtime/onboard_state.json`.
 
+After onboarding, supported user-local provider and runtime overrides live in:
+
+- `~/.meridian/.env`
+- `~/.meridian/.env.gateway`
+
+See [`docs/TEAM_RUNTIME_CONFIG.md`](docs/TEAM_RUNTIME_CONFIG.md) for the source-of-truth config model, precedence rules, and generated runtime files.
+
 ## First commands
 
 ```bash
@@ -90,6 +97,7 @@ cd intelligence && python3 -m unittest -v test_gateway_brain_router.py
 - [Benchmark lane](scripts/benchmark_meridian.sh)
 - [Migration guide](docs/MIGRATION_FROM_CLAW.md)
 - [Onboarding contract](docs/ONBOARDING_CONTRACT.md)
+- [Team runtime config](docs/TEAM_RUNTIME_CONFIG.md)
 
 ## Dev and Maintenance Commands
 

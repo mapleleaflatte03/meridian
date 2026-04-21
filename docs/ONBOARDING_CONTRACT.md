@@ -69,6 +69,17 @@ Public onboarding contract remains Core/Team mode selection via `./scripts/onboa
 | Loom CLI configuration | `~/.config/meridian-loom/` |
 | Agent configs | `~/.config/meridian-loom/agents/` |
 
+## Supported User Config Surface
+
+After onboarding, the supported user-edited runtime config lives outside the repo in:
+
+- `~/.meridian/.env`
+- `~/.meridian/.env.gateway`
+
+These files are the supported place to set provider choice, model, endpoint, runtime root, and team agent overrides for local use. Runtime-generated files such as `runtime/default/providers/profiles.json`, `runtime/default/loom.toml`, and runtime registry/state files are derived artifacts, not the primary user config surface.
+
+See [`TEAM_RUNTIME_CONFIG.md`](./TEAM_RUNTIME_CONFIG.md) for precedence and sync rules.
+
 ## What Is NOT Created
 
 - No remote accounts or cloud registrations

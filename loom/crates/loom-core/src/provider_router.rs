@@ -81,8 +81,11 @@ impl ProviderKind {
 
     fn from_str(raw: &str) -> Option<Self> {
         match raw.trim().to_ascii_lowercase().as_str() {
-            "local_ollama" | "ollama" => Some(Self::LocalOllama),
+            "local_ollama" | "ollama" | "local_http_json" | "local-http-json" => {
+                Some(Self::LocalOllama)
+            }
             "openai_compatible" | "openai-compatible" | "openai" => Some(Self::OpenAiCompatible),
+            "http_json" | "http-json" => Some(Self::OpenAiCompatible),
             "openai_codex" | "openai-codex" | "codex" => Some(Self::OpenAiCodex),
             "custom_endpoint" | "custom-endpoint" | "custom" => Some(Self::CustomEndpoint),
             _ => None,
@@ -1766,6 +1769,43 @@ mod tests {
                 env_var: "OPENAI_API_KEY".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn parser_accepts_legacy_http_json_provider_kinds() {
+        let raw = r#"{
+  "default_profile": "local_http",
+  "profiles": [
+    {
+      "name": "local_http",
+      "kind": "local_http_json",
+      "base_url": "http://127.0.0.1:11434/v1/chat/completions",
+      "model": "qwen2.5:7b",
+      "auth": {
+        "mode": "none"
+      }
+    },
+    {
+      "name": "legacy_remote",
+      "kind": "http_json",
+      "base_url": "https://api.openai.com/v1/chat/completions",
+      "model": "gpt-5.4",
+      "auth": {
+        "mode": "bearer_env",
+        "env_var": "OPENAI_API_KEY"
+      }
+    }
+  ],
+  "routing": {
+    "capabilities": {
+      "loom.llm.inference.v1": { "profile": "legacy_remote", "default_model": "gpt-5.4" }
+    }
+  }
+}"#;
+        let profiles = parse_provider_profiles_json(raw).expect("parse provider profiles");
+        assert_eq!(profiles.profiles.len(), 2);
+        assert_eq!(profiles.profiles[0].kind, ProviderKind::LocalOllama);
+        assert_eq!(profiles.profiles[1].kind, ProviderKind::OpenAiCompatible);
     }
 
     #[test]
