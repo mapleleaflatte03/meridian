@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -110,6 +111,56 @@ class LoomRuntimeClientFallbackTests(unittest.TestCase):
         self.assertIn("0.05", commands[0])
         self.assertIn("--estimated-cost-usd", commands[1])
         self.assertIn("0.05", commands[1])
+
+    def test_run_capability_falls_back_when_file_ingress_stays_staged(self):
+        commands = []
+        with tempfile.TemporaryDirectory() as tmpdir:
+            receipt_path = os.path.join(tmpdir, "missing-receipt.json")
+            responses = [
+                subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout=json.dumps(
+                        {
+                            "status": "service_submit_accepted",
+                            "transport": "file_ingress",
+                            "job_id": "abc456",
+                            "ingress_receipt_path": receipt_path,
+                        }
+                    ),
+                    stderr="",
+                ),
+                subprocess.CompletedProcess(
+                    args=[],
+                    returncode=0,
+                    stdout=json.dumps({"job_status": "completed"}),
+                    stderr="",
+                ),
+            ]
+
+            def _runner(*args, **kwargs):
+                commands.append(args[0])
+                return responses.pop(0)
+
+            result = run_capability(
+                self._context(),
+                "loom.llm.inference.v1",
+                {"prompt": "hello"},
+                30,
+                agent_id="agent_atlas",
+                action_type="research",
+                resource="manual:test",
+                runner=_runner,
+                sleeper=lambda _seconds: None,
+                result_loader=lambda path, default=None: {"host_response_json": {"output_text": "ok"}},
+            )
+
+        self.assertTrue(result["ok"])
+        self.assertIn("warnings", result)
+        self.assertIn("staged file_ingress", result["warnings"][0])
+        self.assertEqual(result["job_id"], "abc456")
+        self.assertEqual(result["worker_result"]["host_response_json"]["output_text"], "ok")
+        self.assertEqual(len(commands), 2)
 
     def test_estimate_capability_cost_prefers_payload_override(self):
         cost = estimate_capability_cost_usd(

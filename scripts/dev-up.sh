@@ -568,6 +568,9 @@ start_gateway_if_needed() {
       MERIDIAN_WORKSPACE_API_BASE="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" \
       MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT}" \
       MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED}" \
+      MERIDIAN_TELEGRAM_BOT_TOKEN="${MERIDIAN_TELEGRAM_BOT_TOKEN:-}" \
+      MERIDIAN_ALLOWED_ORIGIN="${MERIDIAN_ALLOWED_ORIGIN:-}" \
+      MERIDIAN_LOOM_AGENT_ID="${MERIDIAN_LOOM_AGENT_ID:-}" \
       nohup python3 meridian_gateway.py >"${LOG_DIR}/gateway.log" 2>&1 &
       echo $! > "${PID_DIR}/gateway.pid"
     )

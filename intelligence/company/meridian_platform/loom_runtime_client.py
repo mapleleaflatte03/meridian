@@ -518,6 +518,23 @@ def run_capability(
             'submit': submit_payload,
         }
 
+    transport = str(submit_payload.get('transport') or '').strip().lower()
+    ingress_receipt_path = str(submit_payload.get('ingress_receipt_path') or '').strip()
+    staged_ingress_warning = ''
+    if transport == 'file_ingress' and ingress_receipt_path:
+        receipt_deadline = time.time() + min(3.0, max(0.5, timeout / 10.0))
+        receipt_seen = False
+        while time.time() < receipt_deadline:
+            if os.path.exists(ingress_receipt_path):
+                receipt_seen = True
+                break
+            sleeper(0.25)
+        if not receipt_seen:
+            staged_ingress_warning = (
+                'Loom service submit stayed in staged file_ingress without an acceptance receipt; '
+                'continuing by job_id because staged ingress can still execute asynchronously.'
+            )
+
     inspect_cmd = [
         context.loom_bin,
         'job',
@@ -556,7 +573,7 @@ def run_capability(
                     if result_loader is not None:
                         loaded = result_loader(result_path, default={})
                         worker_result = loaded or {}
-                    return {
+                    result = {
                         'ok': True,
                         'runtime': 'loom',
                         'capability_name': capability_name,
@@ -566,6 +583,9 @@ def run_capability(
                         'worker_result': worker_result,
                         'estimated_cost_usd': resolved_estimated_cost_usd,
                     }
+                    if staged_ingress_warning:
+                        result['warnings'] = [staged_ingress_warning]
+                    return result
                 if status in {'failed', 'denied', 'cancelled', 'hard_deny'}:
                     return {
                         'ok': False,

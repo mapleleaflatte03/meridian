@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,9 +15,13 @@ PLATFORM_DIR = Path(__file__).resolve().parent
 WORKSPACE_DIR = PLATFORM_DIR.parent.parent
 MERIDIAN_HOME = WORKSPACE_DIR.parent
 REGISTRY_PATH = PLATFORM_DIR / "agent_registry.json"
+LOCAL_RUNTIME_ENV_FILE = Path.home() / ".meridian" / ".env"
+LOCAL_RUNTIME_GATEWAY_ENV_FILE = Path.home() / ".meridian" / ".env.gateway"
 DEFAULT_ENV_FILES = (
     MERIDIAN_HOME / ".env",
     MERIDIAN_HOME / ".env.gateway",
+    LOCAL_RUNTIME_ENV_FILE,
+    LOCAL_RUNTIME_GATEWAY_ENV_FILE,
 )
 DEFAULT_LOOM_ROOT = Path(
     os.environ.get(
@@ -30,22 +35,100 @@ DEFAULT_CODEX_HOME = Path(
         str(MERIDIAN_HOME / "auth" / "codex" / "login-home"),
     )
 )
-DEFAULT_CODEX_AUTH_PATH = Path(
-    os.environ.get(
-        "MERIDIAN_CODEX_AUTH_PATH",
-        str(DEFAULT_CODEX_HOME / ".codex" / "auth.json"),
+DEFAULT_LOOM_CODEX_AUTH_PATH = Path(".meridian/auth/codex/login-home/.codex/auth.json")
+DEFAULT_SHARED_CODEX_AUTH_PATH = Path(".codex/auth.json")
+DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api"
+
+
+def _candidate_codex_auth_paths(runtime_env: dict[str, str] | None = None) -> tuple[Path, ...]:
+    env = runtime_env or {}
+    explicit_auth = str(env.get("MERIDIAN_CODEX_AUTH_PATH") or os.environ.get("MERIDIAN_CODEX_AUTH_PATH") or "").strip()
+    explicit_home = str(env.get("MERIDIAN_CODEX_HOME") or os.environ.get("MERIDIAN_CODEX_HOME") or "").strip()
+    home_dir = Path.home()
+    candidates: list[Path] = []
+    if explicit_auth:
+        candidates.append(Path(explicit_auth))
+    if explicit_home:
+        candidates.append(Path(explicit_home) / ".codex" / "auth.json")
+    candidates.extend(
+        [
+            home_dir / ".meridian" / "auth" / "codex" / "login-home" / ".codex" / "auth.json",
+            MERIDIAN_HOME / "auth" / "codex" / "login-home" / ".codex" / "auth.json",
+            home_dir / ".codex" / "auth.json",
+            DEFAULT_CODEX_HOME / ".codex" / "auth.json",
+        ]
     )
-)
+    ordered: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        rendered = str(candidate)
+        if rendered in seen:
+            continue
+        seen.add(rendered)
+        ordered.append(candidate)
+    return tuple(ordered)
+
+
+def _codex_auth_path_rank(path: Path) -> int:
+    rendered = str(path)
+    try:
+        normalized = path.expanduser().resolve(strict=False)
+    except Exception:
+        normalized = path
+    normalized_text = str(normalized)
+    markers = (
+        (str(DEFAULT_LOOM_CODEX_AUTH_PATH), 0),
+        (str(DEFAULT_SHARED_CODEX_AUTH_PATH), 1),
+        (str(MERIDIAN_HOME / "auth" / "codex" / "login-home" / ".codex" / "auth.json"), 0),
+        (str(Path.home() / ".meridian" / "auth" / "codex" / "login-home" / ".codex" / "auth.json"), 0),
+        (str(Path.home() / ".codex" / "auth.json"), 1),
+        (str(DEFAULT_CODEX_HOME / ".codex" / "auth.json"), 1),
+    )
+    for marker, rank in markers:
+        if rendered.endswith(marker) or normalized_text.endswith(marker):
+            return rank
+    return 2
+
+
+def _looks_like_valid_codex_auth(path: Path) -> bool:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    tokens = payload.get("tokens")
+    if not isinstance(tokens, dict):
+        return False
+    access_token = str(tokens.get("access_token") or "").strip()
+    return bool(access_token)
+
+
+def _resolve_codex_auth_path(runtime_env: dict[str, str] | None = None) -> Path:
+    candidates = _candidate_codex_auth_paths(runtime_env)
+    valid_existing = [
+        candidate for candidate in candidates if candidate.exists() and _looks_like_valid_codex_auth(candidate)
+    ]
+    if valid_existing:
+        return max(
+            valid_existing,
+            key=lambda candidate: (
+                -_codex_auth_path_rank(candidate),
+                candidate.stat().st_mtime,
+            ),
+        )
+    existing = [candidate for candidate in candidates if candidate.exists()]
+    if existing:
+        return max(existing, key=lambda candidate: candidate.stat().st_mtime)
+    return candidates[0]
 
 
 SPECIALIST_KEYS = ("ATLAS", "SENTINEL", "FORGE", "QUILL", "AEGIS", "PULSE")
 SPECIALIST_PROFILE_NAMES = {
-    "ATLAS": "atlas_specialist",
-    "SENTINEL": "sentinel_specialist",
-    "FORGE": "forge_specialist",
-    "QUILL": "quill_specialist",
-    "AEGIS": "aegis_specialist",
-    "PULSE": "pulse_specialist",
+    "ATLAS": "research_frontier",
+    "SENTINEL": "verifier_frontier",
+    "FORGE": "executor_tooling",
+    "QUILL": "writer_general",
+    "AEGIS": "qa_frontier",
+    "PULSE": "local_ollama",
 }
 SPECIALIST_TASK_DEFAULTS = {
     "ATLAS": "research",
@@ -192,16 +275,32 @@ def _registry_agent_with_fallback(
 def _provider_kind_for_env(raw: str) -> str:
     value = (raw or "").strip().lower()
     if value in {"cli_session", "openai_codex", "openai-codex", "codex"}:
-        return "cli_session"
+        return "openai_codex"
     if value in {"custom_endpoint", "custom-endpoint", "custom"}:
-        return "http_json"
+        return "custom_endpoint"
     if value in {"do-openai-compatible", "openai_compatible", "openai-compatible", "openai"}:
-        return "http_json"
+        return "openai_compatible"
     if value in {"http_json", "http-json", "http"}:
-        return "http_json"
+        return "openai_compatible"
     if value in {"local_ollama", "ollama"}:
-        return "local_http_json"
-    return "http_json"
+        return "local_ollama"
+    return ""
+
+
+def _default_provider_kind_for_profile(profile_name: str) -> str:
+    value = (profile_name or "").strip()
+    if value in {
+        "manager_frontier",
+        "research_frontier",
+        "writer_general",
+        "qa_frontier",
+        "verifier_frontier",
+        "executor_tooling",
+    }:
+        return "openai_codex"
+    if value == "local_ollama":
+        return "local_ollama"
+    return "openai_compatible"
 
 
 def _make_agent(
@@ -265,7 +364,7 @@ def load_team_topology(
     )
     if not manager_transport:
         legacy_provider = (runtime_env.get("MERIDIAN_MANAGER_PROVIDER") or "").strip().lower()
-        manager_transport = "http_json" if legacy_provider in {"xai", "grok", "xai_pool", "grok_pool"} else "cli_session"
+        manager_transport = "openai_compatible" if legacy_provider in {"xai", "grok", "xai_pool", "grok_pool"} else "openai_codex"
     manager_base_url = (
         (runtime_env.get("MERIDIAN_BRAIN_MANAGER_ENDPOINT") or "").strip()
         or (runtime_env.get("MERIDIAN_MANAGER_XAI_BASE_URL") or "").strip()
@@ -290,13 +389,20 @@ def load_team_topology(
     specialists: list[TeamAgent] = []
     for key in SPECIALIST_KEYS:
         name = (runtime_env.get(f"MERIDIAN_AGENT_{key}_NAME") or key.title()).strip() or key.title()
+        profile_name = (
+            (runtime_env.get(f"MERIDIAN_AGENT_{key}_PROFILE_NAME") or "").strip()
+            or SPECIALIST_PROFILE_NAMES[key]
+        )
+        provider_kind = _provider_kind_for_env(runtime_env.get(f"MERIDIAN_AGENT_{key}_PROVIDER", ""))
+        if not provider_kind:
+            provider_kind = _default_provider_kind_for_profile(profile_name)
         specialists.append(
             _make_agent(
                 registry,
                 env_key=key,
                 name=name,
-                profile_name=SPECIALIST_PROFILE_NAMES[key],
-                provider_kind=_provider_kind_for_env(runtime_env.get(f"MERIDIAN_AGENT_{key}_PROVIDER", "")),
+                profile_name=profile_name,
+                provider_kind=provider_kind,
                 base_url=runtime_env.get(f"MERIDIAN_AGENT_{key}_BASE_URL", ""),
                 api_key_env_var=f"MERIDIAN_AGENT_{key}_API_KEY",
                 model=runtime_env.get(f"MERIDIAN_AGENT_{key}_MODEL", ""),
@@ -312,15 +418,27 @@ def default_imported_history_dir(loom_root: str | Path | None = None) -> Path:
     return root / "state" / "session-history" / "imported"
 
 
-def _profile_json_for_agent(agent: TeamAgent) -> dict[str, Any]:
-    base_url = (agent.base_url or "").strip()
-    if agent.provider_kind in {"http_json", "openai_compatible", "custom_endpoint"}:
+def _profile_json_for_agent(
+    agent: TeamAgent,
+    existing_profile: dict[str, Any] | None = None,
+    *,
+    runtime_env: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    existing = dict(existing_profile or {})
+    provider_kind = (
+        (agent.provider_kind or "").strip()
+        or str(existing.get("kind") or "").strip()
+        or _default_provider_kind_for_profile(agent.profile_name)
+    )
+    base_url = (agent.base_url or "").strip() or str(existing.get("base_url") or "").strip()
+    model = (agent.model or "").strip() or str(existing.get("model") or "").strip()
+    if provider_kind in {"openai_compatible", "custom_endpoint"}:
         if base_url.endswith("/api/v1") or base_url.endswith("/v1"):
             base_url = f"{base_url.rstrip('/')}/chat/completions"
-    if agent.provider_kind in {"cli_session", "openai_codex"}:
-        auth = {"mode": "codex_auth_json", "path": str(DEFAULT_CODEX_AUTH_PATH)}
-        base_url = base_url or "cli://session"
-    elif agent.provider_kind in {"local_http_json", "local_ollama"}:
+    if provider_kind == "openai_codex":
+        auth = {"mode": "codex_auth_json", "path": str(_resolve_codex_auth_path(runtime_env))}
+        base_url = base_url or DEFAULT_CODEX_BASE_URL
+    elif provider_kind == "local_ollama":
         auth = {"mode": "none"}
         base_url = base_url or "http://127.0.0.1:11434/v1/chat/completions"
     else:
@@ -331,11 +449,358 @@ def _profile_json_for_agent(agent: TeamAgent) -> dict[str, Any]:
         base_url = base_url
     return {
         "name": agent.profile_name,
-        "kind": agent.provider_kind,
+        "kind": provider_kind,
         "base_url": base_url,
-        "model": agent.model,
+        "model": model,
         "auth": auth,
         "note": f"Meridian team route for {agent.name} ({agent.role})",
+    }
+
+
+def _role_for_kernel_registry(agent: TeamAgent) -> str:
+    value = (agent.role or agent.task_kind or "").strip().lower()
+    mapping = {
+        "manage": "manager",
+        "manager": "manager",
+        "research": "analyst",
+        "analyst": "analyst",
+        "verify": "verifier",
+        "verifier": "verifier",
+        "execute": "executor",
+        "executor": "executor",
+        "write": "writer",
+        "writer": "writer",
+        "qa_gate": "qa_gate",
+        "compress": "compressor",
+        "compressor": "compressor",
+    }
+    return mapping.get(value, "analyst")
+
+
+def _default_scopes_for_agent(agent: TeamAgent) -> list[str]:
+    role = _role_for_kernel_registry(agent)
+    if role == "manager":
+        return ["manage", "read", "delegate"]
+    if role == "analyst":
+        return ["research", "read", "analyze"]
+    if role == "verifier":
+        return ["verify", "read", "audit"]
+    if role == "executor":
+        return ["execute", "write", "deploy"]
+    if role == "writer":
+        return ["write", "read", "draft"]
+    if role == "qa_gate":
+        return ["verify", "read", "qa"]
+    if role == "compressor":
+        return ["compress", "read", "summarize"]
+    return ["read"]
+
+
+def _default_budget_for_agent(agent: TeamAgent) -> dict[str, float]:
+    role = _role_for_kernel_registry(agent)
+    if role == "manager":
+        return {"max_per_run_usd": 1.0, "max_per_day_usd": 10.0, "max_per_month_usd": 200.0}
+    if role == "verifier":
+        return {"max_per_run_usd": 0.3, "max_per_day_usd": 3.0, "max_per_month_usd": 50.0}
+    return {"max_per_run_usd": 0.5, "max_per_day_usd": 5.0, "max_per_month_usd": 100.0}
+
+
+def _kernel_registry_path(loom_root: Path, runtime_env: dict[str, str]) -> Path:
+    explicit = (runtime_env.get("MERIDIAN_KERNEL_AGENT_REGISTRY_PATH") or "").strip()
+    if explicit:
+        return Path(explicit)
+
+    kernel_root = (runtime_env.get("MERIDIAN_KERNEL_ROOT") or "").strip()
+    if not kernel_root:
+        loom_toml = loom_root / "loom.toml"
+        if loom_toml.exists():
+            for raw_line in loom_toml.read_text(encoding="utf-8").splitlines():
+                line = raw_line.strip()
+                if not line.startswith("kernel_path"):
+                    continue
+                _, value = line.split("=", 1)
+                kernel_root = value.strip().strip('"').strip("'")
+                if kernel_root:
+                    break
+    if not kernel_root:
+        kernel_root = "/opt/meridian-kernel"
+
+    kernel_root_path = Path(kernel_root)
+    if kernel_root_path.name == "kernel":
+        nested_kernel_dir = kernel_root_path / "kernel"
+        if (nested_kernel_dir / "agent_registry.py").exists() or nested_kernel_dir.exists():
+            return nested_kernel_dir / "agent_registry.json"
+        return kernel_root_path / "agent_registry.json"
+    return kernel_root_path / "kernel" / "agent_registry.json"
+
+
+def _runtime_kernel_root(loom_root: Path, runtime_env: dict[str, str]) -> str:
+    explicit = (runtime_env.get("MERIDIAN_KERNEL_ROOT") or "").strip()
+    if explicit:
+        return explicit
+    loom_toml = loom_root / "loom.toml"
+    if loom_toml.exists():
+        for raw_line in loom_toml.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line.startswith("kernel_path"):
+                continue
+            _, value = line.split("=", 1)
+            kernel_root = value.strip().strip('"').strip("'")
+            if kernel_root:
+                return kernel_root
+    bundled_kernel_root = MERIDIAN_HOME / "kernel"
+    if (bundled_kernel_root / "kernel" / "agent_registry.py").exists():
+        return str(bundled_kernel_root)
+    return "/opt/meridian-kernel"
+
+
+def _sync_kernel_org_state(
+    *,
+    loom_root: Path,
+    runtime_env: dict[str, str],
+    org_id: str,
+) -> dict[str, Any]:
+    kernel_root = Path(_runtime_kernel_root(loom_root, runtime_env))
+    kernel_platform_dir = kernel_root / "kernel"
+    kernel_orgs_path = kernel_platform_dir / "organizations.json"
+    platform_orgs_path = PLATFORM_DIR / "organizations.json"
+    result = {
+        "kernel_orgs_path": str(kernel_orgs_path),
+        "kernel_org_status": "missing_platform_orgs",
+        "kernel_capsule_path": str(kernel_root / "capsules" / org_id),
+        "kernel_capsule_status": "skipped",
+    }
+
+    if not platform_orgs_path.exists():
+        return result
+
+    try:
+        platform_payload = json.loads(platform_orgs_path.read_text(encoding="utf-8"))
+    except Exception:
+        result["kernel_org_status"] = "invalid_platform_orgs"
+        return result
+
+    platform_org = dict((platform_payload.get("organizations") or {}).get(org_id) or {})
+    if not platform_org:
+        result["kernel_org_status"] = "org_missing_from_platform"
+        return result
+
+    if kernel_orgs_path.exists():
+        try:
+            kernel_payload = json.loads(kernel_orgs_path.read_text(encoding="utf-8"))
+        except Exception:
+            kernel_payload = {"organizations": {}, "updatedAt": ""}
+    else:
+        kernel_payload = {"organizations": {}, "updatedAt": ""}
+
+    kernel_orgs = kernel_payload.get("organizations")
+    if not isinstance(kernel_orgs, dict):
+        kernel_orgs = {}
+    kernel_orgs[org_id] = platform_org
+    kernel_payload["organizations"] = kernel_orgs
+    kernel_payload["updatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    kernel_orgs_path.parent.mkdir(parents=True, exist_ok=True)
+    kernel_orgs_path.write_text(json.dumps(kernel_payload, indent=2) + "\n", encoding="utf-8")
+    result["kernel_org_status"] = "updated"
+
+    capsule_dir = kernel_root / "capsules" / org_id
+    ledger_path = capsule_dir / "ledger.json"
+    if ledger_path.exists():
+        result["kernel_capsule_status"] = "unchanged"
+        return result
+
+    capsule_dir.mkdir(parents=True, exist_ok=True)
+    template_ledger_path = kernel_root / "economy" / "ledger.json"
+    if template_ledger_path.exists():
+        ledger_template = json.loads(template_ledger_path.read_text(encoding="utf-8"))
+    else:
+        ledger_template = {
+            "version": 1,
+            "schema": "meridian-kernel-economy-v1",
+            "updatedAt": "",
+            "agents": {},
+            "treasury": {
+                "cash_usd": 0.0,
+                "reserve_floor_usd": 50.0,
+                "total_revenue_usd": 0.0,
+                "support_received_usd": 0.0,
+                "owner_capital_contributed_usd": 0.0,
+                "expenses_recorded_usd": 0.0,
+                "owner_draws_usd": 0.0,
+            },
+            "bonus_pool": {"available_usd": 0.0},
+            "epoch": {"number": 0, "started_at": "", "auth_decay_per_epoch": 5},
+            "transactions": [],
+        }
+
+    bootstrap_script = (
+        "import json, pathlib, sys\n"
+        "kernel_dir = pathlib.Path(sys.argv[1])\n"
+        "org_id = sys.argv[2]\n"
+        "template = json.loads(sys.argv[3])\n"
+        "sys.path.insert(0, str(kernel_dir))\n"
+        "import capsule\n"
+        "try:\n"
+        "    capsule.init_capsule(org_id, ledger_template=template)\n"
+        "    print('initialized')\n"
+        "except FileExistsError:\n"
+        "    print('exists')\n"
+    )
+    import subprocess
+
+    completed = subprocess.run(
+        [
+            "python3",
+            "-c",
+            bootstrap_script,
+            str(kernel_platform_dir),
+            org_id,
+            json.dumps(ledger_template),
+        ],
+        capture_output=True,
+        text=True,
+        cwd=str(kernel_root),
+    )
+    if completed.returncode == 0:
+        result["kernel_capsule_status"] = (completed.stdout or "initialized").strip() or "initialized"
+    else:
+        result["kernel_capsule_status"] = f"init_failed:{(completed.stderr or completed.stdout).strip()[:120]}"
+    return result
+
+
+def _sync_runtime_loom_config(
+    *,
+    loom_root: Path,
+    runtime_env: dict[str, str],
+    org_id: str,
+) -> dict[str, Any]:
+    loom_toml = loom_root / "loom.toml"
+    if not loom_toml.exists():
+        return {
+            "loom_toml_path": str(loom_toml),
+            "loom_toml_status": "missing",
+        }
+
+    payload: list[str] = []
+    updated_org = False
+    updated_kernel = False
+    kernel_root = _runtime_kernel_root(loom_root, runtime_env)
+    for raw_line in loom_toml.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("org_id"):
+            payload.append(f'org_id = "{org_id}"')
+            updated_org = True
+            continue
+        if line.startswith("kernel_path"):
+            payload.append(f'kernel_path = "{kernel_root}"')
+            updated_kernel = True
+            continue
+        payload.append(raw_line)
+
+    if not updated_org:
+        payload.append(f'org_id = "{org_id}"')
+    if not updated_kernel:
+        payload.append(f'kernel_path = "{kernel_root}"')
+
+    rendered = "\n".join(payload).rstrip() + "\n"
+    status = "unchanged"
+    if loom_toml.read_text(encoding="utf-8") != rendered:
+        loom_toml.write_text(rendered, encoding="utf-8")
+        status = "updated"
+    return {
+        "loom_toml_path": str(loom_toml),
+        "loom_toml_status": status,
+        "loom_kernel_path": kernel_root,
+        "loom_org_id": org_id,
+    }
+
+
+def _sync_kernel_agent_registry(
+    topology: TeamTopology,
+    *,
+    loom_root: Path,
+    runtime_env: dict[str, str],
+    org_id: str,
+) -> dict[str, Any]:
+    registry_path = _kernel_registry_path(loom_root, runtime_env)
+    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    if registry_path.exists():
+        try:
+            payload = json.loads(registry_path.read_text(encoding="utf-8"))
+        except Exception:
+            payload = {"agents": {}, "updatedAt": ""}
+    else:
+        payload = {"agents": {}, "updatedAt": ""}
+    original_payload = json.loads(json.dumps(payload))
+    agents = payload.get("agents")
+    if not isinstance(agents, dict):
+        agents = {}
+
+    synced_ids: list[str] = []
+    for team_agent in (topology.manager, *topology.specialists):
+        existing = dict(agents.get(team_agent.registry_id) or {})
+        role = _role_for_kernel_registry(team_agent)
+        existing["id"] = team_agent.registry_id
+        existing["org_id"] = org_id
+        existing["name"] = team_agent.name
+        existing["role"] = role
+        existing["purpose"] = team_agent.purpose or f"{team_agent.name} ({team_agent.env_key})"
+        existing["model_policy"] = existing.get("model_policy") or {
+            "allowed_models": [],
+            "max_context_tokens": 200000,
+            "max_output_tokens": 16000,
+        }
+        existing["scopes"] = existing.get("scopes") or _default_scopes_for_agent(team_agent)
+        existing["budget"] = existing.get("budget") or _default_budget_for_agent(team_agent)
+        existing["approval_required"] = bool(existing.get("approval_required", False))
+        existing["rollout_state"] = str(existing.get("rollout_state") or "active")
+        existing["runtime_binding"] = {
+            "runtime_id": "loom_native",
+            "runtime_label": "Meridian Loom Runtime",
+            "runtime_registered": True,
+            "registration_status": "registered",
+            "bound_org_id": org_id,
+            "context_source": "agent_registry",
+            "boundary_name": "workspace",
+            "identity_model": "session",
+            "boundary_scope": "institution_bound",
+        }
+        existing["sla"] = existing.get("sla") or {
+            "max_latency_seconds": 120,
+            "availability_target": 0.95,
+        }
+        existing["reputation_units"] = int(existing.get("reputation_units") or 50)
+        existing["authority_units"] = int(existing.get("authority_units") or 50)
+        existing["status"] = str(existing.get("status") or "active")
+        existing["created_at"] = str(existing.get("created_at") or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
+        existing["last_active_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        existing["sponsor_id"] = existing.get("sponsor_id")
+        existing["risk_state"] = str(existing.get("risk_state") or "nominal")
+        existing["lifecycle_state"] = str(existing.get("lifecycle_state") or "active")
+        existing["economy_key"] = team_agent.handle
+        existing["incident_count"] = int(existing.get("incident_count") or 0)
+        existing["escalation_path"] = list(existing.get("escalation_path") or [])
+        agents[team_agent.registry_id] = existing
+        synced_ids.append(team_agent.registry_id)
+
+    payload["agents"] = agents
+    payload["updatedAt"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    comparable_original = dict(original_payload)
+    comparable_payload = dict(payload)
+    comparable_original["updatedAt"] = ""
+    comparable_payload["updatedAt"] = ""
+    changed = comparable_original != comparable_payload
+    write_status = "unchanged"
+    if changed:
+        try:
+            registry_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+            write_status = "updated"
+        except OSError as exc:
+            write_status = f"write_failed:{exc.errno}"
+    return {
+        "kernel_registry_path": str(registry_path),
+        "kernel_registry_synced_agents": synced_ids,
+        "kernel_registry_status": write_status,
     }
 
 
@@ -343,8 +808,12 @@ def sync_loom_team_profiles(
     topology: TeamTopology,
     *,
     loom_root: str | Path | None = None,
+    org_id: str | None = None,
+    runtime_env: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     root = Path(loom_root) if loom_root else DEFAULT_LOOM_ROOT
+    resolved_runtime_env = dict(runtime_env or load_runtime_env())
+    resolved_org_id = (org_id or topology.org_id or "org_48b05c21").strip() or "org_48b05c21"
     profiles_path = root / "providers" / "profiles.json"
     profiles_path.parent.mkdir(parents=True, exist_ok=True)
     if profiles_path.exists():
@@ -366,8 +835,16 @@ def sync_loom_team_profiles(
 
     # Preserve existing non-team profiles, but overwrite team-owned profiles.
     for team_agent in (topology.manager, *topology.specialists):
-        existing_profiles[team_agent.profile_name] = _profile_json_for_agent(team_agent)
-        agent_route = {"profile": team_agent.profile_name, "default_model": team_agent.model}
+        existing_profiles[team_agent.profile_name] = _profile_json_for_agent(
+            team_agent,
+            existing_profiles.get(team_agent.profile_name),
+            runtime_env=runtime_env,
+        )
+        route_model = (
+            team_agent.model
+            or str(existing_profiles[team_agent.profile_name].get("model") or "").strip()
+        )
+        agent_route = {"profile": team_agent.profile_name, "default_model": route_model}
         agent_routes[team_agent.registry_id] = dict(agent_route)
         agent_routes[team_agent.handle] = dict(agent_route)
 
@@ -379,8 +856,27 @@ def sync_loom_team_profiles(
 
     payload["profiles"] = list(existing_profiles.values())
     profiles_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    runtime_config_sync = _sync_runtime_loom_config(
+        loom_root=root,
+        runtime_env=resolved_runtime_env,
+        org_id=resolved_org_id,
+    )
+    kernel_org_sync = _sync_kernel_org_state(
+        loom_root=root,
+        runtime_env=resolved_runtime_env,
+        org_id=resolved_org_id,
+    )
+    kernel_sync = _sync_kernel_agent_registry(
+        topology,
+        loom_root=root,
+        runtime_env=resolved_runtime_env,
+        org_id=resolved_org_id,
+    )
     return {
         "profiles_path": str(profiles_path),
         "profile_names": sorted(existing_profiles.keys()),
         "agent_routes": sorted(agent_routes.keys()),
+        **runtime_config_sync,
+        **kernel_org_sync,
+        **kernel_sync,
     }

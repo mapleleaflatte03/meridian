@@ -104,6 +104,7 @@ except ImportError:
 
 from loom_runtime_discovery import preferred_loom_bin as _shared_preferred_loom_bin
 from loom_runtime_discovery import preferred_loom_root as _shared_preferred_loom_root
+from loom_runtime_discovery import runtime_value as _shared_runtime_value
 from loom_runtime_client import LoomRuntimeContext
 from loom_runtime_client import capability_preflight as _shared_loom_capability_preflight
 from loom_runtime_client import run_capability as _shared_run_loom_capability
@@ -235,6 +236,37 @@ def _team_specialist(agent_id: str):
     if not agent_id:
         return None
     return TEAM_TOPOLOGY.specialist_by_id(agent_id)
+
+
+def _loom_runtime_agent_ids() -> set[str]:
+    registry_path = os.path.join(_loom_root(), 'agents', 'registry.json')
+    try:
+        with open(registry_path, encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except Exception:
+        return set()
+    agent_ids: set[str] = set()
+    for record in list(payload.get('agents') or []):
+        if not isinstance(record, dict):
+            continue
+        agent_id = str(record.get('agent_id') or '').strip().lower()
+        if agent_id:
+            agent_ids.add(agent_id)
+    return agent_ids
+
+
+def _loom_execution_agent_id(agent_id: str) -> str:
+    specialist = _team_specialist(agent_id)
+    if specialist is None:
+        return str(agent_id or '').strip()
+    runtime_agent_ids = _loom_runtime_agent_ids()
+    handle = str(specialist.handle or '').strip()
+    registry_id = str(specialist.registry_id or '').strip()
+    if handle and (not runtime_agent_ids or handle.lower() in runtime_agent_ids):
+        return handle
+    if registry_id and (not runtime_agent_ids or registry_id.lower() in runtime_agent_ids):
+        return registry_id
+    return handle or registry_id
 
 
 def _specialist_completion_url(agent_id: str) -> str:
@@ -504,11 +536,11 @@ def _intelligence_route_fallback(route: str, default: bool = False) -> bool:
 
 
 def _loom_bin() -> str:
-    return _shared_preferred_loom_bin(os.environ)
+    return _shared_preferred_loom_bin(TEAM_RUNTIME_ENV)
 
 
 def _loom_root() -> str:
-    return _shared_preferred_loom_root(os.environ)
+    return _shared_preferred_loom_root(TEAM_RUNTIME_ENV)
 
 
 def _loom_agent_id() -> str:
@@ -517,20 +549,21 @@ def _loom_agent_id() -> str:
 
 def _loom_org_id() -> str:
     for key in ('MERIDIAN_LOOM_ORG_ID', 'MERIDIAN_MCP_ORG_ID', 'MERIDIAN_WORKSPACE_ORG_ID'):
-        value = (os.environ.get(key) or '').strip()
+        value = (TEAM_RUNTIME_ENV.get(key) or '').strip()
         if value:
             return value
-    if MCP_ORG_ID:
-        return MCP_ORG_ID
-    if DEFAULT_ORG_ID:
-        return DEFAULT_ORG_ID
+    runtime_org_id = _shared_runtime_value('org_id', '', runtime_env=TEAM_RUNTIME_ENV).strip()
+    if runtime_org_id:
+        return runtime_org_id
+    if TEAM_TOPOLOGY.org_id:
+        return TEAM_TOPOLOGY.org_id
     return 'org_48b05c21'
 
 
 def _loom_service_token() -> str:
     return (
-        os.environ.get('MERIDIAN_LOOM_SERVICE_TOKEN')
-        or os.environ.get('LOOM_SERVICE_TOKEN')
+        TEAM_RUNTIME_ENV.get('MERIDIAN_LOOM_SERVICE_TOKEN')
+        or TEAM_RUNTIME_ENV.get('LOOM_SERVICE_TOKEN')
         or ''
     ).strip()
 
@@ -595,7 +628,12 @@ def _loom_qa_capability() -> str:
 
 
 def _loom_runtime_context() -> LoomRuntimeContext:
-    sync_loom_team_profiles(TEAM_TOPOLOGY, loom_root=_loom_root())
+    sync_loom_team_profiles(
+        TEAM_TOPOLOGY,
+        loom_root=_loom_root(),
+        org_id=_loom_org_id(),
+        runtime_env=TEAM_RUNTIME_ENV,
+    )
     return LoomRuntimeContext(
         loom_bin=_loom_bin(),
         loom_root=_loom_root(),
@@ -603,7 +641,7 @@ def _loom_runtime_context() -> LoomRuntimeContext:
         agent_id=_loom_agent_id(),
         service_token=_loom_service_token(),
         cwd=WORKSPACE,
-        runtime_env=os.environ,
+        runtime_env=TEAM_RUNTIME_ENV,
     )
 
 
@@ -1120,7 +1158,7 @@ def _run_loom_capability(
         capability_name,
         payload,
         timeout,
-        agent_id=agent_id or None,
+        agent_id=_loom_execution_agent_id(agent_id) or None,
         session_id=session_id,
         action_type=action_type,
         resource=resource,
@@ -1623,6 +1661,33 @@ def do_on_demand_research_route(
 
     loom_preflight = _loom_research_preflight(capability_name)
     if not loom_preflight.get('ok'):
+        direct = _specialist_direct_provider_fallback(
+            agent_id,
+            system_prompt=(
+                f"You are Meridian's research specialist ({agent_id}). "
+                "Answer using your training knowledge. Be factual, specific, and concise. "
+                "If data may be outdated, note that. Do not say 'Unknown' for well-established facts."
+            ),
+            user_prompt=topic,
+            max_tokens=1200 if str(depth or '').strip().lower() != 'quick' else 700,
+            timeout=timeout,
+        )
+        if direct.get('ok') and str(direct.get('output_text') or '').strip():
+            return _with_on_demand_research_cutover(
+                {
+                    'topic': topic,
+                    'depth': depth,
+                    'runtime': 'direct_provider_fallback',
+                    'research': str(direct.get('output_text') or '').strip(),
+                    'agent': agent_id,
+                    'source': 'direct provider fallback (loom unavailable)',
+                },
+                requested_runtime,
+                'direct_provider_fallback',
+                True,
+                fallback_state={'used': True, 'from_runtime': 'loom', 'state': 'preflight_failed_direct_used'},
+                loom_preflight=loom_preflight,
+            )
         fallback_state = {
             'used': False,
             'from_runtime': 'loom',
