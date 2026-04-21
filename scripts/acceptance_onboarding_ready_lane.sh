@@ -323,8 +323,23 @@ if isinstance(agents_payload, dict):
     elif isinstance(agents_payload.get("agents"), list):
         agents = agents_payload["agents"]
 assert agents, agents_payload
-agent_id = str(agents[0].get("id") or "").strip()
-assert agent_id, agents[0]
+bound_org_id = str(
+    ((status.get("context") or {}).get("bound_org_id"))
+    or ((status.get("institution") or {}).get("id"))
+    or ""
+).strip()
+
+def agent_matches_bound_org(agent: dict) -> bool:
+    runtime_binding = agent.get("runtime_binding") or {}
+    return str(
+        runtime_binding.get("bound_org_id")
+        or agent.get("org_id")
+        or ""
+    ).strip() == bound_org_id
+
+selected_agent = next((agent for agent in agents if agent_matches_bound_org(agent)), agents[0])
+agent_id = str(selected_agent.get("id") or "").strip()
+assert agent_id, selected_agent
 
 onboard_script = Path("scripts/onboard.sh").read_text(encoding="utf-8")
 assert "Config root:" in onboard_script, "onboard.sh missing config-root summary"
@@ -364,7 +379,7 @@ else:
         "/api/marketplace/assign",
         {"bid_id": bid_id},
         allow_forbidden=True,
-        accept_statuses={400},
+        accept_statuses={400, 409},
     )
     reservation_id = ""
     if assignment.get("_forbidden"):
@@ -372,6 +387,18 @@ else:
         assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
     elif assignment.get("_http_error"):
         raw = str(assignment.get("raw") or "").lower()
+        if "treasury_reserve_denied" in raw:
+            ensure_treasury_headroom(
+                required_usd=0.25,
+                note="acceptance_onboarding_marketplace_assign_retry",
+            )
+            assignment = post_json(
+                "/api/marketplace/assign",
+                {"bid_id": bid_id},
+                allow_forbidden=True,
+                accept_statuses={400, 409},
+            )
+            raw = str(assignment.get("raw") or "").lower() if assignment.get("_http_error") else raw
         if "status=assigned" in raw or "not open" in raw:
             marketplace_snapshot = get_json("/api/marketplace")
             assignments = list(marketplace_snapshot.get("assignments") or [])
