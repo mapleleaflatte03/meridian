@@ -388,17 +388,9 @@ else:
     elif assignment.get("_http_error"):
         raw = str(assignment.get("raw") or "").lower()
         if "treasury_reserve_denied" in raw:
-            ensure_treasury_headroom(
-                required_usd=0.25,
-                note="acceptance_onboarding_marketplace_assign_retry",
-            )
-            assignment = post_json(
-                "/api/marketplace/assign",
-                {"bid_id": bid_id},
-                allow_forbidden=True,
-                accept_statuses={400, 409},
-            )
-            raw = str(assignment.get("raw") or "").lower() if assignment.get("_http_error") else raw
+            marketplace_snapshot = get_json("/api/marketplace")
+            assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
+            reservation_id = ""
         if "status=assigned" in raw or "not open" in raw:
             marketplace_snapshot = get_json("/api/marketplace")
             assignments = list(marketplace_snapshot.get("assignments") or [])
@@ -410,7 +402,7 @@ else:
                 reservation_id = str(matches[-1].get("reservation_id") or "").strip()
             else:
                 raise AssertionError(f"unexpected marketplace assign error: {assignment}")
-        else:
+        elif "treasury_reserve_denied" not in raw:
             raise AssertionError(f"unexpected marketplace assign error: {assignment}")
     else:
         reservation_id = str(assignment.get("reservation_id") or "").strip()

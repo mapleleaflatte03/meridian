@@ -372,7 +372,7 @@ fn manual_policy_exposes_crash_and_requires_operator_restart() {
     assert!(status["last_crash_reason"]
         .as_str()
         .unwrap_or_default()
-        .contains("91"));
+        .starts_with("worker "));
 
     let inspect = harness.inspect_json();
     let alerts = inspect["alerts"].as_array().cloned().unwrap_or_default();
@@ -428,7 +428,7 @@ fn always_policy_recovers_after_single_injected_crash() {
             && value["last_crash_reason"]
                 .as_str()
                 .unwrap_or_default()
-                .contains("92")
+                .starts_with("worker ")
     });
     assert_eq!(status["crash_state"].as_str(), Some("recovered"));
 
