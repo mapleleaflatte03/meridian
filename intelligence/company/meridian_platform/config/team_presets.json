@@ -1,0 +1,212 @@
+{
+  "schema_version": 1,
+  "default_preset": "dev_team",
+  "presets": {
+    "generic_team": {
+      "description": "Legacy generic Meridian specialist team.",
+      "manager": {
+        "role": "manager",
+        "purpose": "Manager and orchestrator. Routes work, sequences pipeline, verifies evidence, closes loops.",
+        "task_kind": "manage",
+        "kernel_role": "manager",
+        "scopes": ["manage", "delegate", "deliver", "score", "research", "write"],
+        "budget": {
+          "max_per_run_usd": 1.0,
+          "max_per_day_usd": 10.0,
+          "max_per_month_usd": 200.0
+        },
+        "dispatchable": false,
+        "aliases": ["manager", "orchestrator"]
+      },
+      "specialists": {
+        "ATLAS": {
+          "role": "analyst",
+          "purpose": "Research, analysis, exploration, synthesis, and option framing.",
+          "task_kind": "research",
+          "kernel_role": "analyst",
+          "scopes": ["research", "read", "analyze"],
+          "budget": {
+            "max_per_run_usd": 0.5,
+            "max_per_day_usd": 5.0,
+            "max_per_month_usd": 100.0
+          },
+          "dispatchable": true,
+          "aliases": ["analyst", "research specialist"]
+        },
+        "SENTINEL": {
+          "role": "verifier",
+          "purpose": "Verification, risk review, contradiction checking, narrow QA.",
+          "task_kind": "verify",
+          "kernel_role": "verifier",
+          "scopes": ["verify", "read", "audit"],
+          "budget": {
+            "max_per_run_usd": 0.3,
+            "max_per_day_usd": 3.0,
+            "max_per_month_usd": 50.0
+          },
+          "dispatchable": true,
+          "aliases": ["verifier", "review specialist"]
+        },
+        "FORGE": {
+          "role": "executor",
+          "purpose": "Implementation, file edits, operational steps, execution handoff.",
+          "task_kind": "execute",
+          "kernel_role": "executor",
+          "scopes": ["execute", "write", "deploy"],
+          "budget": {
+            "max_per_run_usd": 0.5,
+            "max_per_day_usd": 5.0,
+            "max_per_month_usd": 100.0
+          },
+          "dispatchable": true,
+          "aliases": ["executor", "implementation specialist"]
+        },
+        "QUILL": {
+          "role": "writer",
+          "purpose": "Product writing, release notes, structured deliverables, briefs.",
+          "task_kind": "write",
+          "kernel_role": "writer",
+          "scopes": ["write", "read", "deliver"],
+          "budget": {
+            "max_per_run_usd": 0.4,
+            "max_per_day_usd": 4.0,
+            "max_per_month_usd": 80.0
+          },
+          "dispatchable": true,
+          "aliases": ["writer", "documentation specialist"]
+        },
+        "AEGIS": {
+          "role": "qa_gate",
+          "purpose": "QA gate, acceptance testing, standards checking, output validation.",
+          "task_kind": "qa_gate",
+          "kernel_role": "qa_gate",
+          "scopes": ["verify", "read", "qa"],
+          "budget": {
+            "max_per_run_usd": 0.3,
+            "max_per_day_usd": 3.0,
+            "max_per_month_usd": 50.0
+          },
+          "dispatchable": true,
+          "aliases": ["qa gate", "quality gate"]
+        },
+        "PULSE": {
+          "role": "compressor",
+          "purpose": "Context compression, session triage, summarization, support ops.",
+          "task_kind": "compress",
+          "kernel_role": "compressor",
+          "scopes": ["read", "compress", "triage"],
+          "budget": {
+            "max_per_run_usd": 0.2,
+            "max_per_day_usd": 2.0,
+            "max_per_month_usd": 40.0
+          },
+          "dispatchable": true,
+          "aliases": ["compressor", "triage specialist"]
+        }
+      }
+    },
+    "dev_team": {
+      "description": "Software delivery team preset for Meridian Team.",
+      "manager": {
+        "role": "manager_tech_lead",
+        "purpose": "Owns decomposition, sequencing, tradeoff decisions, and final software-delivery synthesis across the team.",
+        "task_kind": "manage",
+        "kernel_role": "manager",
+        "scopes": ["manage", "delegate", "deliver", "plan", "review"],
+        "budget": {
+          "max_per_run_usd": 1.0,
+          "max_per_day_usd": 10.0,
+          "max_per_month_usd": 200.0
+        },
+        "dispatchable": false,
+        "aliases": ["manager", "tech lead", "engineering lead", "team lead"]
+      },
+      "specialists": {
+        "ATLAS": {
+          "role": "architect",
+          "purpose": "Owns architecture, system design, migration strategy, interface contracts, and technical tradeoff analysis.",
+          "task_kind": "research",
+          "kernel_role": "analyst",
+          "scopes": ["research", "design", "analyze", "review"],
+          "budget": {
+            "max_per_run_usd": 0.6,
+            "max_per_day_usd": 6.0,
+            "max_per_month_usd": 120.0
+          },
+          "dispatchable": true,
+          "aliases": ["architect", "staff engineer", "system design", "architecture"]
+        },
+        "SENTINEL": {
+          "role": "security_reviewer",
+          "purpose": "Owns security review, risk analysis, authn/authz scrutiny, threat checks, and change-review skepticism.",
+          "task_kind": "verify",
+          "kernel_role": "verifier",
+          "scopes": ["verify", "audit", "security", "review"],
+          "budget": {
+            "max_per_run_usd": 0.35,
+            "max_per_day_usd": 3.5,
+            "max_per_month_usd": 60.0
+          },
+          "dispatchable": true,
+          "aliases": ["security reviewer", "security engineer", "appsec", "security review"]
+        },
+        "FORGE": {
+          "role": "backend_engineer",
+          "purpose": "Owns backend implementation, API/service changes, data-model evolution, refactors, and server-side delivery.",
+          "task_kind": "execute",
+          "kernel_role": "executor",
+          "scopes": ["execute", "write", "backend", "deploy"],
+          "budget": {
+            "max_per_run_usd": 0.55,
+            "max_per_day_usd": 5.5,
+            "max_per_month_usd": 110.0
+          },
+          "dispatchable": true,
+          "aliases": ["backend engineer", "backend", "api engineer", "server engineer"]
+        },
+        "QUILL": {
+          "role": "frontend_engineer",
+          "purpose": "Owns frontend/product-surface implementation, UX flows, UI polish, and user-facing delivery details.",
+          "task_kind": "execute",
+          "kernel_role": "executor",
+          "scopes": ["execute", "write", "frontend", "deliver"],
+          "budget": {
+            "max_per_run_usd": 0.5,
+            "max_per_day_usd": 5.0,
+            "max_per_month_usd": 100.0
+          },
+          "dispatchable": true,
+          "aliases": ["frontend engineer", "frontend", "ui engineer", "product surface engineer"]
+        },
+        "AEGIS": {
+          "role": "qa_reliability_engineer",
+          "purpose": "Owns test strategy, regression coverage, acceptance criteria, reliability checks, and release confidence.",
+          "task_kind": "qa_gate",
+          "kernel_role": "qa_gate",
+          "scopes": ["verify", "qa", "test", "reliability"],
+          "budget": {
+            "max_per_run_usd": 0.35,
+            "max_per_day_usd": 3.5,
+            "max_per_month_usd": 60.0
+          },
+          "dispatchable": true,
+          "aliases": ["qa engineer", "reliability engineer", "test engineer", "qa"]
+        },
+        "PULSE": {
+          "role": "platform_engineer",
+          "purpose": "Owns platform/devops work, CI/CD, observability, runtime hygiene, release readiness, and infrastructure execution.",
+          "task_kind": "execute",
+          "kernel_role": "executor",
+          "scopes": ["execute", "deploy", "observe", "triage", "platform"],
+          "budget": {
+            "max_per_run_usd": 0.45,
+            "max_per_day_usd": 4.5,
+            "max_per_month_usd": 90.0
+          },
+          "dispatchable": true,
+          "aliases": ["platform engineer", "devops engineer", "sre", "release engineer"]
+        }
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ from dataclasses import replace
 
 from team_topology import (
     DEFAULT_CODEX_BASE_URL,
+    DEFAULT_TEAM_PRESET,
     SPECIALIST_KEYS,
     _profile_json_for_agent,
     _resolve_codex_auth_path,
@@ -75,6 +76,7 @@ class TeamTopologyTests(unittest.TestCase):
     def test_load_team_topology_reads_meridian_env_defaults(self):
         topology = load_team_topology()
         self.assertEqual(topology.manager.name, "Leviathann")
+        self.assertEqual(topology.manager.role, "manager_tech_lead")
         self.assertEqual(topology.manager.profile_name, "manager_primary")
         self.assertIn(topology.manager.provider_kind, {"openai_codex", "openai_compatible"})
         self.assertEqual(len(topology.specialists), len(SPECIALIST_KEYS))
@@ -84,6 +86,12 @@ class TeamTopologyTests(unittest.TestCase):
         self.assertEqual(specialist_map["ATLAS"].profile_name, "research_frontier")
         self.assertEqual(specialist_map["SENTINEL"].profile_name, "verifier_frontier")
         self.assertEqual(specialist_map["FORGE"].profile_name, "executor_tooling")
+        self.assertEqual(specialist_map["ATLAS"].role, "architect")
+        self.assertEqual(specialist_map["FORGE"].role, "backend_engineer")
+        self.assertEqual(specialist_map["QUILL"].role, "frontend_engineer")
+        self.assertEqual(specialist_map["PULSE"].role, "platform_engineer")
+        self.assertEqual(specialist_map["AEGIS"].role, "qa_reliability_engineer")
+        self.assertEqual(specialist_map["SENTINEL"].role, "security_reviewer")
 
     def test_load_runtime_env_prefers_local_meridian_env_over_repo_defaults(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -103,6 +111,52 @@ class TeamTopologyTests(unittest.TestCase):
 
         self.assertEqual(runtime_env["MERIDIAN_AGENT_ATLAS_MODEL"], "local-model")
         self.assertEqual(runtime_env["MERIDIAN_LOOM_ROOT"], "/tmp/local-runtime")
+
+    def test_load_team_topology_supports_generic_team_preset_for_backward_compat(self):
+        topology = load_team_topology(env={"MERIDIAN_TEAM_PRESET": "generic_team"})
+        specialist_map = {agent.env_key: agent for agent in topology.specialists}
+        self.assertEqual(topology.manager.role, "manager")
+        self.assertEqual(specialist_map["ATLAS"].role, "analyst")
+        self.assertEqual(specialist_map["QUILL"].role, "writer")
+        self.assertEqual(specialist_map["PULSE"].role, "compressor")
+
+    def test_load_team_topology_applies_local_team_override_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            override_path = Path(tmpdir) / "team.json"
+            override_path.write_text(
+                __import__("json").dumps(
+                    {
+                        "preset": DEFAULT_TEAM_PRESET,
+                        "specialists": {
+                            "FORGE": {
+                                "role": "platform_engineer",
+                                "purpose": "Owns release automation and platform rollout.",
+                                "task_kind": "execute",
+                                "kernel_role": "executor",
+                                "scopes": ["execute", "deploy", "observe"],
+                                "budget": {
+                                    "max_per_run_usd": 0.9,
+                                    "max_per_day_usd": 9.0,
+                                    "max_per_month_usd": 90.0,
+                                },
+                                "aliases": ["release engineer"],
+                            }
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            topology = load_team_topology(
+                env={"MERIDIAN_TEAM_CONFIG_PATH": str(override_path)},
+            )
+
+        specialist_map = {agent.env_key: agent for agent in topology.specialists}
+        self.assertEqual(specialist_map["FORGE"].role, "platform_engineer")
+        self.assertEqual(specialist_map["FORGE"].purpose, "Owns release automation and platform rollout.")
+        self.assertEqual(specialist_map["FORGE"].scopes, ("execute", "deploy", "observe"))
+        self.assertEqual(specialist_map["FORGE"].budget["max_per_run_usd"], 0.9)
+        self.assertIn("release engineer", specialist_map["FORGE"].aliases)
 
     def test_load_team_topology_falls_back_to_manager_registry_record_on_name_drift(self):
         drifted_registry = {
@@ -178,7 +232,7 @@ class TeamTopologyTests(unittest.TestCase):
 
         self.assertEqual(topology.manager.registry_id, "agent_manager")
         self.assertEqual(topology.manager.name, "Leviathann")
-        self.assertEqual(topology.manager.role, "manager")
+        self.assertEqual(topology.manager.role, "manager_tech_lead")
 
     def test_sync_loom_team_profiles_registers_team_agents_in_kernel_registry(self):
         topology = load_team_topology()
@@ -195,6 +249,11 @@ class TeamTopologyTests(unittest.TestCase):
         self.assertEqual(payload["agents"]["agent_atlas"]["org_id"], "org_runtime")
         self.assertEqual(payload["agents"]["agent_atlas"]["economy_key"], "atlas")
         self.assertEqual(payload["agents"]["agent_sentinel"]["runtime_binding"]["runtime_id"], "loom_native")
+        self.assertEqual(payload["agents"]["agent_atlas"]["role"], "analyst")
+        self.assertEqual(payload["agents"]["agent_forge"]["role"], "executor")
+        self.assertEqual(payload["agents"]["agent_aegis"]["role"], "qa_gate")
+        self.assertEqual(payload["agents"]["agent_atlas"]["scopes"], ["research", "design", "analyze", "review"])
+        self.assertEqual(payload["agents"]["agent_pulse"]["budget"]["max_per_run_usd"], 0.45)
 
     def test_sync_loom_team_profiles_updates_runtime_loom_config(self):
         topology = load_team_topology()

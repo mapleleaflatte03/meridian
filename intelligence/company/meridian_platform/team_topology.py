@@ -15,8 +15,10 @@ PLATFORM_DIR = Path(__file__).resolve().parent
 WORKSPACE_DIR = PLATFORM_DIR.parent.parent
 MERIDIAN_HOME = WORKSPACE_DIR.parent
 REGISTRY_PATH = PLATFORM_DIR / "agent_registry.json"
+TEAM_PRESETS_PATH = PLATFORM_DIR / "config" / "team_presets.json"
 LOCAL_RUNTIME_ENV_FILE = Path.home() / ".meridian" / ".env"
 LOCAL_RUNTIME_GATEWAY_ENV_FILE = Path.home() / ".meridian" / ".env.gateway"
+LOCAL_TEAM_CONFIG_FILE = Path.home() / ".meridian" / "team.json"
 DEFAULT_ENV_FILES = (
     MERIDIAN_HOME / ".env",
     MERIDIAN_HOME / ".env.gateway",
@@ -38,6 +40,7 @@ DEFAULT_CODEX_HOME = Path(
 DEFAULT_LOOM_CODEX_AUTH_PATH = Path(".meridian/auth/codex/login-home/.codex/auth.json")
 DEFAULT_SHARED_CODEX_AUTH_PATH = Path(".codex/auth.json")
 DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api"
+DEFAULT_TEAM_PRESET = "dev_team"
 
 
 def _candidate_codex_auth_paths(runtime_env: dict[str, str] | None = None) -> tuple[Path, ...]:
@@ -154,6 +157,11 @@ class TeamAgent:
     api_key_env_var: str
     model: str
     task_kind: str
+    kernel_role: str
+    scopes: tuple[str, ...]
+    budget: dict[str, float]
+    aliases: tuple[str, ...]
+    dispatchable: bool = True
     manager_visible: bool = False
 
 
@@ -175,6 +183,141 @@ def _load_registry() -> dict[str, Any]:
     if not REGISTRY_PATH.exists():
         return {"agents": {}}
     return json.loads(REGISTRY_PATH.read_text(encoding="utf-8"))
+
+
+def _load_team_presets() -> dict[str, Any]:
+    if not TEAM_PRESETS_PATH.exists():
+        return {"schema_version": 1, "default_preset": DEFAULT_TEAM_PRESET, "presets": {}}
+    try:
+        payload = json.loads(TEAM_PRESETS_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {"schema_version": 1, "default_preset": DEFAULT_TEAM_PRESET, "presets": {}}
+    if not isinstance(payload, dict):
+        return {"schema_version": 1, "default_preset": DEFAULT_TEAM_PRESET, "presets": {}}
+    return payload
+
+
+def _load_local_team_config(runtime_env: dict[str, str]) -> dict[str, Any]:
+    explicit_path = str(runtime_env.get("MERIDIAN_TEAM_CONFIG_PATH") or "").strip()
+    path = Path(explicit_path) if explicit_path else LOCAL_TEAM_CONFIG_FILE
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _string_map(payload: Any) -> dict[str, Any]:
+    return payload if isinstance(payload, dict) else {}
+
+
+def _coerce_aliases(values: Any) -> tuple[str, ...]:
+    aliases: list[str] = []
+    for raw in values or []:
+        value = str(raw or "").strip()
+        if value and value not in aliases:
+            aliases.append(value)
+    return tuple(aliases)
+
+
+def _coerce_scopes(values: Any) -> tuple[str, ...]:
+    scopes: list[str] = []
+    for raw in values or []:
+        value = str(raw or "").strip()
+        if value and value not in scopes:
+            scopes.append(value)
+    return tuple(scopes)
+
+
+def _coerce_budget(values: Any) -> dict[str, float]:
+    payload = _string_map(values)
+    normalized: dict[str, float] = {}
+    for key in ("max_per_run_usd", "max_per_day_usd", "max_per_month_usd"):
+        try:
+            normalized[key] = float(payload.get(key))
+        except (TypeError, ValueError):
+            continue
+    return normalized
+
+
+def _team_role_payload(
+    preset_payload: dict[str, Any],
+    override_payload: dict[str, Any],
+    *,
+    env_key: str,
+    manager_visible: bool,
+) -> dict[str, Any]:
+    merged = dict(_string_map(preset_payload))
+    merged.update(_string_map(override_payload))
+    aliases = list(_coerce_aliases(preset_payload.get("aliases")))
+    for item in _coerce_aliases(override_payload.get("aliases")):
+        if item not in aliases:
+            aliases.append(item)
+    merged["aliases"] = tuple(aliases)
+    merged["scopes"] = _coerce_scopes(merged.get("scopes"))
+    merged["budget"] = _coerce_budget(merged.get("budget"))
+    merged["dispatchable"] = bool(merged.get("dispatchable", not manager_visible))
+    merged["manager_visible"] = manager_visible
+    merged["env_key"] = env_key
+    return merged
+
+
+def _resolve_team_semantics(runtime_env: dict[str, str]) -> dict[str, Any]:
+    catalog = _load_team_presets()
+    presets = _string_map(catalog.get("presets"))
+    local_config = _load_local_team_config(runtime_env)
+    preset_name = (
+        str(runtime_env.get("MERIDIAN_TEAM_PRESET") or "").strip()
+        or str(local_config.get("preset") or "").strip()
+        or str(catalog.get("default_preset") or DEFAULT_TEAM_PRESET).strip()
+        or DEFAULT_TEAM_PRESET
+    )
+    preset = _string_map(presets.get(preset_name))
+    if not preset:
+        preset_name = str(catalog.get("default_preset") or DEFAULT_TEAM_PRESET).strip() or DEFAULT_TEAM_PRESET
+        preset = _string_map(presets.get(preset_name))
+    fallback = _string_map(presets.get("generic_team"))
+    manager_defaults = _team_role_payload(
+        _string_map(_string_map(fallback).get("manager")),
+        _string_map(_string_map(preset).get("manager")),
+        env_key="MANAGER",
+        manager_visible=True,
+    )
+    manager_overrides = _team_role_payload(
+        manager_defaults,
+        _string_map(local_config.get("manager")),
+        env_key="MANAGER",
+        manager_visible=True,
+    )
+    specialist_defaults = _string_map(_string_map(fallback).get("specialists"))
+    preset_specialists = _string_map(_string_map(preset).get("specialists"))
+    local_specialists = _string_map(local_config.get("specialists"))
+    specialists: dict[str, dict[str, Any]] = {}
+    for key in SPECIALIST_KEYS:
+        specialist_base = _team_role_payload(
+            _string_map(specialist_defaults.get(key)),
+            _string_map(preset_specialists.get(key)),
+            env_key=key,
+            manager_visible=False,
+        )
+        specialists[key] = _team_role_payload(
+            specialist_base,
+            _string_map(local_specialists.get(key)),
+            env_key=key,
+            manager_visible=False,
+        )
+    return {
+        "preset": preset_name,
+        "manager": manager_overrides,
+        "specialists": specialists,
+        "config_path": str(
+            Path(str(runtime_env.get("MERIDIAN_TEAM_CONFIG_PATH") or "").strip())
+            if str(runtime_env.get("MERIDIAN_TEAM_CONFIG_PATH") or "").strip()
+            else LOCAL_TEAM_CONFIG_FILE
+        ),
+    }
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -308,12 +451,19 @@ def _make_agent(
     *,
     env_key: str,
     name: str,
+    role: str,
+    purpose: str,
     profile_name: str,
     provider_kind: str,
     base_url: str,
     api_key_env_var: str,
     model: str,
     task_kind: str,
+    kernel_role: str,
+    scopes: tuple[str, ...],
+    budget: dict[str, float],
+    aliases: tuple[str, ...],
+    dispatchable: bool,
     manager_visible: bool,
 ) -> TeamAgent:
     registry_id, record = _registry_agent_with_fallback(
@@ -325,8 +475,8 @@ def _make_agent(
         registry_id = f"agent_{_normalize_handle(name)}"
         record = {
             "name": name,
-            "role": task_kind,
-            "purpose": f"{name} ({env_key})",
+            "role": role,
+            "purpose": purpose or f"{name} ({env_key})",
             "economy_key": _normalize_handle(name),
         }
     return TeamAgent(
@@ -334,14 +484,19 @@ def _make_agent(
         registry_id=registry_id,
         handle=str(record.get("economy_key") or _normalize_handle(name)).strip() or _normalize_handle(name),
         name=name,
-        role=str(record.get("role") or "").strip(),
-        purpose=str(record.get("purpose") or "").strip(),
+        role=role.strip(),
+        purpose=purpose.strip(),
         profile_name=profile_name,
         provider_kind=provider_kind,
         base_url=(base_url or "").strip(),
         api_key_env_var=api_key_env_var,
         model=(model or "").strip(),
         task_kind=task_kind,
+        kernel_role=kernel_role.strip(),
+        scopes=scopes,
+        budget=budget,
+        aliases=aliases,
+        dispatchable=dispatchable,
         manager_visible=manager_visible,
     )
 
@@ -353,6 +508,7 @@ def load_team_topology(
 ) -> TeamTopology:
     runtime_env = load_runtime_env(env, env_files=env_files)
     registry = _load_registry()
+    semantics = _resolve_team_semantics(runtime_env)
     manager_name = (runtime_env.get("MERIDIAN_MANAGER_AGENT_NAME") or "Leviathann").strip() or "Leviathann"
     org_id = (runtime_env.get("MERIDIAN_LOOM_ORG_ID") or runtime_env.get("MERIDIAN_WORKSPACE_ORG_ID") or "org_48b05c21").strip()
     manager_profile_name = (
@@ -378,13 +534,20 @@ def load_team_topology(
         registry,
         env_key="MANAGER",
         name=manager_name,
+        role=str(semantics["manager"].get("role") or "manager"),
+        purpose=str(semantics["manager"].get("purpose") or "Manager and orchestrator."),
         profile_name=manager_profile_name,
         provider_kind=manager_transport,
         base_url=manager_base_url,
         api_key_env_var=manager_api_key_env_var,
         model=manager_model,
-        task_kind="manage",
-        manager_visible=True,
+        task_kind=str(semantics["manager"].get("task_kind") or "manage"),
+        kernel_role=str(semantics["manager"].get("kernel_role") or "manager"),
+        scopes=tuple(semantics["manager"].get("scopes") or ()),
+        budget=dict(semantics["manager"].get("budget") or {}),
+        aliases=tuple(semantics["manager"].get("aliases") or ()),
+        dispatchable=bool(semantics["manager"].get("dispatchable", False)),
+        manager_visible=bool(semantics["manager"].get("manager_visible", True)),
     )
     specialists: list[TeamAgent] = []
     for key in SPECIALIST_KEYS:
@@ -396,18 +559,26 @@ def load_team_topology(
         provider_kind = _provider_kind_for_env(runtime_env.get(f"MERIDIAN_AGENT_{key}_PROVIDER", ""))
         if not provider_kind:
             provider_kind = _default_provider_kind_for_profile(profile_name)
+        agent_semantics = dict((semantics.get("specialists") or {}).get(key) or {})
         specialists.append(
             _make_agent(
                 registry,
                 env_key=key,
                 name=name,
+                role=str(agent_semantics.get("role") or key.lower()),
+                purpose=str(agent_semantics.get("purpose") or f"{name} specialist."),
                 profile_name=profile_name,
                 provider_kind=provider_kind,
                 base_url=runtime_env.get(f"MERIDIAN_AGENT_{key}_BASE_URL", ""),
                 api_key_env_var=f"MERIDIAN_AGENT_{key}_API_KEY",
                 model=runtime_env.get(f"MERIDIAN_AGENT_{key}_MODEL", ""),
-                task_kind=SPECIALIST_TASK_DEFAULTS[key],
-                manager_visible=False,
+                task_kind=str(agent_semantics.get("task_kind") or SPECIALIST_TASK_DEFAULTS[key]),
+                kernel_role=str(agent_semantics.get("kernel_role") or ""),
+                scopes=tuple(agent_semantics.get("scopes") or ()),
+                budget=dict(agent_semantics.get("budget") or {}),
+                aliases=tuple(agent_semantics.get("aliases") or ()),
+                dispatchable=bool(agent_semantics.get("dispatchable", True)),
+                manager_visible=bool(agent_semantics.get("manager_visible", False)),
             )
         )
     return TeamTopology(org_id=org_id, manager=manager, specialists=tuple(specialists))
@@ -458,19 +629,29 @@ def _profile_json_for_agent(
 
 
 def _role_for_kernel_registry(agent: TeamAgent) -> str:
+    explicit = (agent.kernel_role or "").strip().lower()
+    if explicit:
+        return explicit
     value = (agent.role or agent.task_kind or "").strip().lower()
     mapping = {
         "manage": "manager",
         "manager": "manager",
+        "manager_tech_lead": "manager",
         "research": "analyst",
         "analyst": "analyst",
+        "architect": "analyst",
         "verify": "verifier",
         "verifier": "verifier",
+        "security_reviewer": "verifier",
         "execute": "executor",
         "executor": "executor",
+        "backend_engineer": "executor",
+        "frontend_engineer": "executor",
+        "platform_engineer": "executor",
         "write": "writer",
         "writer": "writer",
         "qa_gate": "qa_gate",
+        "qa_reliability_engineer": "qa_gate",
         "compress": "compressor",
         "compressor": "compressor",
     }
@@ -478,6 +659,8 @@ def _role_for_kernel_registry(agent: TeamAgent) -> str:
 
 
 def _default_scopes_for_agent(agent: TeamAgent) -> list[str]:
+    if agent.scopes:
+        return list(agent.scopes)
     role = _role_for_kernel_registry(agent)
     if role == "manager":
         return ["manage", "read", "delegate"]
@@ -497,6 +680,8 @@ def _default_scopes_for_agent(agent: TeamAgent) -> list[str]:
 
 
 def _default_budget_for_agent(agent: TeamAgent) -> dict[str, float]:
+    if agent.budget:
+        return dict(agent.budget)
     role = _role_for_kernel_registry(agent)
     if role == "manager":
         return {"max_per_run_usd": 1.0, "max_per_day_usd": 10.0, "max_per_month_usd": 200.0}
@@ -750,8 +935,8 @@ def _sync_kernel_agent_registry(
             "max_context_tokens": 200000,
             "max_output_tokens": 16000,
         }
-        existing["scopes"] = existing.get("scopes") or _default_scopes_for_agent(team_agent)
-        existing["budget"] = existing.get("budget") or _default_budget_for_agent(team_agent)
+        existing["scopes"] = _default_scopes_for_agent(team_agent)
+        existing["budget"] = _default_budget_for_agent(team_agent)
         existing["approval_required"] = bool(existing.get("approval_required", False))
         existing["rollout_state"] = str(existing.get("rollout_state") or "active")
         existing["runtime_binding"] = {
