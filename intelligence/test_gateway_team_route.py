@@ -1774,6 +1774,164 @@ Use this skill when the user gives a short prompt such as:
             )
         self.assertEqual([item['name'] for item in bundle['matches']], ['safe-web-research'])
 
+    def test_skill_bundle_drops_safe_web_research_for_explicit_specialist_request_without_url(self):
+        with mock.patch.object(
+            meridian_gateway.TEAM_SKILLS,
+            'search',
+            return_value=[
+                {'name': 'safe-web-research', 'description': 'safe url fetch', 'score': 12},
+            ],
+        ):
+            bundle = meridian_gateway._skill_bundle_for_request(
+                'Analyze the security implications of using FastAPI vs Django for a new API service. Have Atlas research performance benchmarks, Sentinel verify security best practices, and Forge provide implementation recommendations.',
+                'telegram:test-explicit-specialists',
+                manager_brief='Analyze the security implications of using FastAPI vs Django for a new API service.',
+                allow_create=True,
+            )
+        self.assertEqual(bundle['matches'], [])
+
+    def test_explicitly_requested_specialists_detects_named_workers(self):
+        self.assertEqual(
+            meridian_gateway._explicitly_requested_specialists(
+                'Have Atlas research, Sentinel verify security, and Forge provide implementation recommendations.'
+            ),
+            ['ATLAS', 'SENTINEL', 'FORGE'],
+        )
+
+    def test_trim_history_context_keeps_recent_lines_within_budget(self):
+        text = "\n".join(
+            [
+                "user: first",
+                "assistant: " + ("a" * 300),
+                "user: second",
+                "assistant: " + ("b" * 300),
+            ]
+        )
+        trimmed = meridian_gateway._trim_history_context(text, max_chars=340)
+        self.assertIn("user: second", trimmed)
+        self.assertIn("assistant: " + ("b" * 300), trimmed)
+        self.assertNotIn("user: first", trimmed)
+
+    def test_specialist_history_context_is_empty_for_explicit_specialist_request(self):
+        with mock.patch.object(
+            meridian_gateway,
+            '_full_session_history_context',
+            return_value='user: old\nassistant: long prior answer',
+        ):
+            context = meridian_gateway._specialist_history_context(
+                'Have Atlas research performance benchmarks, Sentinel verify security best practices, and Forge provide implementation recommendations.',
+                'telegram:test-explicit-specialists',
+                {'reason': 'planner'},
+            )
+        self.assertEqual(context, '')
+
+    def test_run_specialist_step_respects_explicit_empty_skill_plan(self):
+        specialist = next(agent for agent in meridian_gateway.TEAM_TOPOLOGY.specialists if agent.env_key == 'SENTINEL')
+        request = (
+            'Analyze the security implications of using FastAPI vs Django for a new API service. '
+            'Have Atlas research performance benchmarks, Sentinel verify security best practices, '
+            'and Forge provide implementation recommendations.'
+        )
+        loom_result = {
+            'ok': False,
+            'error': 'loom timeout',
+            'worker_result': {'host_response_json': {'output_text': '', 'decision': 'allowed', 'note': ''}},
+            'warnings': [],
+        }
+        fallback_result = {
+            'ok': True,
+            'output_text': '{"result":"sentinel ok","confidence":"high","citations":[],"warnings":[]}',
+            'note': 'direct provider fallback note',
+        }
+        with mock.patch.object(meridian_gateway.TEAM_SKILLS, 'search', return_value=[{'name': 'safe-web-research'}]) as search_mock:
+            with mock.patch.object(meridian_gateway.mcp_server, '_loom_runtime_context', return_value={}):
+                with mock.patch.object(meridian_gateway.mcp_server, '_shared_run_loom_capability', return_value=loom_result):
+                    with mock.patch.object(meridian_gateway.mcp_server, '_specialist_direct_provider_fallback', return_value=fallback_result):
+                        with mock.patch.object(meridian_gateway, 'append_session_event'):
+                            receipt = meridian_gateway._run_specialist_step(
+                                'SENTINEL',
+                                request,
+                                'telegram:test-explicit-specialists',
+                                {'manager_brief': request, 'skills': []},
+                            )
+        self.assertEqual(receipt['status'], 'ok')
+        self.assertEqual(receipt['skills_used'], [])
+        search_mock.assert_not_called()
+        self.assertEqual(receipt['transport_kind'], 'direct_provider_http_fallback')
+
+    def test_run_specialist_step_uses_compact_prompt_for_explicit_specialist_request(self):
+        request = (
+            'Analyze the security implications of using FastAPI vs Django for a new API service. '
+            'Have Atlas research performance benchmarks, Sentinel verify security best practices, '
+            'and Forge provide implementation recommendations.'
+        )
+        loom_result = {
+            'ok': False,
+            'error': 'loom timeout',
+            'worker_result': {'host_response_json': {'output_text': '', 'decision': 'allowed', 'note': ''}},
+            'warnings': [],
+        }
+        fallback_result = {
+            'ok': True,
+            'output_text': '{"result":"forge ok","confidence":"high","citations":[],"warnings":[]}',
+            'note': 'direct provider fallback note',
+        }
+        with mock.patch.object(meridian_gateway.mcp_server, '_loom_runtime_context', return_value={}):
+            with mock.patch.object(meridian_gateway.mcp_server, '_shared_run_loom_capability', return_value=loom_result):
+                with mock.patch.object(meridian_gateway.mcp_server, '_specialist_direct_provider_fallback', return_value=fallback_result) as fallback_mock:
+                    with mock.patch.object(meridian_gateway, 'append_session_event'):
+                        meridian_gateway._run_specialist_step(
+                            'FORGE',
+                            request,
+                            'telegram:test-explicit-specialists',
+                            {'manager_brief': request, 'skills': []},
+                        )
+        prompt = fallback_mock.call_args.kwargs['user_prompt']
+        self.assertIn("Provide only Forge's contribution.", prompt)
+        self.assertNotIn('Relevant internal skills:', prompt)
+        self.assertNotIn('Governed memory recall:', prompt)
+
+    def test_prefer_direct_provider_first_for_explicit_sentinel_and_forge_request(self):
+        request = (
+            'Analyze the security implications of using FastAPI vs Django for a new API service. '
+            'Have Atlas research performance benchmarks, Sentinel verify security best practices, '
+            'and Forge provide implementation recommendations.'
+        )
+        self.assertTrue(meridian_gateway._prefer_direct_provider_first('SENTINEL', request, []))
+        self.assertTrue(meridian_gateway._prefer_direct_provider_first('FORGE', request, []))
+        self.assertFalse(meridian_gateway._prefer_direct_provider_first('ATLAS', request, []))
+
+    def test_specialist_output_needs_retry_for_reasoning_leak(self):
+        self.assertTrue(meridian_gateway._specialist_output_needs_retry('<think>internal</think>', None))
+        self.assertTrue(meridian_gateway._specialist_output_needs_retry('Let me think through this first.', None))
+        self.assertFalse(
+            meridian_gateway._specialist_output_needs_retry(
+                '{"result":"ok","confidence":"high","citations":[],"warnings":[]}',
+                {'result': 'ok'},
+            )
+        )
+
+    def test_normalize_reasoning_leak_locally_extracts_substantive_sentences(self):
+        text = (
+            '<think>Okay, I need to analyze this. '
+            'Django has built-in CSRF protection and mature authentication primitives. '
+            'FastAPI relies more on external libraries and explicit middleware configuration. '
+            'Let me think about community support. '
+            'Django has stronger documentation and a larger security ecosystem.'
+        )
+        normalized = meridian_gateway._normalize_reasoning_leak_locally(text)
+        self.assertIn('Django has built-in CSRF protection', normalized)
+        self.assertIn('FastAPI relies more on external libraries', normalized)
+        self.assertNotIn('Okay, I need to analyze this', normalized)
+        self.assertNotIn('Let me think', normalized)
+
+    def test_strip_leading_think_block_returns_final_answer_tail(self):
+        text = "<think>internal reasoning</think>\n\n{\"result\":\"ok\",\"confidence\":\"0.8\",\"citations\":[],\"warnings\":[]}"
+        self.assertEqual(
+            meridian_gateway._strip_leading_think_block(text),
+            "{\"result\":\"ok\",\"confidence\":\"0.8\",\"citations\":[],\"warnings\":[]}",
+        )
+
     def test_skill_bundle_isolates_customer_research_from_protocol_like_skill(self):
         with mock.patch.object(
             meridian_gateway.TEAM_SKILLS,
