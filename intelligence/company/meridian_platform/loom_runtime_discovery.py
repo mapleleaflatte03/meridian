@@ -91,6 +91,8 @@ def run_loom_json(subcmd: list[str], extra: Optional[list[str]] = None,
         )
     except FileNotFoundError:
         return {"ok": False, "error": f"loom binary not found: {cmd[0]}"}
+    except PermissionError:
+        return {"ok": False, "error": f"loom binary permission denied: {cmd[0]}"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "error": f"timeout after {timeout}s"}
 
