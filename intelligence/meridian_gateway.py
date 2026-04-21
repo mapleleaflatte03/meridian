@@ -214,7 +214,7 @@ LLM_BASE_URL = ""
 LLM_MODEL = ""
 LLM_API_KEY = ""
 TEAM_TOPOLOGY = load_team_topology()
-sync_loom_team_profiles(TEAM_TOPOLOGY, loom_root=LOOM_ROOT)
+sync_loom_team_profiles(TEAM_TOPOLOGY, loom_root=LOOM_ROOT, org_id=LOOM_ORG_ID)
 TEAM_MANAGER_AGENT_ID = TEAM_TOPOLOGY.manager.registry_id
 MEMORY_RECALL_AGENT_ID = os.environ.get("MERIDIAN_MEMORY_AGENT_ID", TEAM_MANAGER_AGENT_ID)
 SKILL_VALIDATOR = Path("/home/ubuntu/.codex/skills/.system/skill-creator/scripts/quick_validate.py")
@@ -248,39 +248,93 @@ MEMORY_LOW_VALUE_EVICT_THRESHOLD = int(os.environ.get("MERIDIAN_MEMORY_LOW_VALUE
 MEMORY_RECALL_ARTIFACT_VERSION = "compressed_recall_v1"
 SKILL_STOPWORDS = {
     "a",
+    "about",
+    "affect",
+    "affected",
+    "also",
     "an",
     "and",
+    "any",
+    "api",
     "are",
     "as",
+    "asks",
     "at",
     "be",
+    "been",
     "by",
+    "can",
     "cho",
+    "could",
     "cua",
+    "do",
+    "does",
     "for",
     "from",
+    "get",
+    "has",
+    "have",
+    "help",
+    "helps",
     "how",
     "i",
+    "if",
     "in",
     "into",
     "is",
     "it",
+    "its",
+    "just",
+    "like",
     "me",
+    "more",
     "my",
+    "need",
+    "needs",
+    "not",
     "of",
     "on",
     "or",
+    "other",
     "please",
+    "requires",
     "show",
+    "so",
+    "some",
+    "such",
+    "than",
     "that",
     "the",
+    "their",
+    "them",
+    "then",
+    "there",
+    "these",
+    "they",
     "this",
     "toi",
     "to",
     "today",
+    "use",
+    "used",
+    "user",
+    "uses",
+    "using",
+    "want",
+    "wants",
+    "was",
     "we",
+    "when",
+    "where",
+    "which",
+    "while",
+    "who",
+    "will",
     "with",
+    "without",
+    "would",
     "you",
+    "your",
 }
 SKILL_WORKER_HINTS = {
     "ai-intelligence": ["ATLAS", "QUILL", "AEGIS"],
@@ -633,6 +687,36 @@ def _team_route_fallback(agent_id: str) -> dict[str, Any]:
         "auth_mode": _profile_auth_mode(specialist.provider_kind),
         "execution_owner": "meridian",
     }
+
+
+def _loom_runtime_agent_ids() -> set[str]:
+    registry_path = Path(LOOM_ROOT) / "agents" / "registry.json"
+    try:
+        payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    agent_ids: set[str] = set()
+    for record in list(payload.get("agents") or []):
+        if not isinstance(record, dict):
+            continue
+        agent_id = str(record.get("agent_id") or "").strip().lower()
+        if agent_id:
+            agent_ids.add(agent_id)
+    return agent_ids
+
+
+def _loom_execution_agent_id(agent_id: str) -> str:
+    specialist = TEAM_TOPOLOGY.specialist_by_id(agent_id)
+    if specialist is None:
+        return str(agent_id or "").strip()
+    runtime_agent_ids = _loom_runtime_agent_ids()
+    handle = str(specialist.handle or "").strip()
+    registry_id = str(specialist.registry_id or "").strip()
+    if handle and (not runtime_agent_ids or handle.lower() in runtime_agent_ids):
+        return handle
+    if registry_id and (not runtime_agent_ids or registry_id.lower() in runtime_agent_ids):
+        return registry_id
+    return handle or registry_id
 
 
 def _loom_manager_defaults() -> dict[str, str]:
@@ -1432,11 +1516,29 @@ def _worker_is_restricted(agent_key: str) -> bool:
 
 
 def _normalize_worker_selection(workers: list[str], text: str) -> list[str]:
+    # Check if specialists are explicitly requested in the text
+    text_lower = str(text or "").lower()
+    explicitly_requested = {
+        "atlas": "ATLAS" in text_lower,
+        "sentinel": "sentinel" in text_lower,
+        "forge": "forge" in text_lower,
+        "quill": "quill" in text_lower,
+        "aegis": "aegis" in text_lower,
+        "pulse": "pulse" in text_lower,
+    }
+    
     ordered: list[str] = []
     for worker in workers:
         value = str(worker or "").strip().upper()
         if value not in SPECIALIST_KEYS or value in ordered:
             continue
+        
+        # Bypass restrictions if specialist is explicitly requested
+        worker_key = value.lower()
+        if explicitly_requested.get(worker_key, False):
+            ordered.append(value)
+            continue
+            
         if _worker_is_restricted(value):
             if value == "SENTINEL" and "AEGIS" not in ordered and not _worker_is_restricted("AEGIS"):
                 ordered.append("AEGIS")
@@ -2128,6 +2230,10 @@ def _request_wants_research_writer(text: str) -> bool:
 
 def _refine_skill_routed_workers(request: str, matched_skills: list[dict[str, Any]], workers: list[str]) -> list[str]:
     lowered_skills = {str(item.get("name") or "").strip().lower() for item in matched_skills}
+    explicitly_requested = _explicitly_requested_specialists(request)
+    if explicitly_requested:
+        return _normalize_worker_selection(explicitly_requested, request)
+    
     selected = _normalize_worker_selection(workers, request)
     if _request_wants_protocol_artifact(request) or any("protocol" in name for name in lowered_skills):
         return _normalize_worker_selection(["QUILL", "AEGIS"], request)
@@ -2163,7 +2269,7 @@ def _specialist_timeout_for_request(agent_key: str, request: str, skills_used: l
     if agent_key == "ATLAS" and _request_is_customer_research(request, skills_used):
         return 30
     if agent_key == "SENTINEL":
-        return 10
+        return 60
     if agent_key == "QUILL" and (
         _request_wants_protocol_artifact(request)
         or any("protocol" in name for name in lowered_skills)
@@ -2205,6 +2311,9 @@ def _prefer_direct_provider_first(agent_key: str, request: str, skills_used: lis
         for name in lowered_skills
     )
     assurance_lane = _request_is_security_questionnaire(request, skills_used)
+    explicit_specialist_lane = bool(_explicitly_requested_specialists(request))
+    if explicit_specialist_lane and agent_key in {"SENTINEL", "FORGE"}:
+        return True
     return agent_key in {"QUILL", "AEGIS"} and (
         bool(lowered_skills.intersection(fast_lane_skills))
         or any("follow" in name for name in lowered_skills)
@@ -2614,7 +2723,7 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
             "skills": skill_bundle["matches"],
             "routing_score": routing_score,
         }
-    history_context = imported_history_context(session_key, loom_root=LOOM_ROOT, limit=24)
+    history_context = _full_session_history_context(session_key, limit=24)
     manager = _loom_manager_defaults()
     plan = _run_codex_exec(
         system_prompt=(
@@ -2625,6 +2734,9 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
             "workers must be an array containing zero or more of: ATLAS, SENTINEL, FORGE, QUILL, AEGIS, PULSE. "
             "depth must be quick, standard, or deep. criteria must be factual, readiness, or consistency. "
             "manager_brief must be a concise execution brief for specialists.\n\n"
+            "CRITICAL: Prefer direct answers for simple factual questions, version numbers, basic definitions, or any query that can be answered from training knowledge. "
+            "Only use team mode when: 1) Multiple specialists are explicitly requested, 2) Complex synthesis is needed, 3) Live web research is required, 4) Multiple tools/capabilities must be coordinated. "
+            "Do NOT over-justify team execution with claims of 'real-time verification' for basic factual questions.\n\n"
             "Specialists:\n"
             f"{_team_specialist_catalog()}\n\n"
             "Available reusable skills:\n"
@@ -2699,6 +2811,48 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
     }
 
 
+def _full_session_history_context(session_key: str, *, limit: int = 24) -> str:
+    imported = imported_history_context(session_key, loom_root=LOOM_ROOT, limit=limit)
+    live_doc = load_session_events(session_key, loom_root=LOOM_ROOT) or {}
+    live_events = [
+        e for e in list(live_doc.get("events") or [])
+        if e.get("history_type") in {"manager_plan", "manager_response", "worker_receipt"}
+        and str(e.get("text") or "").strip()
+    ]
+    if not live_events:
+        return imported
+    live_lines: list[str] = []
+    for e in live_events[-(limit):]:
+        speaker = "user" if e.get("history_type") == "manager_plan" else "assistant"
+        text = str(e.get("text") or "").strip()
+        if text:
+            live_lines.append(f"{speaker}: {text}")
+    live_block = "\n".join(live_lines).strip()
+    if imported and live_block:
+        return f"{imported}\n{live_block}"
+    return live_block or imported
+
+
+def _trim_history_context(text: str, *, max_chars: int) -> str:
+    content = str(text or "").strip()
+    if len(content) <= max_chars:
+        return content
+    kept: list[str] = []
+    total = 0
+    for line in reversed(content.splitlines()):
+        line = line.strip()
+        if not line:
+            continue
+        projected = total + len(line) + (1 if kept else 0)
+        if projected > max_chars:
+            break
+        kept.append(line)
+        total = projected
+    if not kept:
+        return content[-max_chars:].strip()
+    return "\n".join(reversed(kept)).strip()
+
+
 def _manager_direct_response(goal: str, session_key: str, plan: dict[str, Any] | None = None) -> str:
     manager_defaults = _loom_manager_defaults()
     manager_meta = _manager_exec_metadata(manager_defaults.get("model", ""))
@@ -2717,7 +2871,7 @@ def _manager_direct_response(goal: str, session_key: str, plan: dict[str, Any] |
             "execution_owner": "meridian",
         }, loom_root=LOOM_ROOT)
         return answer
-    history_context = imported_history_context(session_key, loom_root=LOOM_ROOT, limit=24)
+    history_context = _full_session_history_context(session_key, limit=24)
     memory_context = _memory_context_block(dict(plan or {}).get("memory_packet"))
     trust_evidence_context = _trust_evidence_context_block(dict(plan or {}).get("trust_evidence_packet"))
     result = _run_codex_exec(
@@ -2773,6 +2927,8 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
     specialist = next(agent for agent in TEAM_TOPOLOGY.specialists if agent.env_key == agent_key)
     specialist_role = _specialist_role_label(specialist)
     specialist_purpose = _specialist_purpose_label(specialist)
+    runtime_agent_id = _loom_execution_agent_id(specialist.registry_id)
+    explicit_specialists = _explicitly_requested_specialists(request)
     def _safe_runtime_context() -> Any:
         try:
             return mcp_server._loom_runtime_context()  # type: ignore[attr-defined]
@@ -2781,8 +2937,10 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
     context_block = _specialist_history_context(request, session_key, plan)
     verified_facts = plan.get("verified_facts")
     verified_facts_block = json.dumps(verified_facts, indent=2, ensure_ascii=False) if isinstance(verified_facts, dict) else "(none)"
-    plan_skills = plan.get("skills") if isinstance(plan.get("skills"), list) else []
-    matched_skills = [dict(item) for item in plan_skills if isinstance(item, dict)] or TEAM_SKILLS.search(request, limit=2)
+    if isinstance(plan.get("skills"), list):
+        matched_skills = [dict(item) for item in list(plan.get("skills") or []) if isinstance(item, dict)]
+    else:
+        matched_skills = TEAM_SKILLS.search(request, limit=2)
     skill_guidance_block = TEAM_SKILLS.guidance_block(matched_skills)
     skill_execution_addendum = _skill_specific_execution_addendum(request, matched_skills)
     skills_used = [str(item.get("name") or "").strip() for item in matched_skills if str(item.get("name") or "").strip()]
@@ -3051,45 +3209,78 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
         }, loom_root=LOOM_ROOT)
         return receipt
 
-    prompt = textwrap.dedent(
-        f"""
-        You are {specialist.name}, Meridian's {specialist_role}.
-        Purpose: {specialist_purpose}
-        Manager brief: {str(plan.get('manager_brief') or request).strip()}
-        Verified Meridian host facts (treat these as the only trusted factual baseline):
-        {verified_facts_block}
-        Shared council context pack:
-        {council_context_block or '(none)'}
-        Your council role in this meeting:
-        {council_role_block or '(none)'}
-        Relevant internal skills:
-        {skill_guidance_block or '(none)'}
-        Execution constraints for this request:
-        {skill_execution_addendum or '(none)'}
-        Conversation continuity:
-        {context_block or '(none)'}
-        Governed memory recall:
-        {memory_context_block or '(none)'}
-        Governed trust evidence:
-        {trust_evidence_context_block or '(none)'}
+    if explicit_specialists:
+        prompt = textwrap.dedent(
+            f"""
+            You are {specialist.name}, Meridian's {specialist_role}.
+            Purpose: {specialist_purpose}
+            Manager brief: {str(plan.get('manager_brief') or request).strip()}
+            User request: {request.strip()}
+            Provide only {specialist.name}'s contribution. Do not restate or simulate the other specialists.
+            Keep the result concise, concrete, and directly usable by the manager synthesis step.
+            Verified Meridian host facts:
+            {verified_facts_block}
+            Return strict JSON only with keys:
+            result, confidence, citations, warnings.
+            Do not include markdown fences.
+            Do not include chain-of-thought or <think> blocks.
+            """
+        ).strip()
+    else:
+        prompt = textwrap.dedent(
+            f"""
+            You are {specialist.name}, Meridian's {specialist_role}.
+            Purpose: {specialist_purpose}
+            Manager brief: {str(plan.get('manager_brief') or request).strip()}
+            Verified Meridian host facts (treat these as the only trusted factual baseline):
+            {verified_facts_block}
+            Shared council context pack:
+            {council_context_block or '(none)'}
+            Your council role in this meeting:
+            {council_role_block or '(none)'}
+            Relevant internal skills:
+            {skill_guidance_block or '(none)'}
+            Execution constraints for this request:
+            {skill_execution_addendum or '(none)'}
+            Conversation continuity:
+            {context_block or '(none)'}
+            Governed memory recall:
+            {memory_context_block or '(none)'}
+            Governed trust evidence:
+            {trust_evidence_context_block or '(none)'}
 
-        User request:
-        {request.strip()}
+            User request:
+            {request.strip()}
 
-        If the request is underspecified, do not invent recipients, attendees, email addresses, dates, exact times,
-        locations, availability, or confirmation state. Return the closest executable draft with placeholders or
-        explicit draft/unknown markers, and list the missing fields in warnings.
-        Return strict JSON only with keys:
-        result, confidence, citations, warnings.
-        Do not introduce governance facts, citations, controls, or delivery claims that are not supported by the verified facts above.
-        """
-    ).strip()
+            If the request is underspecified, do not invent recipients, attendees, email addresses, dates, exact times,
+            locations, availability, or confirmation state. Return the closest executable draft with placeholders or
+            explicit draft/unknown markers, and list the missing fields in warnings.
+            Return strict JSON only with keys:
+            result, confidence, citations, warnings.
+            Do not introduce governance facts, citations, controls, or delivery claims that are not supported by the verified facts above.
+            """
+        ).strip()
     specialist_timeout = _specialist_timeout_for_request(specialist.env_key, request, skills_used)
     specialist_max_tokens = 900
+    if specialist.env_key == "SENTINEL":
+        specialist_max_tokens = 450
     if skill_execution_addendum and specialist.env_key == "QUILL":
         specialist_max_tokens = 420
     direct_fallback = None
     fallback_warning = ""
+    compact_fallback_prompt = textwrap.dedent(
+        f"""
+        User request:
+        {request.strip()}
+
+        Return strict JSON only with keys:
+        result, confidence, citations, warnings.
+
+        Keep result concise and directly usable.
+        Do not include chain-of-thought or <think> blocks.
+        """
+    ).strip()
+    explicit_specialist_lane = bool(explicit_specialists)
     if _prefer_direct_provider_first(specialist.env_key, request, skills_used):
         direct_provider_timeout = _direct_provider_timeout_for_request(
             specialist.env_key,
@@ -3108,9 +3299,15 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
             loom_result = {
                 "ok": True,
                 "job_id": "",
-                "warnings": ["Fast direct provider lane used for low-latency communication skill."],
+                "warnings": [
+                    (
+                        "Direct provider lane used for explicit specialist request."
+                        if explicit_specialist_lane and specialist.env_key in {"SENTINEL", "FORGE"}
+                        else "Fast direct provider lane used for low-latency communication skill."
+                    )
+                ],
             }
-            fallback_warning = "Fast direct provider lane used for low-latency communication skill."
+            fallback_warning = loom_result["warnings"][0]
         else:
             direct_fallback = None
             loom_timeout = max(8, specialist_timeout - min(direct_provider_timeout, max(specialist_timeout - 6, 0)))
@@ -3125,7 +3322,7 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
                     "max_tokens": specialist_max_tokens,
                 },
                 timeout=loom_timeout,
-                agent_id=specialist.registry_id,
+                agent_id=runtime_agent_id,
                 session_id=session_key,
                 action_type=specialist.task_kind,
                 resource=session_key,
@@ -3142,7 +3339,7 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
                 "max_tokens": specialist_max_tokens,
             },
             timeout=specialist_timeout,
-            agent_id=specialist.registry_id,
+            agent_id=runtime_agent_id,
             session_id=session_key,
             action_type=specialist.task_kind,
             resource=session_key,
@@ -3157,26 +3354,42 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
     host_decision = str(host_response.get("decision") or "").strip().lower() if isinstance(host_response, dict) else ""
     host_note = str(host_response.get("note") or "").strip() if isinstance(host_response, dict) else ""
     if direct_fallback and direct_fallback.get("ok") and str(direct_fallback.get("output_text") or "").strip():
-        output_text = str(direct_fallback.get("output_text") or "").strip()
+        output_text = _strip_leading_think_block(str(direct_fallback.get("output_text") or "").strip())
         host_note = str(direct_fallback.get("note") or host_note)
     payload = _extract_json(output_text) if output_text else None
-    if specialist.env_key in {"ATLAS", "QUILL", "PULSE"} and (not output_text or host_decision == "denied" or not loom_result.get("ok")):
-        recovery_timeout = min(12, max(6, specialist_timeout // 3))
+    loom_error = str(loom_result.get("error") or "").strip()
+    if specialist.env_key in {"ATLAS", "QUILL", "PULSE", "SENTINEL", "FORGE"} and (
+        not output_text
+        or host_decision == "denied"
+        or not loom_result.get("ok")
+        or "Not found:" in output_text
+        or "Not found:" in loom_error
+        or "Loom service submit failed" in output_text
+        or _specialist_output_needs_retry(output_text, payload)
+    ):
+        recovery_timeout = min(20, max(8, specialist_timeout // 3))
+        fallback_prompt = compact_fallback_prompt if specialist.env_key == "SENTINEL" else prompt
         direct_fallback = mcp_server._specialist_direct_provider_fallback(  # type: ignore[attr-defined]
             specialist.registry_id,
             system_prompt=f"You are {specialist.name}. {specialist_purpose}",
-            user_prompt=prompt,
-            max_tokens=specialist_max_tokens,
+            user_prompt=fallback_prompt,
+            max_tokens=500 if specialist.env_key == "SENTINEL" else specialist_max_tokens,
             timeout=recovery_timeout,
         )
         if direct_fallback.get("ok") and str(direct_fallback.get("output_text") or "").strip():
-            output_text = str(direct_fallback.get("output_text") or "").strip()
+            output_text = _strip_leading_think_block(str(direct_fallback.get("output_text") or "").strip())
             payload = _extract_json(output_text) if output_text else None
             fallback_warning = host_note or "Loom host call returned an empty specialist response; direct provider fallback recovered output."
             host_note = str(direct_fallback.get("note") or host_note)
         elif not loom_result.get("error") and host_note:
             loom_result = dict(loom_result)
             loom_result["error"] = host_note
+    if _specialist_output_needs_retry(output_text, payload):
+        normalized_text = _normalize_reasoning_leak_locally(output_text)
+        if normalized_text:
+            output_text = normalized_text
+            payload = _extract_json(normalized_text) if normalized_text else None
+            fallback_warning = fallback_warning or "specialist reasoning leak normalized locally into final artifact"
     warnings = (payload or {}).get("warnings") if isinstance((payload or {}).get("warnings"), list) else []
     loom_warnings = loom_result.get("warnings") if isinstance(loom_result.get("warnings"), list) else []
     if loom_warnings:
@@ -3193,6 +3406,7 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
         transport_kind = "loom_direct_action_execute"
     else:
         transport_kind = "loom_capability"
+    warnings = list(dict.fromkeys([item for item in warnings if str(item).strip()]))
     result_text = str((payload or {}).get("result") or output_text or loom_result.get("error") or "").strip()
     lowered_skill_names = {str(item).strip().lower() for item in skills_used}
     if specialist.env_key == "QUILL" and skills_used and (
@@ -3319,7 +3533,7 @@ def _manager_synthesis(goal: str, session_key: str, steps: list[dict[str, Any]],
         }, loom_root=LOOM_ROOT)
         return fastpath_artifact
 
-    history_context = imported_history_context(session_key, loom_root=LOOM_ROOT, limit=24)
+    history_context = _full_session_history_context(session_key, limit=24)
     cleaned_steps = _manager_step_view(steps)
     verified_facts = {}
     if isinstance(plan, dict) and isinstance(plan.get("verified_facts"), dict):
@@ -3668,7 +3882,25 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
             loom_root=LOOM_ROOT,
         )
     delivery_event_id = str(dict(delivery_event or {}).get("event_id") or "")
-    score_summary = _score_user_session_delivery(session_key, delivery_event_id)
+    try:
+        score_summary = _score_user_session_delivery(session_key, delivery_event_id)
+    except Exception as exc:
+        _log(f"user-session scoring warning for {session_key}: {exc}", color=ANSI_YELLOW)
+        append_session_event(
+            session_key,
+            {
+                "history_type": "economy_score_update",
+                "status": "failed",
+                "agent_id": TEAM_MANAGER_AGENT_ID,
+                "speaker": "manager",
+                "text": f"User-session economy scoring failed for {session_key}.",
+                "skills_used": skill_names,
+                "warnings": [f"{exc.__class__.__name__}: {exc}"],
+                "source_label": "live_user_session_scoring",
+            },
+            loom_root=LOOM_ROOT,
+        )
+        score_summary = None
     if score_summary:
         append_session_event(
             session_key,
@@ -3865,7 +4097,6 @@ class SkillRegistry:
                             sorted(
                                 self._tokenize(name)
                                 | self._tokenize(description)
-                                | self._tokenize(excerpt)
                                 | set(SKILL_ALIAS_HINTS.get(name.lower(), set()))
                             )
                         ),
@@ -3899,8 +4130,21 @@ class SkillRegistry:
             if description and description in lowered:
                 score += 4
             category = str(item.get("category") or "").strip().lower()
+            has_signal = bool(overlap) or bool(alias_hits) or (name and name in lowered)
+            
+            # Special case: prevent security-questionnaire from matching planning tasks
+            if name == "security-questionnaire":
+                planning_exclusions = (
+                    "migration plan", "implementation plan", "comprehensive plan",
+                    "step by step", "create a plan", "migration strategy",
+                    "implementation strategy", "roadmap"
+                )
+                if any(exclusion in lowered for exclusion in planning_exclusions):
+                    score = 0
+                    continue
+            
             if category:
-                if category == request_category:
+                if category == request_category and has_signal:
                     score += 4
                 elif bool(item.get("autogenerated")) and request_category != "general":
                     score -= 6
@@ -4244,6 +4488,17 @@ def _extract_request_url(text: str) -> str:
     return str(match.group(0) or "").strip() if match else ""
 
 
+def _explicitly_requested_specialists(request: str) -> list[str]:
+    lowered = str(request or "").strip().lower()
+    if not lowered:
+        return []
+    requested: list[str] = []
+    for name in ("atlas", "sentinel", "forge", "quill", "aegis", "pulse"):
+        if re.search(rf"\b{name}\b", lowered):
+            requested.append(name.upper())
+    return requested
+
+
 def _request_prefers_safe_web_research(text: str) -> bool:
     lowered = str(text or "").strip().lower()
     if not lowered:
@@ -4282,8 +4537,11 @@ def _specialist_history_context(request: str, session_key: str, plan: dict[str, 
     reason = str(plan.get("reason") or "").strip()
     if reason == "skill_routed_request" and (_short_prompt_skill_candidate(request) or _autonomy_skill_candidate(request)):
         return ""
+    if _explicitly_requested_specialists(request):
+        return ""
     limit = 12 if reason == "skill_routed_request" else 20
-    return imported_history_context(session_key, loom_root=LOOM_ROOT, limit=limit)
+    max_chars = 2400 if _explicitly_requested_specialists(request) else 4000
+    return _trim_history_context(_full_session_history_context(session_key, limit=limit), max_chars=max_chars)
 
 
 def _load_skill_quality_state() -> dict[str, Any]:
@@ -5198,6 +5456,49 @@ def _extract_request_user_fact_entries(request: str, session_key: str) -> list[d
                     "source_recorded_at": _memory_now_iso(),
                 }
             )
+    # "remember: ..." explicit user fact
+    remember_match = re.match(r"^remember\s*[:\-]\s*(.+)$", text, re.IGNORECASE)
+    if remember_match:
+        fact_text = str(remember_match.group(1) or "").strip()
+        if fact_text:
+            fact_key = f"fact/user/{hashlib.sha1(fact_text.lower().encode('utf-8')).hexdigest()[:12]}"
+            entries.append(
+                {
+                    "key": fact_key,
+                    "heading": "User Preference",
+                    "category": "user_fact",
+                    "content": fact_text,
+                    "tokens": _request_tokens(f"user preference remember {fact_text}"),
+                    "source": MEMORY_FACT_SOURCE,
+                    "source_session_key": session_key,
+                    "source_quality_status": "explicit",
+                    "source_recorded_at": _memory_now_iso(),
+                }
+            )
+
+    # timezone: "my timezone is UTC+X" / "timezone: UTC+X"
+    tz_match = re.search(
+        r"(?:my\s+)?timezone\s+(?:is\s+)?([A-Z][A-Z0-9+\-/:]+)",
+        text,
+        re.IGNORECASE,
+    )
+    if tz_match and not remember_match:
+        tz_val = str(tz_match.group(1) or "").strip()
+        if tz_val:
+            entries.append(
+                {
+                    "key": "fact/timezone",
+                    "heading": "User Timezone",
+                    "category": "user_fact",
+                    "content": f"User timezone: {tz_val}",
+                    "tokens": _request_tokens(f"user timezone {tz_val}"),
+                    "source": MEMORY_FACT_SOURCE,
+                    "source_session_key": session_key,
+                    "source_quality_status": "explicit",
+                    "source_recorded_at": _memory_now_iso(),
+                }
+            )
+
     return entries
 
 
@@ -9177,6 +9478,19 @@ def _skill_bundle_for_request(
                     matches = []
                     names = set()
         names = {str(item.get("name") or "").strip().lower() for item in matches}
+        explicit_specialists = _explicitly_requested_specialists(request)
+        if explicit_specialists and "safe-web-research" in names and not _request_prefers_safe_web_research(request):
+            filtered = [
+                item
+                for item in matches
+                if str(item.get("name") or "").strip().lower() != "safe-web-research"
+            ]
+            if filtered:
+                matches = filtered
+                names = {str(item.get("name") or "").strip().lower() for item in matches}
+            else:
+                matches = []
+                names = set()
         autogenerated_specific = [
             item
             for item in matches
@@ -9262,6 +9576,36 @@ def _extract_json_value(text: str) -> Any:
 def _extract_json(text: str) -> dict[str, Any] | None:
     parsed = _extract_json_value(text)
     return parsed if isinstance(parsed, dict) else None
+
+
+def _strip_leading_think_block(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    lowered = raw.lower()
+    if lowered.startswith("<think>"):
+        closing = lowered.find("</think>")
+        if closing != -1:
+            return raw[closing + len("</think>"):].strip()
+    return raw
+
+
+def _specialist_output_needs_retry(text: str, payload: dict[str, Any] | None) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return True
+    lowered = raw.lower()
+    if lowered.startswith("<think>"):
+        return True
+    if lowered.startswith("```") and payload is None:
+        return True
+    if payload is None and (
+        lowered.startswith("alright, i need to")
+        or lowered.startswith("i need to")
+        or lowered.startswith("let me")
+    ):
+        return True
+    return False
 
 
 def _string_list(value: Any) -> list[str]:
@@ -9363,6 +9707,59 @@ def _sanitize_worker_citations(
             warnings.append("direct fallback citations stripped because they were not independently verified")
         return [], warnings
     return normalized, warnings
+
+
+def _normalize_reasoning_leak_locally(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    cleaned = raw.replace("<think>", " ").replace("</think>", " ")
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    sentences = re.split(r"(?<=[.!?])\s+", cleaned)
+    kept: list[str] = []
+    meta_starts = (
+        "okay",
+        "alright",
+        "i need to",
+        "let me",
+        "first,",
+        "first ",
+        "next,",
+        "next ",
+        "another aspect",
+        "i should",
+        "i'm also thinking",
+    )
+    signal_terms = (
+        "django",
+        "fastapi",
+        "security",
+        "csrf",
+        "jwt",
+        "oauth",
+        "pydantic",
+        "middleware",
+        "validation",
+        "authorization",
+        "authentication",
+        "community",
+        "documentation",
+        "performance",
+        "async",
+    )
+    for sentence in sentences:
+        item = sentence.strip(" `\"'")
+        lowered = item.lower()
+        if not item:
+            continue
+        if any(lowered.startswith(prefix) for prefix in meta_starts):
+            continue
+        if not any(term in lowered for term in signal_terms):
+            continue
+        kept.append(item)
+        if len(kept) >= 5:
+            break
+    return " ".join(kept).strip()
 
 
 def _request_prefers_vietnamese(text: str) -> bool:
@@ -9839,6 +10236,21 @@ def _request_is_security_questionnaire(request: str, skills_used: list[str] | No
         return True
     if _request_wants_protocol_artifact(request):
         return False
+    
+    # Exclude planning and migration tasks
+    planning_exclusions = (
+        "migration plan",
+        "implementation plan",
+        "comprehensive plan",
+        "step by step",
+        "create a plan",
+        "migration strategy",
+        "implementation strategy",
+        "roadmap",
+    )
+    if any(exclusion in lowered for exclusion in planning_exclusions):
+        return False
+    
     keywords = (
         "ai governance",
         "customer assurance",

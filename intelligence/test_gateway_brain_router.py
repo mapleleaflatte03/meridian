@@ -238,6 +238,10 @@ class GatewayBrainRouterIntegrationTests(unittest.TestCase):
         self.assertEqual(defaults["provider_profile"], "manager_primary")
         self.assertEqual(defaults["model"], "reasoner-small")
 
+    def test_loom_execution_agent_id_prefers_runtime_handle_for_specialists(self):
+        self.assertEqual(meridian_gateway._loom_execution_agent_id("agent_sentinel"), "sentinel")
+        self.assertEqual(meridian_gateway._loom_execution_agent_id("agent_forge"), "forge")
+
     def test_build_workflow_showcase_snapshot_returns_live_growth_shape(self):
         responses = {
             "/api/status": {

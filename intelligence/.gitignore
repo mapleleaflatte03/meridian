@@ -72,6 +72,8 @@ skills/*
 !skills/ai-stack-watch/SKILL.md
 !skills/security-questionnaire/
 !skills/security-questionnaire/SKILL.md
+!skills/safe-web-research/
+!skills/safe-web-research/SKILL.md
 security-vendor-manifest.json
 security/
 
