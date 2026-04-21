@@ -21,6 +21,9 @@
 **/*.lock
 **/output/
 **/runtime/
+/state/
+/kernel/agent_registry.json
+artifacts/**/live_*.png
 
 # kernel/economy runtime-generated state (see docs/STATE_CLASSIFICATION.md)
 # These files are mutated by running the system and must never be committed.

@@ -12654,14 +12654,7 @@ fn build_builtin_llm_inference_guest(
             let profile = value_string(payload.get("provider_profile"));
             profile
         },
-        model: {
-            let model = value_string(payload.get("model"));
-            if model.is_empty() {
-                "qwen2.5:7b".to_string()
-            } else {
-                model
-            }
-        },
+        model: llm_payload_requested_model(&payload),
         system_prompt: value_string(payload.get("system_prompt")),
         user_prompt,
         max_tokens: payload
@@ -12671,6 +12664,12 @@ fn build_builtin_llm_inference_guest(
     };
     let request_json = render_wasm_llm_inference_request_json(&request);
     builtin_llm_inference_guest_bytes(&request_json)
+}
+
+fn llm_payload_requested_model(payload: &Value) -> String {
+    // Preserve an empty model so provider routing can apply the selected
+    // profile's default model instead of forcing the local Ollama default.
+    value_string(payload.get("model"))
 }
 
 fn build_builtin_kv_get_guest(
@@ -13813,7 +13812,18 @@ mod tests {
     };
     use loom_core::{init_workspace, ActionEnvelope, AgentIdentityResolution};
     use loom_poge::KernelWarrant;
+    use serde_json::json;
     use sha2::{Digest, Sha256};
+
+    #[test]
+    fn llm_payload_requested_model_preserves_empty_profile_default_case() {
+        assert_eq!(llm_payload_requested_model(&json!({"model": ""})), "");
+        assert_eq!(llm_payload_requested_model(&json!({})), "");
+        assert_eq!(
+            llm_payload_requested_model(&json!({"model": "gpt-5.4"})),
+            "gpt-5.4"
+        );
+    }
 
     #[test]
     fn records_preflight_and_renders_report() {
