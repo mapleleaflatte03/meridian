@@ -9,8 +9,15 @@ use loom_core::gateway_runtime::sync_gateway_runtime;
 use serde_json::{json, Value};
 
 const DEFAULT_ACTOR_ID: &str = "loom:init_nation";
-const SEED_AGENT_NAMES: [&str; 7] = [
-    "manager", "atlas", "sentinel", "forge", "quill", "aegis", "pulse",
+const SEED_AGENT_KEYS: [&str; 7] = ["main", "atlas", "sentinel", "forge", "quill", "aegis", "pulse"];
+const SEED_AGENT_NAME_ALIASES: [(&str, &[&str]); 7] = [
+    ("main", &["manager", "leviathann"]),
+    ("atlas", &["atlas"]),
+    ("sentinel", &["sentinel"]),
+    ("forge", &["forge"]),
+    ("quill", &["quill"]),
+    ("aegis", &["aegis"]),
+    ("pulse", &["pulse"]),
 ];
 
 pub(crate) fn handle_nation(args: &[String]) -> LoomResult<()> {
@@ -70,11 +77,11 @@ pub(crate) fn handle_nation(args: &[String]) -> LoomResult<()> {
 
     let agent_listing = list_org_agents(&kernel_path, institution_id.as_str())?;
     let (seed_agents_count, seed_agent_ids) = count_seed_agents(&agent_listing)?;
-    if seed_agents_count < SEED_AGENT_NAMES.len() {
+    if seed_agents_count < SEED_AGENT_KEYS.len() {
         return Err(format!(
             "bootstrap produced {} seed agents, expected at least {}",
             seed_agents_count,
-            SEED_AGENT_NAMES.len()
+            SEED_AGENT_KEYS.len()
         ));
     }
 
@@ -259,15 +266,11 @@ fn count_seed_agents(agent_listing: &Value) -> LoomResult<(usize, Vec<String>)> 
         .get("agents")
         .and_then(Value::as_array)
         .ok_or_else(|| "agent listing missing agents array".to_string())?;
-    let mut seen_names = BTreeSet::new();
+    let mut seen_keys = BTreeSet::new();
     let mut ids = Vec::new();
     for agent in agents {
-        let Some(name) = agent.get("name").and_then(Value::as_str) else {
-            continue;
-        };
-        let lowered = name.trim().to_ascii_lowercase();
-        if SEED_AGENT_NAMES.iter().any(|seed| seed == &lowered) {
-            seen_names.insert(lowered);
+        if let Some(seed_key) = detect_seed_agent_key(agent) {
+            seen_keys.insert(seed_key.to_string());
             if let Some(agent_id) = agent.get("id").and_then(Value::as_str) {
                 ids.push(agent_id.to_string());
             }
@@ -275,7 +278,32 @@ fn count_seed_agents(agent_listing: &Value) -> LoomResult<(usize, Vec<String>)> 
     }
     ids.sort();
     ids.dedup();
-    Ok((seen_names.len(), ids))
+    Ok((seen_keys.len(), ids))
+}
+
+fn detect_seed_agent_key(agent: &Value) -> Option<&'static str> {
+    let economy_key = agent
+        .get("economy_key")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty());
+    if let Some(economy_key) = economy_key.as_deref() {
+        if SEED_AGENT_KEYS.iter().any(|seed| seed == &economy_key) {
+            return SEED_AGENT_KEYS.iter().copied().find(|seed| seed == &economy_key);
+        }
+    }
+
+    let lowered_name = agent
+        .get("name")
+        .and_then(Value::as_str)
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())?;
+    for (seed_key, aliases) in SEED_AGENT_NAME_ALIASES {
+        if aliases.iter().any(|alias| alias == &lowered_name) {
+            return Some(seed_key);
+        }
+    }
+    None
 }
 
 fn ensure_hot_wallet(

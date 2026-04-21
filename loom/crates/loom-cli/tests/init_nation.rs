@@ -160,13 +160,13 @@ from organizations import load_orgs, save_orgs
 import agent_registry
 
 SEED = [
-    ("Manager", "manager"),
-    ("Atlas", "analyst"),
-    ("Sentinel", "verifier"),
-    ("Forge", "executor"),
-    ("Quill", "writer"),
-    ("Aegis", "qa_gate"),
-    ("Pulse", "compressor"),
+    ("Leviathann", "manager_tech_lead", "main"),
+    ("Atlas", "architect", "atlas"),
+    ("Sentinel", "security_reviewer", "sentinel"),
+    ("Forge", "backend_engineer", "forge"),
+    ("Quill", "frontend_engineer", "quill"),
+    ("Aegis", "qa_reliability_engineer", "aegis"),
+    ("Pulse", "platform_engineer", "pulse"),
 ]
 
 AGENTS_STORE = pathlib.Path(__file__).resolve().parent / "_agents.json"
@@ -218,7 +218,7 @@ def bootstrap(name=None, owner_id=None, slug=None, charter=None, plan="enterpris
 
     agents_data = _load_agents()
     agents = agents_data.setdefault("agents", {})
-    for name, role in SEED:
+    for name, role, economy_key in SEED:
         found = None
         for existing in agents.values():
             if existing.get("org_id") == org_id and existing.get("name") == name:
@@ -232,6 +232,7 @@ def bootstrap(name=None, owner_id=None, slug=None, charter=None, plan="enterpris
             "org_id": org_id,
             "name": name,
             "role": role,
+            "economy_key": economy_key,
             "runtime_binding": {"runtime_id": "loom_native", "runtime_label": "Loom Native Runtime"},
             "rollout_state": "active",
         }

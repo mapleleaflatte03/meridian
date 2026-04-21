@@ -306,16 +306,15 @@ if isinstance(runtime_proof_contract, dict):
 if isinstance(runtime_proof, dict):
     assert runtime_proof.get("runtime_id"), runtime_proof
 else:
-    proof_block = dict(status.get("proof") or {})
-    recursive = dict(proof_block.get("recursive") or {})
-    aggregate = dict(proof_block.get("aggregate") or {})
-    assert recursive.get("root") or aggregate.get("bundle_id"), status
+    runtime_proof_meta = dict(status.get("runtime_proof") or {})
+    assert runtime_proof_meta.get("route") == "/api/runtime-proof", status
+    assert runtime_proof_meta.get("contract_route") == "/api/runtime-proof-contract", status
 
 if isinstance(kernel_bundle, dict):
     assert kernel_bundle.get("proof_bundle_version"), kernel_bundle
 else:
-    aggregate = dict((status.get("proof") or {}).get("aggregate") or {})
-    assert aggregate.get("bundle_id"), status
+    runtime_proof_meta = dict(status.get("runtime_proof") or {})
+    assert runtime_proof_meta.get("kernel_bundle_route") == "/api/kernel-proof-bundle", status
 
 agents = []
 if isinstance(agents_payload, dict):
