@@ -131,7 +131,7 @@ def _install_mcp_server_stub() -> None:
         team_topology.SPECIALIST_KEYS = ("ATLAS", "SENTINEL", "FORGE", "QUILL", "AEGIS", "PULSE")
 
         class _Agent:
-            def __init__(self, env_key, registry_id, handle, name, profile_name, model, task_kind):
+            def __init__(self, env_key, registry_id, handle, name, profile_name, model, task_kind, role, purpose, aliases=()):
                 self.env_key = env_key
                 self.registry_id = registry_id
                 self.handle = handle
@@ -139,6 +139,13 @@ def _install_mcp_server_stub() -> None:
                 self.profile_name = profile_name
                 self.model = model
                 self.task_kind = task_kind
+                self.role = role
+                self.purpose = purpose
+                self.aliases = aliases
+                self.kernel_role = role
+                self.scopes = ()
+                self.budget = {}
+                self.dispatchable = env_key != "MANAGER"
 
         class _Topology:
             def __init__(self):
@@ -151,14 +158,16 @@ def _install_mcp_server_stub() -> None:
                     "manager_primary",
                     "reasoner-small",
                     "manage",
+                    "manager_tech_lead",
+                    "Lead the team and synthesize the final answer.",
                 )
                 self.specialists = (
-                    _Agent("ATLAS", "agent_atlas", "atlas", "Atlas", "atlas_specialist", "reasoner-small", "research"),
-                    _Agent("SENTINEL", "agent_sentinel", "sentinel", "Sentinel", "sentinel_specialist", "reasoner-small", "verify"),
-                    _Agent("FORGE", "agent_forge", "forge", "Forge", "forge_specialist", "reasoner-small", "execute"),
-                    _Agent("QUILL", "agent_quill", "quill", "Quill", "quill_specialist", "reasoner-small", "write"),
-                    _Agent("AEGIS", "agent_aegis", "aegis", "Aegis", "aegis_specialist", "reasoner-small", "qa_gate"),
-                    _Agent("PULSE", "agent_pulse", "pulse", "Pulse", "pulse_specialist", "reasoner-small", "compress"),
+                    _Agent("ATLAS", "agent_atlas", "atlas", "Atlas", "atlas_specialist", "reasoner-small", "research", "architect", "Own architecture and tradeoffs.", ("architect",)),
+                    _Agent("SENTINEL", "agent_sentinel", "sentinel", "Sentinel", "sentinel_specialist", "reasoner-small", "verify", "security_reviewer", "Own security review.", ("security reviewer",)),
+                    _Agent("FORGE", "agent_forge", "forge", "Forge", "forge_specialist", "reasoner-small", "execute", "backend_engineer", "Own backend implementation.", ("backend engineer",)),
+                    _Agent("QUILL", "agent_quill", "quill", "Quill", "quill_specialist", "reasoner-small", "execute", "frontend_engineer", "Own frontend delivery.", ("frontend engineer",)),
+                    _Agent("AEGIS", "agent_aegis", "aegis", "Aegis", "aegis_specialist", "reasoner-small", "qa_gate", "qa_reliability_engineer", "Own QA and regression checks.", ("qa engineer",)),
+                    _Agent("PULSE", "agent_pulse", "pulse", "Pulse", "pulse_specialist", "reasoner-small", "execute", "platform_engineer", "Own platform and release work.", ("platform engineer",)),
                 )
 
             def specialist_by_id(self, agent_id):
