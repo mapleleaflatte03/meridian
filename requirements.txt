@@ -1,0 +1,15 @@
+# Meridian runtime Python dependencies
+#
+# Installed automatically by scripts/bootstrap_full.sh (full install path).
+# scripts/onboard.sh does NOT install these; onboarding only seeds the
+# intelligence gateway config so `./scripts/dev-up.sh` starts cleanly.
+#
+# If you ran ./scripts/onboard.sh directly and want the MCP-backed
+# intelligence routes (/api/research, /api/qa-verify), install this file
+# manually:
+#
+#   pip install -r requirements.txt
+#
+# The gateway starts without `mcp` installed; only those routes are affected.
+
+mcp>=1.0.0

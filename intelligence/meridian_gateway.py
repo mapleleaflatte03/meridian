@@ -44,7 +44,30 @@ for _path in (WORKSPACE_DIR, COMPANY_DIR, PLATFORM_DIR):
     if str(_path) not in sys.path:
         sys.path.insert(0, str(_path))
 
-from company import mcp_server
+try:  # `mcp` is an optional runtime dep for intelligence MCP surfaces.
+    from company import mcp_server  # type: ignore[attr-defined]
+except ImportError as _mcp_import_error:  # pragma: no cover - optional dep path
+    class _MCPServerUnavailable:
+        """Stub used when `mcp` Python package is not installed.
+
+        The gateway does not need MCP to start, serve status/treasury/
+        institution routes, memory/governed-execution, or proofs. Only the
+        `/api/research` and `/api/qa-verify` intelligence routes require it;
+        those fail with a clear install hint when actually used instead of
+        blocking the rest of the product from coming up.
+        """
+
+        _error = _mcp_import_error
+
+        def __getattr__(self, name: str):
+            raise RuntimeError(
+                "`mcp` Python package is not installed. Install it with "
+                "`pip install mcp` (or `pip install -r requirements.txt`) "
+                "to enable MCP-backed intelligence routes. Original import "
+                f"error: {self._error}"
+            )
+
+    mcp_server = _MCPServerUnavailable()  # type: ignore[assignment]
 from accounting import append_tx as accounting_append_tx, load_ledger as accounting_load_ledger, save_ledger as accounting_save_ledger
 from audit import log_event
 from capsule import ensure_treasury_aliases, ledger_path as capsule_ledger_path

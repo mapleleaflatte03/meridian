@@ -406,6 +406,20 @@ print(json.dumps(state, indent=2))
 
 echo "[onboard] Onboarding state saved to: $ONBOARD_STATE_DIR/onboard_state.json"
 
+# ── Seed intelligence gateway config ────────────────────────────────────
+# dev-up.sh starts meridian_gateway.py, which refuses to start unless
+# intelligence/meridian_config.json exists. bootstrap_full.sh handles this on
+# the full install path; onboard.sh must do the same so `./scripts/onboard.sh`
+# followed by `./scripts/dev-up.sh` works as documented in the README.
+
+(
+  cd "${MERIDIAN_INTELLIGENCE_ROOT:-${MERIDIAN_ROOT}/intelligence}"
+  python3 - <<'PY' >/dev/null
+from meridian_config import load_config, save_config
+save_config(load_config(required=False))
+PY
+) || echo "[onboard] Warning: failed to seed intelligence/meridian_config.json; run 'python3 intelligence/meridian_setup.py' before dev-up." >&2
+
 # ── Create first agent ──────────────────────────────────────────────────
 
 echo ""
@@ -531,9 +545,13 @@ else
   echo "    or set MERIDIAN_TEAM_PRESET=generic_team to restore the legacy generic team model"
   echo ""
   echo "  Proof and audit surfaces:"
-  echo "    \"$LOOM_BIN\" contract show"
-  echo "    \"$LOOM_BIN\" capsule inspect"
-  echo "    \"$LOOM_BIN\" parity report"
+  _loom_display="${LOOM_BIN:-loom}"
+  echo "    \"$_loom_display\" contract show"
+  echo "    \"$_loom_display\" capsule inspect"
+  echo "    \"$_loom_display\" parity report"
+  if [ -z "${LOOM_BIN:-}" ]; then
+    echo "    (build Loom first: cd \"$MERIDIAN_ROOT/loom\" && cargo build -p meridian-loom --release)"
+  fi
   echo ""
   if [ "$AGENT_CREATED" = "1" ]; then
     echo "  Your agent:"
