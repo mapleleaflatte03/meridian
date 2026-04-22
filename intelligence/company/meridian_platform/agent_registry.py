@@ -35,7 +35,22 @@ except ImportError:
     from .loom_runtime_discovery import runtime_value as loom_runtime_value
 
 VALID_ROLLOUT_STATES = ('active', 'staged', 'quarantined', 'disabled')
-VALID_ROLES = ('manager', 'analyst', 'verifier', 'executor', 'writer', 'qa_gate', 'compressor')
+VALID_ROLES = (
+    'manager',
+    'analyst',
+    'verifier',
+    'executor',
+    'writer',
+    'qa_gate',
+    'compressor',
+    'manager_tech_lead',
+    'architect',
+    'backend_engineer',
+    'frontend_engineer',
+    'platform_engineer',
+    'qa_reliability_engineer',
+    'security_reviewer',
+)
 VALID_RISK_STATES = ('nominal', 'elevated', 'critical', 'suspended')
 VALID_LIFECYCLE_STATES = ('provisioned', 'active', 'quarantined', 'decommissioned')
 DEFAULT_RUNTIME_ID = 'loom_native'

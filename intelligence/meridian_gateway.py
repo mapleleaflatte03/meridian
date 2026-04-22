@@ -1515,30 +1515,59 @@ def _worker_is_restricted(agent_key: str) -> bool:
     return bool(values & {"execute", "assign", "lead"})
 
 
+def _specialist_request_aliases(specialist: Any) -> tuple[str, ...]:
+    aliases: list[str] = []
+    for raw in (
+        getattr(specialist, "name", ""),
+        getattr(specialist, "role", ""),
+        *tuple(getattr(specialist, "aliases", ()) or ()),
+    ):
+        value = str(raw or "").strip().lower().replace("_", " ")
+        if value and value not in aliases:
+            aliases.append(value)
+    return tuple(aliases)
+
+
+def _requested_specialist_positions(request: str) -> list[tuple[int, str]]:
+    lowered = str(request or "").strip().lower().replace("_", " ")
+    if not lowered:
+        return []
+    matches: list[tuple[int, str]] = []
+    for specialist in TEAM_TOPOLOGY.specialists:
+        if not bool(getattr(specialist, "dispatchable", True)):
+            continue
+        for alias in _specialist_request_aliases(specialist):
+            if not alias:
+                continue
+            pattern = rf"\b{re.escape(alias)}\b"
+            found = re.search(pattern, lowered)
+            if found:
+                matches.append((found.start(), specialist.env_key))
+                break
+    matches.sort(key=lambda item: item[0])
+    ordered: list[tuple[int, str]] = []
+    seen: set[str] = set()
+    for position, env_key in matches:
+        if env_key in seen:
+            continue
+        seen.add(env_key)
+        ordered.append((position, env_key))
+    return ordered
+
+
 def _normalize_worker_selection(workers: list[str], text: str) -> list[str]:
-    # Check if specialists are explicitly requested in the text
-    text_lower = str(text or "").lower()
-    explicitly_requested = {
-        "atlas": "ATLAS" in text_lower,
-        "sentinel": "sentinel" in text_lower,
-        "forge": "forge" in text_lower,
-        "quill": "quill" in text_lower,
-        "aegis": "aegis" in text_lower,
-        "pulse": "pulse" in text_lower,
-    }
-    
+    explicitly_requested = {env_key for _, env_key in _requested_specialist_positions(text)}
+
     ordered: list[str] = []
     for worker in workers:
         value = str(worker or "").strip().upper()
         if value not in SPECIALIST_KEYS or value in ordered:
             continue
-        
-        # Bypass restrictions if specialist is explicitly requested
-        worker_key = value.lower()
-        if explicitly_requested.get(worker_key, False):
+
+        if value in explicitly_requested:
             ordered.append(value)
             continue
-            
+
         if _worker_is_restricted(value):
             if value == "SENTINEL" and "AEGIS" not in ordered and not _worker_is_restricted("AEGIS"):
                 ordered.append("AEGIS")
@@ -1961,7 +1990,7 @@ def _verified_fact_warnings(verified_facts: dict[str, Any], *, include_unknowns:
 def _specialist_role_label(specialist: Any) -> str:
     role = str(getattr(specialist, "role", "") or "").strip()
     if role:
-        return role
+        return role.replace("_", " ")
     task_kind = str(getattr(specialist, "task_kind", "") or "").strip().lower()
     fallback_by_task = {
         "research": "research specialist",
@@ -2185,12 +2214,95 @@ def _team_specialist_catalog() -> str:
     lines = []
     for agent in TEAM_TOPOLOGY.specialists:
         lines.append(
-            f"- {agent.env_key}: {agent.name} ({agent.role}) -> {agent.purpose}"
+            f"- {agent.env_key}: {agent.name} ({str(agent.role).replace('_', ' ')}) -> {agent.purpose}"
         )
     return "\n".join(lines)
 
 
+def _software_delivery_worker_hints(text: str) -> list[str]:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return []
+    hinted: list[str] = []
+    if any(term in lowered for term in ("architect", "architecture", "system design", "design a system", "migration plan", "technical design")):
+        hinted.append("ATLAS")
+    if any(term in lowered for term in ("backend", "api", "service layer", "database", "schema", "fastapi", "django", "server-side")):
+        hinted.append("FORGE")
+    if any(term in lowered for term in ("frontend", "ui", "ux", "react", "next.js", "css", "tailwind", "design system")):
+        hinted.append("QUILL")
+    if any(term in lowered for term in ("devops", "platform", "ci/cd", "ci", "cd", "deploy", "release", "kubernetes", "terraform", "observability")):
+        hinted.append("PULSE")
+    if any(term in lowered for term in ("qa", "test plan", "testing", "reliability", "regression", "acceptance criteria", "acceptance test")):
+        hinted.append("AEGIS")
+    if any(term in lowered for term in ("security", "threat model", "auth", "authz", "authentication", "authorization", "review")):
+        hinted.append("SENTINEL")
+    return _normalize_worker_selection(hinted, text)
+
+
+def _looks_like_software_delivery_request(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    has_build_context = any(
+        term in lowered
+        for term in (
+            "build",
+            "implement",
+            "ship",
+            "develop",
+            "refactor",
+            "migrate",
+            "release",
+            "architecture",
+            "frontend",
+            "backend",
+            "platform",
+            "test plan",
+            "security review",
+        )
+    )
+    has_software_surface = any(
+        term in lowered
+        for term in (
+            "api",
+            "service",
+            "react",
+            "next.js",
+            "fastapi",
+            "django",
+            "web app",
+            "dashboard",
+            "deployment",
+            "ci/cd",
+            "kubernetes",
+            "pull request",
+            "codebase",
+        )
+    )
+    return has_build_context and has_software_surface
+
+
+def _software_delivery_manager_brief(request: str, workers: list[str]) -> str:
+    responsibilities = {
+        "ATLAS": "Atlas should own architecture, interfaces, and major technical tradeoffs.",
+        "FORGE": "Forge should own backend implementation details and server-side execution steps.",
+        "QUILL": "Quill should own frontend/product-surface implementation and user-facing delivery details.",
+        "PULSE": "Pulse should own platform, CI/CD, release, and observability concerns.",
+        "AEGIS": "Aegis should own QA coverage, regression risk, and release confidence.",
+        "SENTINEL": "Sentinel should own security review, auth/risk scrutiny, and skeptical validation.",
+    }
+    lines = [responsibilities[key] for key in workers if key in responsibilities]
+    return (
+        "Treat this as a software delivery team request. Decompose the work like a real dev team, not a generic analyst/writer workflow. "
+        "Use concise role handoffs, highlight dependencies, and end with a manager-ready execution summary. "
+        + " ".join(lines)
+    ).strip()
+
+
 def _fallback_team_workers(text: str) -> list[str]:
+    hinted = _software_delivery_worker_hints(text)
+    if hinted:
+        return hinted
     workers = ["ATLAS", "AEGIS"]
     if _request_needs_writer(text) and "QUILL" not in workers:
         workers.append("QUILL")
@@ -2662,6 +2774,21 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
             "reason": "meridian_positioning",
             "skills": skill_bundle["matches"],
         }
+    if _looks_like_software_delivery_request(stripped):
+        workers = _software_delivery_worker_hints(stripped) or _fallback_team_workers(stripped)
+        if len(workers) < 2:
+            workers = _normalize_worker_selection(["ATLAS", "FORGE", "AEGIS"], stripped)
+        return {
+            "mode": "team",
+            "topic": stripped,
+            "depth": "deep",
+            "criteria": "consistency",
+            "workers": workers,
+            "manager_brief": _software_delivery_manager_brief(stripped, workers),
+            "reason": "software_delivery_team_request",
+            "skills": skill_bundle["matches"],
+            "routing_score": routing_score,
+        }
     if _skill_route_should_activate(stripped, skill_bundle):
         workers = _refine_skill_routed_workers(
             stripped,
@@ -2737,6 +2864,7 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
             "CRITICAL: Prefer direct answers for simple factual questions, version numbers, basic definitions, or any query that can be answered from training knowledge. "
             "Only use team mode when: 1) Multiple specialists are explicitly requested, 2) Complex synthesis is needed, 3) Live web research is required, 4) Multiple tools/capabilities must be coordinated. "
             "Do NOT over-justify team execution with claims of 'real-time verification' for basic factual questions.\n\n"
+            "For software delivery requests, prefer realistic dev-team decomposition across architecture, backend, frontend, platform, QA, and security instead of generic research/writing framing.\n\n"
             "Specialists:\n"
             f"{_team_specialist_catalog()}\n\n"
             "Available reusable skills:\n"
@@ -4489,14 +4617,7 @@ def _extract_request_url(text: str) -> str:
 
 
 def _explicitly_requested_specialists(request: str) -> list[str]:
-    lowered = str(request or "").strip().lower()
-    if not lowered:
-        return []
-    requested: list[str] = []
-    for name in ("atlas", "sentinel", "forge", "quill", "aegis", "pulse"):
-        if re.search(rf"\b{name}\b", lowered):
-            requested.append(name.upper())
-    return requested
+    return [env_key for _, env_key in _requested_specialist_positions(request)]
 
 
 def _request_prefers_safe_web_research(text: str) -> bool:

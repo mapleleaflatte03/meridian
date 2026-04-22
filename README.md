@@ -45,8 +45,9 @@ After onboarding, supported user-local provider and runtime overrides live in:
 
 - `~/.meridian/.env`
 - `~/.meridian/.env.gateway`
+- `~/.meridian/team.json` for role/purpose/team-semantics overrides
 
-See [`docs/TEAM_RUNTIME_CONFIG.md`](docs/TEAM_RUNTIME_CONFIG.md) for the source-of-truth config model, precedence rules, and generated runtime files.
+Meridian now defaults Team mode to a 7-agent software-delivery team preset. See [`docs/DEV_TEAM_PRESET.md`](docs/DEV_TEAM_PRESET.md) and [`docs/TEAM_RUNTIME_CONFIG.md`](docs/TEAM_RUNTIME_CONFIG.md) for the source-of-truth config model, supported role swapping, precedence rules, and generated runtime files.
 
 ## First commands
 

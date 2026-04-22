@@ -22,7 +22,8 @@ set -euo pipefail
 #   MERIDIAN_INST_NAME        institution name           (default: prompt)
 #   MERIDIAN_OWNER_ID         owner user id              (default: auto-generated)
 #   MERIDIAN_AGENT_NAME       first agent name           (default: prompt)
-#   MERIDIAN_AGENT_ROLE       first agent role           (default: manager)
+#   MERIDIAN_AGENT_ROLE       first agent role label     (default: manager_tech_lead)
+#   MERIDIAN_TEAM_PRESET      team preset                (default: dev_team)
 #   MERIDIAN_IMPORT_DEMO_PACK import demo data           (default: no)
 #   MERIDIAN_ENABLE_GOVERNANCE enable governance gates   (default: yes)
 #   MERIDIAN_BRAIN_ROUTE_TYPE execution route type       (default: cli_session)
@@ -215,7 +216,8 @@ else
 fi
 
 AGENT_NAME="$(prompt_or_default MERIDIAN_AGENT_NAME "First agent name" "Assistant")"
-AGENT_ROLE="$(prompt_or_default MERIDIAN_AGENT_ROLE "First agent role (manager / analyst / executor / writer)" "manager")"
+TEAM_PRESET="$(prompt_or_default MERIDIAN_TEAM_PRESET "Team preset (dev_team / generic_team)" "dev_team")"
+AGENT_ROLE="$(prompt_or_default MERIDIAN_AGENT_ROLE "First agent role label (manager_tech_lead / architect / backend_engineer / frontend_engineer / platform_engineer / qa_reliability_engineer / security_reviewer)" "manager_tech_lead")"
 
 IMPORT_DEMO="$(prompt_or_default MERIDIAN_IMPORT_DEMO_PACK "Import demo data pack? (yes / no)" "no")"
 ENABLE_GOV="$(prompt_or_default MERIDIAN_ENABLE_GOVERNANCE "Enable governance gates? (yes / no)" "yes")"
@@ -300,12 +302,14 @@ echo "  Institution:   $INST_NAME"
 echo "  Owner ID:      $OWNER_ID"
 echo "  Plan:          $INST_PLAN"
 echo "  First agent:   $AGENT_NAME (role: $AGENT_ROLE)"
+echo "  Team preset:   $TEAM_PRESET"
 echo "  Demo pack:     $IMPORT_DEMO"
 echo "  Governance:    $ENABLE_GOV"
 echo "  Brain route:   $BRAIN_POLICY_SUMMARY"
 echo "  Data root:     $MERIDIAN_ROOT/runtime"
 echo "  Config root:   $LOOM_CONFIG_ROOT"
 echo "  Agent configs: $LOOM_AGENT_CONFIG_DIR"
+echo "  Team config:   ${HOME}/.meridian/team.json"
 echo "----------------------------------------------------------------"
 
 if [ "$NON_INTERACTIVE" = "0" ]; then
@@ -483,6 +487,7 @@ echo "    - Institution data:  $MERIDIAN_ROOT/intelligence/"
 echo "    - Runtime state:     $MERIDIAN_ROOT/runtime/"
 echo "    - Kernel governance: $MERIDIAN_ROOT/kernel/"
 echo "    - Loom agents:       $MERIDIAN_ROOT/runtime/default/"
+echo "    - Team semantics:    ${HOME}/.meridian/team.json"
 echo ""
 
 if [ "$SELECTED_MODE" = "core" ]; then
@@ -520,6 +525,10 @@ else
   echo "    http://127.0.0.1:8266/api/status           — runtime status"
   echo "    http://127.0.0.1:8266/api/treasury          — treasury state"
   echo "    http://127.0.0.1:8266/api/institution/template — institution template"
+  echo ""
+  echo "  Team semantics:"
+  echo "    edit ~/.meridian/team.json to swap role / purpose / task_kind / scopes / aliases"
+  echo "    or set MERIDIAN_TEAM_PRESET=generic_team to restore the legacy generic team model"
   echo ""
   echo "  Proof and audit surfaces:"
   echo "    \"$LOOM_BIN\" contract show"

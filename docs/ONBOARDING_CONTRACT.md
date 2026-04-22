@@ -75,8 +75,9 @@ After onboarding, the supported user-edited runtime config lives outside the rep
 
 - `~/.meridian/.env`
 - `~/.meridian/.env.gateway`
+- `~/.meridian/team.json`
 
-These files are the supported place to set provider choice, model, endpoint, runtime root, and team agent overrides for local use. Runtime-generated files such as `runtime/default/providers/profiles.json`, `runtime/default/loom.toml`, and runtime registry/state files are derived artifacts, not the primary user config surface.
+These files are the supported place to set provider choice, model, endpoint, runtime root, preset selection, and team role/purpose overrides for local use. Runtime-generated files such as `runtime/default/providers/profiles.json`, `runtime/default/loom.toml`, and runtime registry/state files are derived artifacts, not the primary user config surface.
 
 See [`TEAM_RUNTIME_CONFIG.md`](./TEAM_RUNTIME_CONFIG.md) for precedence and sync rules.
 

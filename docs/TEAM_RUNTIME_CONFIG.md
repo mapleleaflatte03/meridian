@@ -11,10 +11,11 @@ For an end user, the supported configuration sources are:
 | Product mode (`core` / `team`) and first-run bootstrap state | `runtime/onboard_state.json` | onboarding scripts |
 | User-local runtime and provider config | `~/.meridian/.env` | end user |
 | User-local gateway/runtime overrides | `~/.meridian/.env.gateway` | end user |
+| User-local team semantics (`preset`, `role`, `purpose`, `task_kind`, `scopes`, `budget`, aliases) | `~/.meridian/team.json` | end user |
 | Brain-router / manager policy config when explicitly used | `intelligence/company/meridian_platform/config/*.json` plus referenced env vars | source + end user |
-| Team topology seed metadata | `intelligence/company/meridian_platform/agent_registry.json` | source-controlled product code |
+| Team preset catalog | `intelligence/company/meridian_platform/config/team_presets.json` | source-controlled product code |
 
-The user-edited files are `~/.meridian/.env` and `~/.meridian/.env.gateway`.
+The user-edited files are `~/.meridian/.env`, `~/.meridian/.env.gateway`, and `~/.meridian/team.json`.
 
 ## Config Precedence
 
@@ -30,6 +31,14 @@ Later files override earlier ones. The supported rule is:
 - repo env files provide product defaults
 - `~/.meridian/*` provides the user's local runtime truth
 
+Team semantics follow this supported rule:
+
+1. source-controlled preset catalog in `config/team_presets.json`
+2. preset selection via `MERIDIAN_TEAM_PRESET` or `~/.meridian/team.json`
+3. per-agent semantic overrides in `~/.meridian/team.json`
+
+The shipped default preset is `dev_team`. Existing users can pin `generic_team` for legacy behavior.
+
 ## Generated Runtime State
 
 The following are generated or synchronized artifacts. Users should not hand-edit them as their primary config surface:
@@ -43,6 +52,8 @@ The following are generated or synchronized artifacts. Users should not hand-edi
 | `state/**` | generated | local caches and temporary proof artifacts |
 
 If a user wants to change provider, model, endpoint, agent name, or runtime root, they should update `~/.meridian/.env` or `~/.meridian/.env.gateway` and let runtime sync regenerate the derived files.
+
+If a user wants to change the team role model, they should update `~/.meridian/team.json` and let runtime sync regenerate the derived files.
 
 ## Supported User Customization
 
@@ -65,6 +76,7 @@ The supported local env surface includes:
 - `MERIDIAN_LOOM_ORG_ID`
 - `MERIDIAN_LOOM_AGENT_ID`
 - `MERIDIAN_LOOM_SERVICE_TOKEN`
+- `MERIDIAN_TEAM_PRESET` for preset-only switching (`dev_team` / `generic_team`)
 
 This is the supported path for:
 
@@ -72,6 +84,16 @@ This is the supported path for:
 2. choosing provider transport
 3. supplying model + endpoint
 4. pointing Meridian at a different Loom binary or runtime root
+5. switching between shipped team presets through a simple env toggle
+
+The supported `~/.meridian/team.json` path is for:
+
+1. changing role
+2. changing purpose
+3. changing internal task kind when needed
+4. changing dispatch aliases
+5. changing default scopes and budgets by role
+6. overriding one agent without rewriting the whole team
 
 ## Runtime Sync Contract
 
@@ -81,8 +103,23 @@ This is the supported path for:
 - sync `loom.toml`
 - sync runtime-facing agent registry data
 - sync kernel org/capsule metadata needed for execution
+- materialize the selected team preset and local team overrides into runtime-facing registry state
 
 It is not the user configuration surface. The env files remain the user truth.
+
+## Default Team Model
+
+Meridian now defaults Team mode to a software-delivery team:
+
+- Leviathann -> `manager_tech_lead`
+- Atlas -> `architect`
+- Forge -> `backend_engineer`
+- Quill -> `frontend_engineer`
+- Pulse -> `platform_engineer`
+- Aegis -> `qa_reliability_engineer`
+- Sentinel -> `security_reviewer`
+
+See [`DEV_TEAM_PRESET.md`](./DEV_TEAM_PRESET.md) for the exact mapping and an override example.
 
 ## Routing And Execution In The Supported Path
 

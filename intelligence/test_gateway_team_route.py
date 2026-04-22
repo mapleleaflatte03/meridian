@@ -80,6 +80,28 @@ class GatewayTeamRouteTests(unittest.TestCase):
         self.assertEqual(plan['mode'], 'team')
         self.assertEqual(plan['workers'], ['QUILL', 'AEGIS'])
 
+    def test_explicit_specialist_detection_supports_dev_team_role_aliases(self):
+        requested = meridian_gateway._explicitly_requested_specialists(
+            'Have the architect define the migration boundaries, the backend engineer implement the API changes, and the security reviewer check auth.'
+        )
+        self.assertEqual(requested, ['ATLAS', 'FORGE', 'SENTINEL'])
+
+    def test_software_delivery_request_routes_to_dev_team_workers(self):
+        with mock.patch.object(meridian_gateway, '_skill_bundle_for_request', return_value={'matches': [], 'workers': [], 'guidance': '', 'created_skill': None, 'refined_skill': None}):
+            with mock.patch.object(
+                meridian_gateway,
+                '_routing_runtime_load_snapshot',
+                return_value={'pending_count': 0, 'latency_p50_ms': 1800, 'fail_rate': 0.02, 'latest_status': 'delivered'},
+            ):
+                plan = meridian_gateway._team_route_plan(
+                    'Design the architecture, implement the backend API, build the React frontend, set up CI/CD, write the QA plan, and run a security review for a new FastAPI service.',
+                    'telegram:dev-team',
+                )
+        self.assertEqual(plan['mode'], 'team')
+        self.assertEqual(plan['reason'], 'software_delivery_team_request')
+        self.assertEqual(plan['workers'], ['ATLAS', 'FORGE', 'QUILL', 'PULSE', 'AEGIS', 'SENTINEL'])
+        self.assertIn('software delivery team request', plan['manager_brief'].lower())
+
     def test_short_prompt_skill_route_uses_existing_skill(self):
         plan = meridian_gateway._team_route_plan('mvp scope', 'telegram:123')
         self.assertEqual(plan['mode'], 'team')

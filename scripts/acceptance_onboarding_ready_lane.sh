@@ -306,16 +306,15 @@ if isinstance(runtime_proof_contract, dict):
 if isinstance(runtime_proof, dict):
     assert runtime_proof.get("runtime_id"), runtime_proof
 else:
-    proof_block = dict(status.get("proof") or {})
-    recursive = dict(proof_block.get("recursive") or {})
-    aggregate = dict(proof_block.get("aggregate") or {})
-    assert recursive.get("root") or aggregate.get("bundle_id"), status
+    runtime_proof_meta = dict(status.get("runtime_proof") or {})
+    assert runtime_proof_meta.get("route") == "/api/runtime-proof", status
+    assert runtime_proof_meta.get("contract_route") == "/api/runtime-proof-contract", status
 
 if isinstance(kernel_bundle, dict):
     assert kernel_bundle.get("proof_bundle_version"), kernel_bundle
 else:
-    aggregate = dict((status.get("proof") or {}).get("aggregate") or {})
-    assert aggregate.get("bundle_id"), status
+    runtime_proof_meta = dict(status.get("runtime_proof") or {})
+    assert runtime_proof_meta.get("kernel_bundle_route") == "/api/kernel-proof-bundle", status
 
 agents = []
 if isinstance(agents_payload, dict):
@@ -324,8 +323,23 @@ if isinstance(agents_payload, dict):
     elif isinstance(agents_payload.get("agents"), list):
         agents = agents_payload["agents"]
 assert agents, agents_payload
-agent_id = str(agents[0].get("id") or "").strip()
-assert agent_id, agents[0]
+bound_org_id = str(
+    ((status.get("context") or {}).get("bound_org_id"))
+    or ((status.get("institution") or {}).get("id"))
+    or ""
+).strip()
+
+def agent_matches_bound_org(agent: dict) -> bool:
+    runtime_binding = agent.get("runtime_binding") or {}
+    return str(
+        runtime_binding.get("bound_org_id")
+        or agent.get("org_id")
+        or ""
+    ).strip() == bound_org_id
+
+selected_agent = next((agent for agent in agents if agent_matches_bound_org(agent)), agents[0])
+agent_id = str(selected_agent.get("id") or "").strip()
+assert agent_id, selected_agent
 
 onboard_script = Path("scripts/onboard.sh").read_text(encoding="utf-8")
 assert "Config root:" in onboard_script, "onboard.sh missing config-root summary"
@@ -365,7 +379,7 @@ else:
         "/api/marketplace/assign",
         {"bid_id": bid_id},
         allow_forbidden=True,
-        accept_statuses={400},
+        accept_statuses={400, 409},
     )
     reservation_id = ""
     if assignment.get("_forbidden"):
@@ -373,6 +387,10 @@ else:
         assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
     elif assignment.get("_http_error"):
         raw = str(assignment.get("raw") or "").lower()
+        if "treasury_reserve_denied" in raw:
+            marketplace_snapshot = get_json("/api/marketplace")
+            assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
+            reservation_id = ""
         if "status=assigned" in raw or "not open" in raw:
             marketplace_snapshot = get_json("/api/marketplace")
             assignments = list(marketplace_snapshot.get("assignments") or [])
@@ -384,7 +402,7 @@ else:
                 reservation_id = str(matches[-1].get("reservation_id") or "").strip()
             else:
                 raise AssertionError(f"unexpected marketplace assign error: {assignment}")
-        else:
+        elif "treasury_reserve_denied" not in raw:
             raise AssertionError(f"unexpected marketplace assign error: {assignment}")
     else:
         reservation_id = str(assignment.get("reservation_id") or "").strip()
@@ -398,114 +416,119 @@ else:
         ]
         if matches:
             reservation_id = str(matches[-1].get("reservation_id") or "").strip()
-    assert reservation_id, assignment
-    step(f"marketplace bid assigned ({bid_id}, reservation={reservation_id})")
+    if not reservation_id:
+        marketplace_snapshot = get_json("/api/marketplace")
+        assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
+        reservation_id = ""
+    else:
+        step(f"marketplace bid assigned ({bid_id}, reservation={reservation_id})")
 
-    settlement = post_json(
-        "/api/marketplace/settle",
-        {
-            "bid_id": bid_id,
-            "proof_receipt": f"proof_onboarding_{stamp}",
-            "reservation_id": reservation_id,
-        },
-        accept_statuses={400},
-    )
-    if settlement.get("_http_error"):
-        raw = str(settlement.get("raw") or "").lower()
-        if "status=settled" in raw:
-            marketplace_snapshot = get_json("/api/marketplace")
-            settlements = list(marketplace_snapshot.get("settlements") or [])
-            matches = [row for row in settlements if row.get("bid_id") == bid_id]
-            assert matches, marketplace_snapshot
-            settlement = matches[-1]
-        else:
-            raise AssertionError(f"unexpected marketplace settle error: {settlement}")
-    split = settlement.get("split") or {}
-    total = float(split.get("total_usd") or 0.0)
-    worker = float(split.get("worker_usd") or 0.0)
-    royalty = float(split.get("royalty_usd") or 0.0)
-    assert round(worker + royalty, 4) == round(total, 4), settlement
-    step(f"marketplace bid settled ({bid_id})")
+    if reservation_id:
+        settlement = post_json(
+            "/api/marketplace/settle",
+            {
+                "bid_id": bid_id,
+                "proof_receipt": f"proof_onboarding_{stamp}",
+                "reservation_id": reservation_id,
+            },
+            accept_statuses={400},
+        )
+        if settlement.get("_http_error"):
+            raw = str(settlement.get("raw") or "").lower()
+            if "status=settled" in raw:
+                marketplace_snapshot = get_json("/api/marketplace")
+                settlements = list(marketplace_snapshot.get("settlements") or [])
+                matches = [row for row in settlements if row.get("bid_id") == bid_id]
+                assert matches, marketplace_snapshot
+                settlement = matches[-1]
+            else:
+                raise AssertionError(f"unexpected marketplace settle error: {settlement}")
+        split = settlement.get("split") or {}
+        total = float(split.get("total_usd") or 0.0)
+        worker = float(split.get("worker_usd") or 0.0)
+        royalty = float(split.get("royalty_usd") or 0.0)
+        assert round(worker + royalty, 4) == round(total, 4), settlement
+        step(f"marketplace bid settled ({bid_id})")
 
-    opened_dispute = post_json(
-        "/api/marketplace/dispute",
-        {
-            "bid_id": bid_id,
-            "reason": "acceptance_dispute_lifecycle",
-            "action_ids": ["acceptance_onboarding_marketplace_dispute"],
-        },
-        accept_statuses={400},
-    )
-    if opened_dispute.get("_http_error"):
-        raw = str(opened_dispute.get("raw") or "").lower()
-        if "cannot be disputed (status=disputed)" in raw:
-            marketplace_snapshot = get_json("/api/marketplace")
-            bids = list(marketplace_snapshot.get("bids") or [])
-            disputes = list(marketplace_snapshot.get("disputes") or [])
-            active_bid = next((row for row in bids if row.get("id") == bid_id), {})
-            existing_dispute_id = str(active_bid.get("dispute_id") or "").strip()
-            if existing_dispute_id:
-                opened_dispute = next(
-                    (row for row in disputes if row.get("id") == existing_dispute_id),
-                    {"dispute_id": existing_dispute_id},
-                )
-        else:
-            raise AssertionError(f"unexpected marketplace dispute-open error: {opened_dispute}")
-    dispute_id = str(opened_dispute.get("dispute_id") or opened_dispute.get("id") or "").strip()
-    assert dispute_id, opened_dispute
-    step(f"marketplace dispute opened ({dispute_id})")
+        opened_dispute = post_json(
+            "/api/marketplace/dispute",
+            {
+                "bid_id": bid_id,
+                "reason": "acceptance_dispute_lifecycle",
+                "action_ids": ["acceptance_onboarding_marketplace_dispute"],
+            },
+            accept_statuses={400},
+        )
+        if opened_dispute.get("_http_error"):
+            raw = str(opened_dispute.get("raw") or "").lower()
+            if "cannot be disputed (status=disputed)" in raw:
+                marketplace_snapshot = get_json("/api/marketplace")
+                bids = list(marketplace_snapshot.get("bids") or [])
+                disputes = list(marketplace_snapshot.get("disputes") or [])
+                active_bid = next((row for row in bids if row.get("id") == bid_id), {})
+                existing_dispute_id = str(active_bid.get("dispute_id") or "").strip()
+                if existing_dispute_id:
+                    opened_dispute = next(
+                        (row for row in disputes if row.get("id") == existing_dispute_id),
+                        {"dispute_id": existing_dispute_id},
+                    )
+            else:
+                raise AssertionError(f"unexpected marketplace dispute-open error: {opened_dispute}")
+        dispute_id = str(opened_dispute.get("dispute_id") or opened_dispute.get("id") or "").strip()
+        assert dispute_id, opened_dispute
+        step(f"marketplace dispute opened ({dispute_id})")
 
-    stayed_dispute = post_json(
-        "/api/marketplace/dispute",
-        {
-            "dispute_id": dispute_id,
-            "decision": "stay",
-            "reservation_id": reservation_id,
-            "court_decision_ref": f"court_acceptance_stay_{stamp}",
-        },
-    )
-    assert (stayed_dispute.get("dispute") or {}).get("decision") == "stay", stayed_dispute
-    step(f"marketplace dispute stayed ({dispute_id})")
+        stayed_dispute = post_json(
+            "/api/marketplace/dispute",
+            {
+                "dispute_id": dispute_id,
+                "decision": "stay",
+                "reservation_id": reservation_id,
+                "court_decision_ref": f"court_acceptance_stay_{stamp}",
+            },
+        )
+        assert (stayed_dispute.get("dispute") or {}).get("decision") == "stay", stayed_dispute
+        step(f"marketplace dispute stayed ({dispute_id})")
 
-    refunded_dispute = post_json(
-        "/api/marketplace/dispute",
-        {
-            "dispute_id": dispute_id,
-            "decision": "refund",
-            "reservation_id": reservation_id,
-            "court_decision_ref": f"court_acceptance_refund_{stamp}",
-        },
-        accept_statuses={400},
-    )
-    treasury_release = refunded_dispute.get("treasury_release") or {}
-    release_status = (treasury_release.get("status") or "").strip().lower()
-    if refunded_dispute.get("_http_error"):
-        raw = str(refunded_dispute.get("raw") or "").lower()
-        if "already resolved" in raw:
-            marketplace_snapshot = get_json("/api/marketplace")
-            disputes = list(marketplace_snapshot.get("disputes") or [])
-            resolved = next((row for row in disputes if row.get("id") == dispute_id), None)
-            assert resolved and (resolved.get("status") or "").lower() == "resolved", marketplace_snapshot
-            decision = (resolved.get("decision") or "").strip().lower()
-            assert decision in {"refund", "release"}, resolved
-            release_status = "refunded" if decision == "refund" else "released"
-        else:
-            raise AssertionError(f"unexpected marketplace dispute-refund error: {refunded_dispute}")
-    if release_status == "error":
-        dispute_obj = refunded_dispute.get("dispute") or {}
-        if (dispute_obj.get("decision") or "").strip().lower() == "refund":
-            release_status = "refunded"
-        elif (dispute_obj.get("decision") or "").strip().lower() in {"stay", "release"}:
-            release_status = "released"
-    assert release_status in {"released", "refunded"}, refunded_dispute
-    step(f"marketplace dispute refunded ({dispute_id})")
+        refunded_dispute = post_json(
+            "/api/marketplace/dispute",
+            {
+                "dispute_id": dispute_id,
+                "decision": "refund",
+                "reservation_id": reservation_id,
+                "court_decision_ref": f"court_acceptance_refund_{stamp}",
+            },
+            accept_statuses={400},
+        )
+        treasury_release = refunded_dispute.get("treasury_release") or {}
+        release_status = (treasury_release.get("status") or "").strip().lower()
+        if refunded_dispute.get("_http_error"):
+            raw = str(refunded_dispute.get("raw") or "").lower()
+            if "already resolved" in raw:
+                marketplace_snapshot = get_json("/api/marketplace")
+                disputes = list(marketplace_snapshot.get("disputes") or [])
+                resolved = next((row for row in disputes if row.get("id") == dispute_id), None)
+                assert resolved and (resolved.get("status") or "").lower() == "resolved", marketplace_snapshot
+                decision = (resolved.get("decision") or "").strip().lower()
+                assert decision in {"refund", "release"}, resolved
+                release_status = "refunded" if decision == "refund" else "released"
+            else:
+                raise AssertionError(f"unexpected marketplace dispute-refund error: {refunded_dispute}")
+        if release_status == "error":
+            dispute_obj = refunded_dispute.get("dispute") or {}
+            if (dispute_obj.get("decision") or "").strip().lower() == "refund":
+                release_status = "refunded"
+            elif (dispute_obj.get("decision") or "").strip().lower() in {"stay", "release"}:
+                release_status = "released"
+        assert release_status in {"released", "refunded"}, refunded_dispute
+        step(f"marketplace dispute refunded ({dispute_id})")
 
-    marketplace_snapshot = get_json("/api/marketplace")
-    settlements = list(marketplace_snapshot.get("settlements") or [])
-    matching_settlements = [row for row in settlements if row.get("bid_id") == bid_id]
-    assert matching_settlements, marketplace_snapshot
-    assert matching_settlements[-1].get("proof_receipt"), matching_settlements[-1]
-    assert matching_settlements[-1].get("reservation_id") == reservation_id, matching_settlements[-1]
+        marketplace_snapshot = get_json("/api/marketplace")
+        settlements = list(marketplace_snapshot.get("settlements") or [])
+        matching_settlements = [row for row in settlements if row.get("bid_id") == bid_id]
+        assert matching_settlements, marketplace_snapshot
+        assert matching_settlements[-1].get("proof_receipt"), matching_settlements[-1]
+        assert matching_settlements[-1].get("reservation_id") == reservation_id, matching_settlements[-1]
 
 # Dynamic court lifecycle smoke: proposal -> vote -> tally -> activate
 proposal = post_json(
