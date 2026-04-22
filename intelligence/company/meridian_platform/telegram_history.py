@@ -197,14 +197,15 @@ def import_telegram_history(
     export_path: str | Path,
     session_key: str,
     *,
-    manager_name: str = "Leviathann",
+    manager_name: str = "Manager",
     loom_root: str | Path | None = None,
 ) -> dict[str, Any]:
     path = Path(export_path)
     if not path.exists():
         raise FileNotFoundError(f"export file not found: {path}")
     manager_names = {
-        (manager_name or "Leviathann").strip().lower(),
+        (manager_name or "Manager").strip().lower(),
+        "manager",
         "leviathann",
         "leviathan",
     }
@@ -281,7 +282,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Import Telegram history into Meridian session continuity")
     parser.add_argument("--export-path", required=True)
     parser.add_argument("--session-key", required=True)
-    parser.add_argument("--manager-name", default="Leviathann")
+    parser.add_argument("--manager-name", default="Manager")
     parser.add_argument("--loom-root", default="")
     args = parser.parse_args()
     result = import_telegram_history(

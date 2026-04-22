@@ -53,13 +53,13 @@ def init_economy():
         "schema": "meridian-kernel-economy-v1",
         "updatedAt": now_ts(),
         "agents": {
-            "main":     {"name": "Leviathann", "role": "manager", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
-            "atlas":    {"name": "Atlas",      "role": "analyst", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
-            "sentinel": {"name": "Sentinel",   "role": "verifier", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
-            "forge":    {"name": "Forge",      "role": "executor", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
-            "quill":    {"name": "Quill",      "role": "writer", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
-            "aegis":    {"name": "Aegis",      "role": "qa_gate", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
-            "pulse":    {"name": "Pulse",      "role": "compressor", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "main":     {"name": "Manager",    "role": "manager", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "atlas":    {"name": "Architect",  "role": "analyst", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "sentinel": {"name": "Security",   "role": "verifier", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "forge":    {"name": "Backend",    "role": "executor", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "quill":    {"name": "Frontend",   "role": "writer", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "aegis":    {"name": "QA",         "role": "qa_gate", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
+            "pulse":    {"name": "Platform",   "role": "compressor", "reputation_units": 50, "authority_units": 50, "probation": False, "zero_authority": False, "status": "active"},
         },
         "treasury": {
             "cash_usd": 0.0,
@@ -160,13 +160,13 @@ def _manual_init():
 
     # Register agents
     AGENTS = [
-        ('Leviathann', 'manager',    'main',     'Orchestrate pipeline, route work, close loops'),
-        ('Atlas',      'analyst',    'atlas',    'Research, analysis, source extraction'),
-        ('Sentinel',   'verifier',   'sentinel', 'Source verification, contradiction checking'),
-        ('Forge',      'executor',   'forge',    'Implementation, execution, operational tasks'),
-        ('Quill',      'writer',     'quill',    'Write intelligence briefs and deliverables'),
-        ('Aegis',      'qa_gate',    'aegis',    'Quality acceptance gate — pass/fail decisions'),
-        ('Pulse',      'compressor', 'pulse',    'Context compression, triage, delivery prep'),
+        ('Manager',    'manager',    'main',     'Orchestrate pipeline, route work, close loops'),
+        ('Architect',  'analyst',    'atlas',    'Research, analysis, source extraction'),
+        ('Security',   'verifier',   'sentinel', 'Source verification, contradiction checking'),
+        ('Backend',    'executor',   'forge',    'Implementation, execution, operational tasks'),
+        ('Frontend',   'writer',     'quill',    'Write intelligence briefs and deliverables'),
+        ('QA',         'qa_gate',    'aegis',    'Quality acceptance gate — pass/fail decisions'),
+        ('Platform',   'compressor', 'pulse',    'Context compression, triage, delivery prep'),
     ]
     reg = load_registry()
     existing_names = {a['name'] for a in reg.get('agents', {}).values()}

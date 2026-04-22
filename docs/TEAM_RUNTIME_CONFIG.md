@@ -109,15 +109,15 @@ It is not the user configuration surface. The env files remain the user truth.
 
 ## Default Team Model
 
-Meridian now defaults Team mode to a software-delivery team:
+Meridian now defaults Team mode to a software-delivery team with public-safe handles:
 
-- Leviathann -> `manager_tech_lead`
-- Atlas -> `architect`
-- Forge -> `backend_engineer`
-- Quill -> `frontend_engineer`
-- Pulse -> `platform_engineer`
-- Aegis -> `qa_reliability_engineer`
-- Sentinel -> `security_reviewer`
+- Manager -> `manager_tech_lead`
+- Architect -> `architect`
+- Backend -> `backend_engineer`
+- Frontend -> `frontend_engineer`
+- Platform -> `platform_engineer`
+- QA -> `qa_reliability_engineer`
+- Security -> `security_reviewer`
 
 See [`DEV_TEAM_PRESET.md`](./DEV_TEAM_PRESET.md) for the exact mapping and an override example.
 

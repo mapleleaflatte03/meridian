@@ -122,49 +122,49 @@ def bootstrap():
     # Map ledger keys to agent definitions
     agent_defs = {
         'main': {
-            'name': 'Leviathann',
+            'name': 'Manager',
             'role': 'manager_tech_lead',
             'purpose': 'Owns decomposition, sequencing, tradeoff decisions, and final software-delivery synthesis across the team.',
             'scopes': ['manage', 'delegate', 'deliver', 'plan', 'review'],
             'budget': {'max_per_run_usd': 1.00, 'max_per_day_usd': 10.00, 'max_per_month_usd': 200.00},
         },
         'atlas': {
-            'name': 'Atlas',
+            'name': 'Architect',
             'role': 'architect',
             'purpose': 'Owns architecture, system design, migration strategy, interface contracts, and technical tradeoff analysis.',
             'scopes': ['research', 'design', 'analyze', 'review'],
             'budget': {'max_per_run_usd': 0.60, 'max_per_day_usd': 6.00, 'max_per_month_usd': 120.00},
         },
         'sentinel': {
-            'name': 'Sentinel',
+            'name': 'Security',
             'role': 'security_reviewer',
             'purpose': 'Owns security review, risk analysis, authn/authz scrutiny, threat checks, and skeptical change validation.',
             'scopes': ['verify', 'audit', 'security', 'review'],
             'budget': {'max_per_run_usd': 0.35, 'max_per_day_usd': 3.50, 'max_per_month_usd': 60.00},
         },
         'forge': {
-            'name': 'Forge',
+            'name': 'Backend',
             'role': 'backend_engineer',
             'purpose': 'Owns backend implementation, API/service changes, data-model evolution, refactors, and server-side delivery.',
             'scopes': ['execute', 'write', 'backend', 'deploy'],
             'budget': {'max_per_run_usd': 0.55, 'max_per_day_usd': 5.50, 'max_per_month_usd': 110.00},
         },
         'quill': {
-            'name': 'Quill',
+            'name': 'Frontend',
             'role': 'frontend_engineer',
             'purpose': 'Owns frontend/product-surface implementation, UX flows, UI polish, and user-facing delivery details.',
             'scopes': ['execute', 'write', 'frontend', 'deliver'],
             'budget': {'max_per_run_usd': 0.50, 'max_per_day_usd': 5.00, 'max_per_month_usd': 100.00},
         },
         'aegis': {
-            'name': 'Aegis',
+            'name': 'QA',
             'role': 'qa_reliability_engineer',
             'purpose': 'Owns test strategy, regression coverage, acceptance criteria, reliability checks, and release confidence.',
             'scopes': ['verify', 'qa', 'test', 'reliability'],
             'budget': {'max_per_run_usd': 0.35, 'max_per_day_usd': 3.50, 'max_per_month_usd': 60.00},
         },
         'pulse': {
-            'name': 'Pulse',
+            'name': 'Platform',
             'role': 'platform_engineer',
             'purpose': 'Owns platform/devops work, CI/CD, observability, runtime hygiene, release readiness, and infrastructure execution.',
             'scopes': ['execute', 'deploy', 'observe', 'triage', 'platform'],
@@ -174,10 +174,12 @@ def bootstrap():
 
     registered = 0
     for ledger_key, agent_def in agent_defs.items():
-        # Check if already registered (by name match)
+        # Check if already registered by stable economy_key first, then by name.
         already_exists = False
         for existing in registry['agents'].values():
-            if existing['name'] == agent_def['name'] and existing['org_id'] == founding_org_id:
+            if existing.get('org_id') != founding_org_id:
+                continue
+            if existing.get('economy_key') == ledger_key or existing.get('name') == agent_def['name']:
                 already_exists = True
                 # Sync scores from ledger
                 ledger_agent = ledger['agents'].get(ledger_key, {})
@@ -254,8 +256,13 @@ def bootstrap():
 
     # Map economy_key for each agent
     economy_key_map = {
-        'Leviathann': 'main', 'Atlas': 'atlas', 'Sentinel': 'sentinel',
-        'Forge': 'forge', 'Quill': 'quill', 'Aegis': 'aegis', 'Pulse': 'pulse',
+        'Manager': 'main', 'Leviathann': 'main',
+        'Architect': 'atlas', 'Atlas': 'atlas',
+        'Security': 'sentinel', 'Sentinel': 'sentinel',
+        'Backend': 'forge', 'Forge': 'forge',
+        'Frontend': 'quill', 'Quill': 'quill',
+        'QA': 'aegis', 'Aegis': 'aegis',
+        'Platform': 'pulse', 'Pulse': 'pulse',
     }
     for agent in registry['agents'].values():
         mapped_key = economy_key_map.get(agent['name'])

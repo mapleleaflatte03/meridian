@@ -74,15 +74,23 @@ class TeamTopologyTests(unittest.TestCase):
         self.assertEqual(resolved, shared_auth)
 
     def test_load_team_topology_reads_meridian_env_defaults(self):
-        topology = load_team_topology()
-        self.assertEqual(topology.manager.name, "Leviathann")
+        with mock.patch.dict(os.environ, {}, clear=True):
+            topology = load_team_topology(env_files=())
+        self.assertEqual(topology.manager.name, "Manager")
         self.assertEqual(topology.manager.role, "manager_tech_lead")
         self.assertEqual(topology.manager.profile_name, "manager_primary")
         self.assertIn(topology.manager.provider_kind, {"openai_codex", "openai_compatible"})
+        self.assertEqual(topology.org_id, "org_local_default")
         self.assertEqual(len(topology.specialists), len(SPECIALIST_KEYS))
         specialist_map = {agent.env_key: agent for agent in topology.specialists}
         for key in SPECIALIST_KEYS:
             self.assertIn(key, specialist_map)
+        self.assertEqual(specialist_map["ATLAS"].name, "Architect")
+        self.assertEqual(specialist_map["SENTINEL"].name, "Security")
+        self.assertEqual(specialist_map["FORGE"].name, "Backend")
+        self.assertEqual(specialist_map["QUILL"].name, "Frontend")
+        self.assertEqual(specialist_map["AEGIS"].name, "QA")
+        self.assertEqual(specialist_map["PULSE"].name, "Platform")
         self.assertEqual(specialist_map["ATLAS"].profile_name, "research_frontier")
         self.assertEqual(specialist_map["SENTINEL"].profile_name, "verifier_frontier")
         self.assertEqual(specialist_map["FORGE"].profile_name, "executor_tooling")
@@ -233,6 +241,19 @@ class TeamTopologyTests(unittest.TestCase):
         self.assertEqual(topology.manager.registry_id, "agent_manager")
         self.assertEqual(topology.manager.name, "Leviathann")
         self.assertEqual(topology.manager.role, "manager_tech_lead")
+
+    def test_load_team_topology_allows_local_identity_overrides_over_generic_defaults(self):
+        topology = load_team_topology(
+            env={
+                "MERIDIAN_MANAGER_AGENT_NAME": "Tech Lead",
+                "MERIDIAN_AGENT_ATLAS_NAME": "Architecture Lead",
+                "MERIDIAN_AGENT_FORGE_NAME": "Backend Lead",
+            }
+        )
+        specialist_map = {agent.env_key: agent for agent in topology.specialists}
+        self.assertEqual(topology.manager.name, "Tech Lead")
+        self.assertEqual(specialist_map["ATLAS"].name, "Architecture Lead")
+        self.assertEqual(specialist_map["FORGE"].name, "Backend Lead")
 
     def test_sync_loom_team_profiles_registers_team_agents_in_kernel_registry(self):
         topology = load_team_topology()

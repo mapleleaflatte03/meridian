@@ -15,8 +15,8 @@ class TelegramHistoryTests(unittest.TestCase):
                 json.dumps(
                     {
                         "messages": [
-                            {"id": 1, "date": "2026-03-01T01:02:03Z", "from": "me", "text": "Hello Leviathann"},
-                            {"id": 2, "date": "2026-03-01T01:03:03Z", "from": "Leviathann", "text": "Hello back"},
+                            {"id": 1, "date": "2026-03-01T01:02:03Z", "from": "me", "text": "Hello Manager"},
+                            {"id": 2, "date": "2026-03-01T01:03:03Z", "from": "Manager", "text": "Hello back"},
                         ]
                     }
                 ),
@@ -25,7 +25,7 @@ class TelegramHistoryTests(unittest.TestCase):
             result = import_telegram_history(
                 export_path,
                 "telegram:5322393870",
-                manager_name="Leviathann",
+                manager_name="Manager",
                 loom_root=tmpdir,
             )
             self.assertTrue(result["ok"])

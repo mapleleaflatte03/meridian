@@ -7516,7 +7516,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
             if path == '/api/telegram/history/import':
                 export_path = str(body.get('export_path') or '').strip()
                 session_key = str(body.get('session_key') or '').strip()
-                manager_name = str(body.get('manager_name') or 'Leviathann').strip() or 'Leviathann'
+                manager_name = str(body.get('manager_name') or 'Manager').strip() or 'Manager'
                 if not export_path:
                     return self._json({'error': 'export_path is required'}, 400)
                 if not session_key:
@@ -7542,7 +7542,7 @@ class WorkspaceHandler(BaseHTTPRequestHandler):
                     session_id=_sid,
                 )
                 return self._json({
-                    'message': 'Telegram history imported into Leviathann session continuity',
+                    'message': f'Telegram history imported into {manager_name} session continuity',
                     'result': result,
                 }, 201)
 
