@@ -4,15 +4,17 @@ Meridian now ships with a default 7-agent software-delivery team preset for Team
 
 ## Default Dev Team
 
-| Agent | Default role | Internal task kind | Kernel role | Dispatchable |
+| Default handle | Default role | Internal task kind | Kernel role | Dispatchable |
 | --- | --- | --- | --- | --- |
-| Leviathann | `manager_tech_lead` | `manage` | `manager` | no |
-| Atlas | `architect` | `research` | `analyst` | yes |
-| Forge | `backend_engineer` | `execute` | `executor` | yes |
-| Quill | `frontend_engineer` | `execute` | `executor` | yes |
-| Pulse | `platform_engineer` | `execute` | `executor` | yes |
-| Aegis | `qa_reliability_engineer` | `qa_gate` | `qa_gate` | yes |
-| Sentinel | `security_reviewer` | `verify` | `verifier` | yes |
+| Manager | `manager_tech_lead` | `manage` | `manager` | no |
+| Architect | `architect` | `research` | `analyst` | yes |
+| Backend | `backend_engineer` | `execute` | `executor` | yes |
+| Frontend | `frontend_engineer` | `execute` | `executor` | yes |
+| Platform | `platform_engineer` | `execute` | `executor` | yes |
+| QA | `qa_reliability_engineer` | `qa_gate` | `qa_gate` | yes |
+| Security | `security_reviewer` | `verify` | `verifier` | yes |
+
+These are public-safe default handles, not the user's required identity. End users are expected to rename the team locally during onboarding or through `~/.meridian/.env`.
 
 The internal task kind and kernel role remain stable runtime primitives. The user-facing team semantics now describe a real software-delivery team.
 

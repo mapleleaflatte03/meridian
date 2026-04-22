@@ -86,8 +86,11 @@ def resolve_org_id(org_id=None):
     if resolved_from_slug:
         return resolved_from_slug
 
-    # In dev/CI the orgs file may be absent — accept org_id-shaped values
-    if not orgs and org_id.startswith('org_'):
+    # Host-bound and freshly onboarded local installs may already know their
+    # exact org_id before organizations.json is fully synchronized. Accepting
+    # an explicit org_* identifier keeps governed calls alive without requiring
+    # users to hand-edit generated registry state.
+    if org_id.startswith('org_'):
         return org_id
 
     # Reject unknown org IDs
@@ -109,6 +112,18 @@ def _founding_capsule_alias_dir(org_id=None):
     return ''
 
 
+def _host_bound_capsule_alias_dir(org_id=None):
+    resolved_org_id = resolve_org_id(org_id)
+    if not resolved_org_id:
+        return ''
+    dedicated_dir = os.path.join(CAPSULES_DIR, resolved_org_id)
+    if os.path.isdir(dedicated_dir):
+        return ''
+    if os.path.exists(LEGACY_LEDGER_FILE):
+        return ECONOMY_DIR
+    return ''
+
+
 def capsule_dir(org_id=None):
     resolved_org_id = resolve_org_id(org_id)
     if not resolved_org_id:
@@ -116,6 +131,9 @@ def capsule_dir(org_id=None):
     alias_dir = _founding_capsule_alias_dir(resolved_org_id)
     if alias_dir:
         return alias_dir
+    host_bound_alias_dir = _host_bound_capsule_alias_dir(resolved_org_id)
+    if host_bound_alias_dir:
+        return host_bound_alias_dir
     return os.path.join(CAPSULES_DIR, resolved_org_id)
 
 

@@ -28,19 +28,29 @@ DEFAULT_ENV_FILES = (
 DEFAULT_LOOM_ROOT = Path(
     os.environ.get(
         "MERIDIAN_LOOM_ROOT",
-        "/home/ubuntu/.local/share/meridian-loom/runtime/default",
+        str(Path.home() / ".local" / "share" / "meridian-loom" / "runtime" / "default"),
     )
 )
 DEFAULT_CODEX_HOME = Path(
     os.environ.get(
         "MERIDIAN_CODEX_HOME",
-        str(MERIDIAN_HOME / "auth" / "codex" / "login-home"),
+        str(Path.home() / ".meridian" / "auth" / "codex" / "login-home"),
     )
 )
 DEFAULT_LOOM_CODEX_AUTH_PATH = Path(".meridian/auth/codex/login-home/.codex/auth.json")
 DEFAULT_SHARED_CODEX_AUTH_PATH = Path(".codex/auth.json")
 DEFAULT_CODEX_BASE_URL = "https://chatgpt.com/backend-api"
 DEFAULT_TEAM_PRESET = "dev_team"
+DEFAULT_ORG_ID = "org_local_default"
+DEFAULT_MANAGER_NAME = "Manager"
+DEFAULT_SPECIALIST_NAMES = {
+    "ATLAS": "Architect",
+    "SENTINEL": "Security",
+    "FORGE": "Backend",
+    "QUILL": "Frontend",
+    "AEGIS": "QA",
+    "PULSE": "Platform",
+}
 
 
 def _candidate_codex_auth_paths(runtime_env: dict[str, str] | None = None) -> tuple[Path, ...]:
@@ -509,8 +519,12 @@ def load_team_topology(
     runtime_env = load_runtime_env(env, env_files=env_files)
     registry = _load_registry()
     semantics = _resolve_team_semantics(runtime_env)
-    manager_name = (runtime_env.get("MERIDIAN_MANAGER_AGENT_NAME") or "Leviathann").strip() or "Leviathann"
-    org_id = (runtime_env.get("MERIDIAN_LOOM_ORG_ID") or runtime_env.get("MERIDIAN_WORKSPACE_ORG_ID") or "org_48b05c21").strip()
+    manager_name = (runtime_env.get("MERIDIAN_MANAGER_AGENT_NAME") or DEFAULT_MANAGER_NAME).strip() or DEFAULT_MANAGER_NAME
+    org_id = (
+        runtime_env.get("MERIDIAN_LOOM_ORG_ID")
+        or runtime_env.get("MERIDIAN_WORKSPACE_ORG_ID")
+        or DEFAULT_ORG_ID
+    ).strip() or DEFAULT_ORG_ID
     manager_profile_name = (
         (runtime_env.get("MERIDIAN_BRAIN_MANAGER_PROFILE_NAME") or "").strip()
         or "manager_primary"
@@ -551,7 +565,8 @@ def load_team_topology(
     )
     specialists: list[TeamAgent] = []
     for key in SPECIALIST_KEYS:
-        name = (runtime_env.get(f"MERIDIAN_AGENT_{key}_NAME") or key.title()).strip() or key.title()
+        default_name = DEFAULT_SPECIALIST_NAMES[key]
+        name = (runtime_env.get(f"MERIDIAN_AGENT_{key}_NAME") or default_name).strip() or default_name
         profile_name = (
             (runtime_env.get(f"MERIDIAN_AGENT_{key}_PROFILE_NAME") or "").strip()
             or SPECIALIST_PROFILE_NAMES[key]
@@ -998,7 +1013,7 @@ def sync_loom_team_profiles(
 ) -> dict[str, Any]:
     root = Path(loom_root) if loom_root else DEFAULT_LOOM_ROOT
     resolved_runtime_env = dict(runtime_env or load_runtime_env())
-    resolved_org_id = (org_id or topology.org_id or "org_48b05c21").strip() or "org_48b05c21"
+    resolved_org_id = (org_id or topology.org_id or DEFAULT_ORG_ID).strip() or DEFAULT_ORG_ID
     profiles_path = root / "providers" / "profiles.json"
     profiles_path.parent.mkdir(parents=True, exist_ok=True)
     if profiles_path.exists():

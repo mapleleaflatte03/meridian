@@ -142,6 +142,21 @@ class CourtCapsuleTests(unittest.TestCase):
             court._load_records(f'org_missing_{uuid.uuid4().hex[:8]}')
         self.assertIn('is not initialized', str(ctx.exception))
 
+    def test_capsule_resolve_org_id_accepts_org_id_and_slug(self):
+        with mock.patch.object(capsule, '_load_orgs', return_value={
+            'org_meridian': {'slug': 'meridian'},
+            'org_alpha': {'slug': 'alpha'},
+        }):
+            self.assertEqual(capsule.resolve_org_id('org_alpha'), 'org_alpha')
+            self.assertEqual(capsule.resolve_org_id('alpha'), 'org_alpha')
+            self.assertEqual(capsule.resolve_org_id(None), 'org_meridian')
+
+    def test_capsule_resolve_org_id_accepts_explicit_org_id_even_when_registry_is_missing_it(self):
+        with mock.patch.object(capsule, '_load_orgs', return_value={
+            'org_meridian': {'slug': 'meridian'},
+        }):
+            self.assertEqual(capsule.resolve_org_id('org_hostbound123'), 'org_hostbound123')
+
     def test_load_records_migrates_legacy_records_for_founding_alias(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir = pathlib.Path(tmpdir)

@@ -94,6 +94,22 @@ print(next(iter(orgs.keys()), ""))
 PY
 }
 
+resolve_onboard_org_id() {
+  python3 - <<'PY'
+import json
+import os
+
+runtime_root = os.path.join(os.environ["MERIDIAN_ROOT"], "runtime", "onboard_state.json")
+if not os.path.exists(runtime_root):
+    print("")
+    raise SystemExit(0)
+
+with open(runtime_root, "r", encoding="utf-8") as f:
+    payload = json.load(f)
+print((payload.get("org_id") or "").strip())
+PY
+}
+
 resolve_workspace_org_id() {
   python3 - <<'PY'
 import json
@@ -175,7 +191,13 @@ PY
 }
 
 export MERIDIAN_ORG_ID="${MERIDIAN_ORG_ID:-$(resolve_org_id)}"
+if [ -z "${MERIDIAN_ORG_ID}" ]; then
+  export MERIDIAN_ORG_ID="$(resolve_onboard_org_id)"
+fi
 export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_WORKSPACE_ORG_ID:-$(resolve_workspace_org_id)}"
+if [ -z "${MERIDIAN_WORKSPACE_ORG_ID}" ]; then
+  export MERIDIAN_WORKSPACE_ORG_ID="${MERIDIAN_ORG_ID}"
+fi
 export MERIDIAN_WORKSPACE_CREDENTIALS_FILE="${WORKSPACE_CREDENTIALS_FILE}"
 
 if [ -z "${MERIDIAN_ORG_ID}" ] || [ -z "${MERIDIAN_WORKSPACE_ORG_ID}" ]; then

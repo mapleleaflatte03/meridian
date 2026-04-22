@@ -233,13 +233,13 @@ Every agent is a registered entity with identity, scopes, budget, and reputation
 
 | Agent | Role | Purpose |
 |-------|------|---------|
-| **Leviathann** | Manager | Orchestrates pipeline, routes work, closes loops |
-| **Atlas** | Analyst | Research, sourced findings, competitive analysis |
-| **Quill** | Writer | Structured briefs, release-ready deliverables |
-| **Aegis** | QA Gate | PASS/FAIL acceptance with evidence |
-| **Sentinel** | Verifier | Contradiction detection, risk review |
-| **Forge** | Executor | Implementation, operational steps |
-| **Pulse** | Compressor | Context compression, triage |
+| **Manager** | Manager / Tech Lead | Orchestrates pipeline, routes work, closes loops |
+| **Architect** | Architect / Staff Engineer | Research, system design, technical tradeoffs |
+| **Frontend** | Frontend Engineer | Structured user-facing delivery work |
+| **QA** | QA / Reliability Engineer | PASS/FAIL acceptance with evidence |
+| **Security** | Security Reviewer | Contradiction detection, auth/risk review |
+| **Backend** | Backend Engineer | Implementation, API and server-side execution |
+| **Platform** | Platform Engineer | Runtime hygiene, release, compression/triage support |
 
 Agents earn REP (reputation) and AUTH (authority) from accepted output. Sanctions apply for failures, fake progress, or wasted resources.
 

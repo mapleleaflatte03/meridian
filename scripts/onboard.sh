@@ -40,7 +40,21 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export MERIDIAN_ROOT="${MERIDIAN_ROOT:-$ROOT_DIR}"
 PLATFORM_DIR="${MERIDIAN_ROOT}/intelligence/company/meridian_platform"
-LOOM_BIN="${LOOM_BIN:-$MERIDIAN_ROOT/loom/target/release/loom}"
+MERIDIAN_LOCAL_ENV_FILE="${MERIDIAN_LOCAL_ENV_FILE:-$HOME/.meridian/.env}"
+MERIDIAN_LOCAL_GATEWAY_ENV_FILE="${MERIDIAN_LOCAL_GATEWAY_ENV_FILE:-$HOME/.meridian/.env.gateway}"
+if [[ -f "${MERIDIAN_LOCAL_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${MERIDIAN_LOCAL_ENV_FILE}"
+  set +a
+fi
+if [[ -f "${MERIDIAN_LOCAL_GATEWAY_ENV_FILE}" ]]; then
+  set -a
+  # shellcheck disable=SC1090
+  source "${MERIDIAN_LOCAL_GATEWAY_ENV_FILE}"
+  set +a
+fi
+LOOM_BIN="${LOOM_BIN:-${MERIDIAN_LOOM_BIN:-$MERIDIAN_ROOT/loom/target/release/loom}}"
 KERNEL_PATH="${MERIDIAN_ROOT}/kernel"
 LOOM_CONFIG_BASE="${XDG_CONFIG_HOME:-${HOME}/.config}"
 LOOM_CONFIG_ROOT="${LOOM_CONFIG_BASE}/meridian-loom"
@@ -49,6 +63,38 @@ LOOM_AGENT_CONFIG_DIR="${LOOM_CONFIG_ROOT}/agents"
 NON_INTERACTIVE=0
 CORE_MODE=0
 TEAM_MODE=0
+
+autodetect_http_execution_route() {
+  if [[ -n "${MERIDIAN_BRAIN_ROUTE_TYPE:-}" ]]; then
+    return
+  fi
+  local manager_transport="${MERIDIAN_BRAIN_MANAGER_TRANSPORT:-}"
+  local manager_endpoint="${MERIDIAN_BRAIN_MANAGER_ENDPOINT:-${MERIDIAN_MANAGER_XAI_BASE_URL:-}}"
+  local manager_model="${MERIDIAN_BRAIN_MANAGER_MODEL:-${MERIDIAN_MANAGER_MODEL:-}}"
+  local manager_profile="${MERIDIAN_BRAIN_MANAGER_PROFILE_NAME:-manager_primary}"
+  local manager_auth_env="${MERIDIAN_BRAIN_MANAGER_AUTH_ENV:-}"
+  local manager_key_env_pool="${MERIDIAN_BRAIN_MANAGER_KEY_ENV_POOL:-}"
+
+  if [[ -z "${manager_auth_env}" && -n "${MERIDIAN_MANAGER_XAI_API_KEY_1:-}" ]]; then
+    manager_auth_env="MERIDIAN_MANAGER_XAI_API_KEY_1"
+  fi
+
+  if [[ "${manager_transport}" == "http_json" || "${manager_transport}" == "openai_compatible" ]]; then
+    export MERIDIAN_BRAIN_ROUTE_TYPE="http_json"
+  elif [[ -n "${manager_endpoint}" && ( -n "${manager_auth_env}" || -n "${manager_key_env_pool}" ) ]]; then
+    export MERIDIAN_BRAIN_ROUTE_TYPE="http_json"
+  else
+    return
+  fi
+
+  export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-$manager_profile}"
+  export MERIDIAN_BRAIN_MODEL="${MERIDIAN_BRAIN_MODEL:-$manager_model}"
+  export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-${MERIDIAN_BRAIN_PROVIDER_PROFILE}}"
+  export MERIDIAN_BRAIN_ENDPOINT="${MERIDIAN_BRAIN_ENDPOINT:-$manager_endpoint}"
+  export MERIDIAN_BRAIN_AUTH_ENV="${MERIDIAN_BRAIN_AUTH_ENV:-$manager_auth_env}"
+  export MERIDIAN_BRAIN_KEY_ENV_POOL="${MERIDIAN_BRAIN_KEY_ENV_POOL:-$manager_key_env_pool}"
+  export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-}"
+}
 
 # Parse flags
 prev_arg=""
@@ -70,6 +116,7 @@ done
 # Env var override
 if [ "${MERIDIAN_MODE:-}" = "core" ]; then CORE_MODE=1; fi
 if [ "${MERIDIAN_MODE:-}" = "team" ]; then TEAM_MODE=1; fi
+autodetect_http_execution_route
 
 # Apply Core defaults (skips governance prompts, auto-selects execution)
 if [ "$CORE_MODE" = "1" ]; then
