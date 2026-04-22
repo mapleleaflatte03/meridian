@@ -478,57 +478,57 @@ else:
         assert dispute_id, opened_dispute
         step(f"marketplace dispute opened ({dispute_id})")
 
-    stayed_dispute = post_json(
-        "/api/marketplace/dispute",
-        {
-            "dispute_id": dispute_id,
-            "decision": "stay",
-            "reservation_id": reservation_id,
-            "court_decision_ref": f"court_acceptance_stay_{stamp}",
-        },
-    )
-    assert (stayed_dispute.get("dispute") or {}).get("decision") == "stay", stayed_dispute
-    step(f"marketplace dispute stayed ({dispute_id})")
+        stayed_dispute = post_json(
+            "/api/marketplace/dispute",
+            {
+                "dispute_id": dispute_id,
+                "decision": "stay",
+                "reservation_id": reservation_id,
+                "court_decision_ref": f"court_acceptance_stay_{stamp}",
+            },
+        )
+        assert (stayed_dispute.get("dispute") or {}).get("decision") == "stay", stayed_dispute
+        step(f"marketplace dispute stayed ({dispute_id})")
 
-    refunded_dispute = post_json(
-        "/api/marketplace/dispute",
-        {
-            "dispute_id": dispute_id,
-            "decision": "refund",
-            "reservation_id": reservation_id,
-            "court_decision_ref": f"court_acceptance_refund_{stamp}",
-        },
-        accept_statuses={400},
-    )
-    treasury_release = refunded_dispute.get("treasury_release") or {}
-    release_status = (treasury_release.get("status") or "").strip().lower()
-    if refunded_dispute.get("_http_error"):
-        raw = str(refunded_dispute.get("raw") or "").lower()
-        if "already resolved" in raw:
-            marketplace_snapshot = get_json("/api/marketplace")
-            disputes = list(marketplace_snapshot.get("disputes") or [])
-            resolved = next((row for row in disputes if row.get("id") == dispute_id), None)
-            assert resolved and (resolved.get("status") or "").lower() == "resolved", marketplace_snapshot
-            decision = (resolved.get("decision") or "").strip().lower()
-            assert decision in {"refund", "release"}, resolved
-            release_status = "refunded" if decision == "refund" else "released"
-        else:
-            raise AssertionError(f"unexpected marketplace dispute-refund error: {refunded_dispute}")
-    if release_status == "error":
-        dispute_obj = refunded_dispute.get("dispute") or {}
-        if (dispute_obj.get("decision") or "").strip().lower() == "refund":
-            release_status = "refunded"
-        elif (dispute_obj.get("decision") or "").strip().lower() in {"stay", "release"}:
-            release_status = "released"
-    assert release_status in {"released", "refunded"}, refunded_dispute
-    step(f"marketplace dispute refunded ({dispute_id})")
+        refunded_dispute = post_json(
+            "/api/marketplace/dispute",
+            {
+                "dispute_id": dispute_id,
+                "decision": "refund",
+                "reservation_id": reservation_id,
+                "court_decision_ref": f"court_acceptance_refund_{stamp}",
+            },
+            accept_statuses={400},
+        )
+        treasury_release = refunded_dispute.get("treasury_release") or {}
+        release_status = (treasury_release.get("status") or "").strip().lower()
+        if refunded_dispute.get("_http_error"):
+            raw = str(refunded_dispute.get("raw") or "").lower()
+            if "already resolved" in raw:
+                marketplace_snapshot = get_json("/api/marketplace")
+                disputes = list(marketplace_snapshot.get("disputes") or [])
+                resolved = next((row for row in disputes if row.get("id") == dispute_id), None)
+                assert resolved and (resolved.get("status") or "").lower() == "resolved", marketplace_snapshot
+                decision = (resolved.get("decision") or "").strip().lower()
+                assert decision in {"refund", "release"}, resolved
+                release_status = "refunded" if decision == "refund" else "released"
+            else:
+                raise AssertionError(f"unexpected marketplace dispute-refund error: {refunded_dispute}")
+        if release_status == "error":
+            dispute_obj = refunded_dispute.get("dispute") or {}
+            if (dispute_obj.get("decision") or "").strip().lower() == "refund":
+                release_status = "refunded"
+            elif (dispute_obj.get("decision") or "").strip().lower() in {"stay", "release"}:
+                release_status = "released"
+        assert release_status in {"released", "refunded"}, refunded_dispute
+        step(f"marketplace dispute refunded ({dispute_id})")
 
-    marketplace_snapshot = get_json("/api/marketplace")
-    settlements = list(marketplace_snapshot.get("settlements") or [])
-    matching_settlements = [row for row in settlements if row.get("bid_id") == bid_id]
-    assert matching_settlements, marketplace_snapshot
-    assert matching_settlements[-1].get("proof_receipt"), matching_settlements[-1]
-    assert matching_settlements[-1].get("reservation_id") == reservation_id, matching_settlements[-1]
+        marketplace_snapshot = get_json("/api/marketplace")
+        settlements = list(marketplace_snapshot.get("settlements") or [])
+        matching_settlements = [row for row in settlements if row.get("bid_id") == bid_id]
+        assert matching_settlements, marketplace_snapshot
+        assert matching_settlements[-1].get("proof_receipt"), matching_settlements[-1]
+        assert matching_settlements[-1].get("reservation_id") == reservation_id, matching_settlements[-1]
 
 # Dynamic court lifecycle smoke: proposal -> vote -> tally -> activate
 proposal = post_json(
