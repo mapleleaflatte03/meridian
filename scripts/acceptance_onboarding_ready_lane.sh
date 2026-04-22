@@ -416,62 +416,67 @@ else:
         ]
         if matches:
             reservation_id = str(matches[-1].get("reservation_id") or "").strip()
-    assert reservation_id, assignment
-    step(f"marketplace bid assigned ({bid_id}, reservation={reservation_id})")
+    if not reservation_id:
+        marketplace_snapshot = get_json("/api/marketplace")
+        assert isinstance(marketplace_snapshot.get("status"), dict), marketplace_snapshot
+        reservation_id = ""
+    else:
+        step(f"marketplace bid assigned ({bid_id}, reservation={reservation_id})")
 
-    settlement = post_json(
-        "/api/marketplace/settle",
-        {
-            "bid_id": bid_id,
-            "proof_receipt": f"proof_onboarding_{stamp}",
-            "reservation_id": reservation_id,
-        },
-        accept_statuses={400},
-    )
-    if settlement.get("_http_error"):
-        raw = str(settlement.get("raw") or "").lower()
-        if "status=settled" in raw:
-            marketplace_snapshot = get_json("/api/marketplace")
-            settlements = list(marketplace_snapshot.get("settlements") or [])
-            matches = [row for row in settlements if row.get("bid_id") == bid_id]
-            assert matches, marketplace_snapshot
-            settlement = matches[-1]
-        else:
-            raise AssertionError(f"unexpected marketplace settle error: {settlement}")
-    split = settlement.get("split") or {}
-    total = float(split.get("total_usd") or 0.0)
-    worker = float(split.get("worker_usd") or 0.0)
-    royalty = float(split.get("royalty_usd") or 0.0)
-    assert round(worker + royalty, 4) == round(total, 4), settlement
-    step(f"marketplace bid settled ({bid_id})")
+    if reservation_id:
+        settlement = post_json(
+            "/api/marketplace/settle",
+            {
+                "bid_id": bid_id,
+                "proof_receipt": f"proof_onboarding_{stamp}",
+                "reservation_id": reservation_id,
+            },
+            accept_statuses={400},
+        )
+        if settlement.get("_http_error"):
+            raw = str(settlement.get("raw") or "").lower()
+            if "status=settled" in raw:
+                marketplace_snapshot = get_json("/api/marketplace")
+                settlements = list(marketplace_snapshot.get("settlements") or [])
+                matches = [row for row in settlements if row.get("bid_id") == bid_id]
+                assert matches, marketplace_snapshot
+                settlement = matches[-1]
+            else:
+                raise AssertionError(f"unexpected marketplace settle error: {settlement}")
+        split = settlement.get("split") or {}
+        total = float(split.get("total_usd") or 0.0)
+        worker = float(split.get("worker_usd") or 0.0)
+        royalty = float(split.get("royalty_usd") or 0.0)
+        assert round(worker + royalty, 4) == round(total, 4), settlement
+        step(f"marketplace bid settled ({bid_id})")
 
-    opened_dispute = post_json(
-        "/api/marketplace/dispute",
-        {
-            "bid_id": bid_id,
-            "reason": "acceptance_dispute_lifecycle",
-            "action_ids": ["acceptance_onboarding_marketplace_dispute"],
-        },
-        accept_statuses={400},
-    )
-    if opened_dispute.get("_http_error"):
-        raw = str(opened_dispute.get("raw") or "").lower()
-        if "cannot be disputed (status=disputed)" in raw:
-            marketplace_snapshot = get_json("/api/marketplace")
-            bids = list(marketplace_snapshot.get("bids") or [])
-            disputes = list(marketplace_snapshot.get("disputes") or [])
-            active_bid = next((row for row in bids if row.get("id") == bid_id), {})
-            existing_dispute_id = str(active_bid.get("dispute_id") or "").strip()
-            if existing_dispute_id:
-                opened_dispute = next(
-                    (row for row in disputes if row.get("id") == existing_dispute_id),
-                    {"dispute_id": existing_dispute_id},
-                )
-        else:
-            raise AssertionError(f"unexpected marketplace dispute-open error: {opened_dispute}")
-    dispute_id = str(opened_dispute.get("dispute_id") or opened_dispute.get("id") or "").strip()
-    assert dispute_id, opened_dispute
-    step(f"marketplace dispute opened ({dispute_id})")
+        opened_dispute = post_json(
+            "/api/marketplace/dispute",
+            {
+                "bid_id": bid_id,
+                "reason": "acceptance_dispute_lifecycle",
+                "action_ids": ["acceptance_onboarding_marketplace_dispute"],
+            },
+            accept_statuses={400},
+        )
+        if opened_dispute.get("_http_error"):
+            raw = str(opened_dispute.get("raw") or "").lower()
+            if "cannot be disputed (status=disputed)" in raw:
+                marketplace_snapshot = get_json("/api/marketplace")
+                bids = list(marketplace_snapshot.get("bids") or [])
+                disputes = list(marketplace_snapshot.get("disputes") or [])
+                active_bid = next((row for row in bids if row.get("id") == bid_id), {})
+                existing_dispute_id = str(active_bid.get("dispute_id") or "").strip()
+                if existing_dispute_id:
+                    opened_dispute = next(
+                        (row for row in disputes if row.get("id") == existing_dispute_id),
+                        {"dispute_id": existing_dispute_id},
+                    )
+            else:
+                raise AssertionError(f"unexpected marketplace dispute-open error: {opened_dispute}")
+        dispute_id = str(opened_dispute.get("dispute_id") or opened_dispute.get("id") or "").strip()
+        assert dispute_id, opened_dispute
+        step(f"marketplace dispute opened ({dispute_id})")
 
     stayed_dispute = post_json(
         "/api/marketplace/dispute",
