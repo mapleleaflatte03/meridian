@@ -83,6 +83,11 @@ from loom_runtime_discovery import preferred_loom_bin, preferred_loom_root, runt
 from session_history import append_session_event, load_session_events
 from team_topology import SPECIALIST_KEYS, load_team_topology, sync_loom_team_profiles
 from telegram_history import imported_history_context
+from constitutional_trace import (
+    build_constitutional_trace,
+    load_recent_traces as load_recent_constitutional_traces,
+    persist_trace as persist_constitutional_trace,
+)
 import brain_router
 
 
@@ -12420,6 +12425,7 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/marketplace/bids",
                     "/api/marketplace/settlements",
                     "/api/marketplace/disputes",
+                    "/api/execution-traces",
                 }
 
             def _send_cors_headers(self) -> None:
@@ -12711,11 +12717,23 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/marketplace/bids",
                     "/api/marketplace/settlements",
                     "/api/marketplace/disputes",
+                    "/api/execution-traces",
                     # Commonwealth L1-L5
                     "/api/commonwealth/federation",
                     "/api/commonwealth/memory/anchor",
                     "/api/commonwealth/proof-bundle",
                 }:
+                    if request_path == "/api/execution-traces":
+                        query = parse_qs(parsed.query or "")
+                        limit = min(int(str((query.get("limit") or ["50"])[0] or "50").strip() or "50"), 200)
+                        traces = load_recent_constitutional_traces(limit=limit)
+                        self._send_json(200, {
+                            "status": "success",
+                            "schema_version": "constitutional_trace.v1",
+                            "count": len(traces),
+                            "traces": traces,
+                        })
+                        return
                     if request_path == "/api/treasury" and not parsed.query:
                         proxied = _workspace_proxied_get_cached(
                             proxied_path,
@@ -12974,13 +12992,30 @@ class WebAPIAdapter(ChannelAdapter):
                     delivery_id=delivery_id,
                     job_id=str((team_meta or {}).get("job_id") or "").strip(),
                 )
+                constitutional_trace = {}
                 try:
-                    self._send_json(200, {
+                    constitutional_trace = build_constitutional_trace(
+                        org_id=LOOM_ORG_ID,
+                        session_key=session_key,
+                        agent_id=TEAM_MANAGER_AGENT_ID,
+                        plan=dict(team_meta.get("plan") or {}) if isinstance(team_meta, dict) else {},
+                        steps=list(team_meta.get("steps") or []) if isinstance(team_meta, dict) else [],
+                        output=answer,
+                        mode=str((team_meta or {}).get("mode") or ""),
+                    )
+                    persist_constitutional_trace(constitutional_trace)
+                except Exception as trace_exc:
+                    _log(f"constitutional trace build warning: {trace_exc}", color=ANSI_YELLOW)
+                try:
+                    response_payload = {
                         "status": "success",
                         "output": answer,
                         "session_id": session_id,
                         "session_key": session_key,
-                    })
+                    }
+                    if constitutional_trace:
+                        response_payload["constitutional_trace"] = constitutional_trace
+                    self._send_json(200, response_payload)
                 except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError) as exc:
                     if delivery_id:
                         _loom_channel_update(
