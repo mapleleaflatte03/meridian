@@ -180,16 +180,16 @@ LOOM_ORG_ID = (
     os.environ.get("MERIDIAN_LOOM_ORG_ID")
     or os.environ.get("MERIDIAN_WORKSPACE_ORG_ID")
     or runtime_value('org_id', '')
-    or "org_48b05c21"
+    or "org_local_default"
 )
-LOOM_AGENT_ID = os.environ.get("MERIDIAN_LOOM_AGENT_ID", "agent_leviathann")
+LOOM_AGENT_ID = os.environ.get("MERIDIAN_LOOM_AGENT_ID", "agent_manager")
 MERIDIAN_CODEX_HOME = os.environ.get(
     "MERIDIAN_CODEX_HOME",
-    "/home/ubuntu/.meridian/auth/codex/login-home",
+    str(Path.home() / ".meridian" / "auth" / "codex" / "login-home"),
 )
 MERIDIAN_CODEX_BIN = os.environ.get(
     "MERIDIAN_CODEX_BIN",
-    "/home/ubuntu/.npm-global/bin/codex",
+    "codex",
 )
 MAX_STEPS = int(os.environ.get("MERIDIAN_GATEWAY_MAX_STEPS", "6"))
 REQUEST_TIMEOUT_SECONDS = int(os.environ.get("MERIDIAN_GATEWAY_TIMEOUT_SECONDS", "90"))
@@ -223,7 +223,7 @@ WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS = float(
 )
 WORKSPACE_API_BASE = os.environ.get("MERIDIAN_WORKSPACE_API_BASE", "http://127.0.0.1:18901").rstrip("/")
 WORKSPACE_CREDENTIALS_FILE = Path(
-    os.environ.get("MERIDIAN_WORKSPACE_CREDENTIALS_FILE", "/home/ubuntu/.meridian/.workspace_credentials")
+    os.environ.get("MERIDIAN_WORKSPACE_CREDENTIALS_FILE", str(Path.home() / ".meridian" / ".workspace_credentials"))
 )
 
 ANSI_RESET = "\033[0m"
@@ -239,11 +239,14 @@ LLM_API_KEY = ""
 TEAM_TOPOLOGY = load_team_topology()
 sync_loom_team_profiles(TEAM_TOPOLOGY, loom_root=LOOM_ROOT, org_id=LOOM_ORG_ID)
 TEAM_MANAGER_AGENT_ID = TEAM_TOPOLOGY.manager.registry_id
+TEAM_MANAGER_NAME = TEAM_TOPOLOGY.manager.name
 MEMORY_RECALL_AGENT_ID = os.environ.get("MERIDIAN_MEMORY_AGENT_ID", TEAM_MANAGER_AGENT_ID)
-SKILL_VALIDATOR = Path("/home/ubuntu/.codex/skills/.system/skill-creator/scripts/quick_validate.py")
+SKILL_VALIDATOR = Path.home() / ".codex" / "skills" / ".system" / "skill-creator" / "scripts" / "quick_validate.py"
 GOVERNED_SKILL_SYNTHESIS_POLICY_REF = "governed_dynamic_skill_synthesis_v1"
 GOVERNED_SKILL_BOUNDARY_NAME = "skill_autonomy"
 GOVERNED_MEMORY_POLICY_REF = "governed_memory_retrieval_v1"
+TEAM_ROUTE_SYNTHESIS_RESERVE_SECONDS = int(os.environ.get("MERIDIAN_TEAM_ROUTE_SYNTHESIS_RESERVE_SECONDS", "18"))
+TEAM_ROUTE_MIN_WORKER_SECONDS = int(os.environ.get("MERIDIAN_TEAM_ROUTE_MIN_WORKER_SECONDS", "8"))
 SKILL_SYNTHESIS_CREATE_COST_USD = 0.03
 SKILL_SYNTHESIS_REFINE_COST_USD = 0.015
 MEMORY_RECALL_LIMIT = int(os.environ.get("MERIDIAN_MEMORY_RECALL_LIMIT", "4"))
@@ -2216,8 +2219,8 @@ def _telegram_help_text() -> str:
     return (
         "Telegram conversation surface:\n"
         "/help -> show this help.\n"
-        "Any other message goes to Leviathann.\n"
-        "Leviathann decides which internal specialists to call and returns the final answer."
+        f"Any other message goes to {TEAM_MANAGER_NAME}.\n"
+        f"{TEAM_MANAGER_NAME} decides which internal specialists to call and returns the final answer."
     )
 
 
@@ -2395,6 +2398,13 @@ def _refine_skill_routed_workers(request: str, matched_skills: list[dict[str, An
 
 def _specialist_timeout_for_request(agent_key: str, request: str, skills_used: list[str]) -> int:
     lowered_skills = {str(item or "").strip().lower() for item in skills_used}
+    if _looks_like_software_delivery_request(request):
+        if agent_key == "ATLAS":
+            return 28
+        if agent_key == "SENTINEL":
+            return 24
+        if agent_key in {"FORGE", "QUILL", "PULSE"}:
+            return 22
     if agent_key == "ATLAS" and _request_is_ai_stack_watch(request, skills_used):
         return 28
     if agent_key == "ATLAS" and _request_is_security_questionnaire(request, skills_used):
@@ -2441,13 +2451,14 @@ def _prefer_direct_provider_first(agent_key: str, request: str, skills_used: lis
     lowered_skills = {str(item or "").strip().lower() for item in skills_used}
     fast_lane_skills = {"mail-gui", "book-meeting", "safe-web-research", "security-questionnaire"}
     protocol_lane = _request_wants_protocol_artifact(request) or any("protocol" in name for name in lowered_skills)
+    software_delivery_lane = _looks_like_software_delivery_request(request)
     customer_research_lane = any(
         "research" in name and any(token in name for token in ("khach", "customer", "persona", "jtbd", "icp"))
         for name in lowered_skills
     )
     assurance_lane = _request_is_security_questionnaire(request, skills_used)
     explicit_specialist_lane = bool(_explicitly_requested_specialists(request))
-    if explicit_specialist_lane and agent_key in {"SENTINEL", "FORGE"}:
+    if (explicit_specialist_lane or software_delivery_lane) and agent_key in {"SENTINEL", "FORGE", "QUILL", "PULSE"}:
         return True
     return agent_key in {"QUILL", "AEGIS"} and (
         bool(lowered_skills.intersection(fast_lane_skills))
@@ -2485,6 +2496,8 @@ def _route_requires_team_execution(request: str, skill_names: list[str]) -> bool
     lowered_skills = {str(item or "").strip().lower() for item in skill_names if str(item or "").strip()}
     if not request.strip():
         return False
+    if _looks_like_software_delivery_request(request):
+        return True
     if _request_wants_protocol_artifact(request):
         return True
     if _request_is_security_questionnaire(request, list(lowered_skills)):
@@ -2520,6 +2533,8 @@ def _decision_grade_route_score(request: str, skill_bundle: dict[str, Any]) -> d
     token_count = len(tokens)
     short_prompt = token_count <= 6 and len(stripped.split()) <= 10
     actionable = _request_is_actionable(stripped)
+    explicit_specialists = _explicitly_requested_specialists(stripped)
+    software_delivery_request = _looks_like_software_delivery_request(stripped)
     matched_skills = [dict(item) for item in (skill_bundle.get("matches") or []) if isinstance(item, dict)]
     skill_names = [str(item.get("name") or "").strip() for item in matched_skills if str(item.get("name") or "").strip()]
     sorted_scores = sorted((int(item.get("score") or 0) for item in matched_skills), reverse=True)
@@ -2587,6 +2602,8 @@ def _decision_grade_route_score(request: str, skill_bundle: dict[str, Any]) -> d
         else adaptive_thresholds.get("team_margin_default")
     )
     direct_guard_confidence = int(adaptive_thresholds.get("direct_guard_confidence") or ROUTE_SCORE_DIRECT_GUARD_CONFIDENCE)
+    if requires_team_execution and (software_delivery_request or explicit_specialists):
+        team_score = max(team_score, direct_score + margin_required)
     raw_margin = team_score - direct_score
     decision = "team" if raw_margin >= margin_required else "direct"
     confidence = min(99, max(40, int((abs(raw_margin) * 2) + (top_skill_score * 1.5) + (score_gap * 1.5))))
@@ -2809,7 +2826,7 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
             "workers": workers,
             "manager_brief": _software_delivery_manager_brief(stripped, workers),
             "reason": "software_delivery_team_request",
-            "skills": skill_bundle["matches"],
+            "skills": [],
             "routing_score": routing_score,
         }
     if _skill_route_should_activate(stripped, skill_bundle):
@@ -2877,7 +2894,7 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
     manager = _loom_manager_defaults()
     plan = _run_codex_exec(
         system_prompt=(
-            "You are Leviathann, Meridian's manager and orchestrator. "
+            f"You are {TEAM_MANAGER_NAME}, Meridian's manager and orchestrator. "
             "Decide whether to answer directly or delegate to internal specialists. "
             "Return strict JSON only with keys: mode, workers, topic, depth, criteria, manager_brief, reason. "
             "mode must be direct or team. "
@@ -3027,7 +3044,7 @@ def _manager_direct_response(goal: str, session_key: str, plan: dict[str, Any] |
     trust_evidence_context = _trust_evidence_context_block(dict(plan or {}).get("trust_evidence_packet"))
     result = _run_codex_exec(
         system_prompt=(
-            "You are Leviathann, Meridian's manager. "
+            f"You are {TEAM_MANAGER_NAME}, Meridian's manager. "
             "Answer the user directly. Use conversation continuity when relevant. "
             "Do not mention internal specialist routing unless asked. "
             "Use governed memory recall only as bounded context, never as a substitute for verified live facts."
@@ -3074,7 +3091,14 @@ def _manager_direct_response(goal: str, session_key: str, plan: dict[str, Any] |
     return answer
 
 
-def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: dict[str, Any]) -> dict[str, Any]:
+def _run_specialist_step(
+    agent_key: str,
+    request: str,
+    session_key: str,
+    plan: dict[str, Any],
+    *,
+    deadline_unix: float | None = None,
+) -> dict[str, Any]:
     specialist = next(agent for agent in TEAM_TOPOLOGY.specialists if agent.env_key == agent_key)
     specialist_role = _specialist_role_label(specialist)
     specialist_purpose = _specialist_purpose_label(specialist)
@@ -3412,6 +3436,16 @@ def _run_specialist_step(agent_key: str, request: str, session_key: str, plan: d
             """
         ).strip()
     specialist_timeout = _specialist_timeout_for_request(specialist.env_key, request, skills_used)
+    if deadline_unix is not None:
+        remaining_seconds = int(deadline_unix - time.time())
+        if remaining_seconds < TEAM_ROUTE_MIN_WORKER_SECONDS:
+            return _specialist_deadline_timeout_receipt(
+                specialist,
+                session_key=session_key,
+                skills_used=skills_used,
+                remaining_seconds=max(0, remaining_seconds),
+            )
+        specialist_timeout = min(specialist_timeout, remaining_seconds)
     specialist_max_tokens = 900
     if specialist.env_key == "SENTINEL":
         specialist_max_tokens = 450
@@ -3659,7 +3693,14 @@ def _manager_fastpath_artifact(
     return "", ""
 
 
-def _manager_synthesis(goal: str, session_key: str, steps: list[dict[str, Any]], plan: dict[str, Any] | None = None) -> str:
+def _manager_synthesis(
+    goal: str,
+    session_key: str,
+    steps: list[dict[str, Any]],
+    plan: dict[str, Any] | None = None,
+    *,
+    timeout_seconds: int | None = None,
+) -> str:
     manager_defaults = _loom_manager_defaults()
     manager_meta = _manager_exec_metadata(manager_defaults.get("model", ""))
     skill_names = [
@@ -3684,6 +3725,23 @@ def _manager_synthesis(goal: str, session_key: str, steps: list[dict[str, Any]],
         }, loom_root=LOOM_ROOT)
         return fastpath_artifact
 
+    local_team_fallback = _local_team_delivery_fallback(goal, steps, plan)
+    if timeout_seconds is not None and timeout_seconds < TEAM_ROUTE_MIN_WORKER_SECONDS and local_team_fallback:
+        append_session_event(session_key, {
+            "history_type": "manager_response",
+            "status": "degraded",
+            "agent_id": TEAM_MANAGER_AGENT_ID,
+            "speaker": "manager",
+            "text": local_team_fallback,
+            "provider_profile": manager_meta["provider_profile"],
+            "model": manager_meta["model"],
+            "transport_kind": manager_meta["transport_kind"],
+            "auth_mode": manager_meta["auth_mode"],
+            "execution_owner": "meridian",
+            "warnings": ["manager_synthesis_fallback_local_team_summary"],
+        }, loom_root=LOOM_ROOT)
+        return local_team_fallback
+
     history_context = _full_session_history_context(session_key, limit=24)
     cleaned_steps = _manager_step_view(steps)
     verified_facts = {}
@@ -3695,7 +3753,7 @@ def _manager_synthesis(goal: str, session_key: str, steps: list[dict[str, Any]],
     trust_evidence_context = _trust_evidence_context_block(dict(plan or {}).get("trust_evidence_packet"))
     result = _run_codex_exec(
         system_prompt=(
-            "You are Leviathann, Meridian's manager. "
+            f"You are {TEAM_MANAGER_NAME}, Meridian's manager. "
             "Given specialist outputs, produce the final user-facing reply. "
             "Resolve conflicts, call out uncertainty, and keep the answer concise but complete. "
             "Treat worker warnings and empty citations as first-class truth. "
@@ -3716,7 +3774,7 @@ def _manager_synthesis(goal: str, session_key: str, steps: list[dict[str, Any]],
             f"Specialist outputs:\n{json.dumps(cleaned_steps, indent=2, ensure_ascii=False)}"
         ),
         model=manager_defaults["model"],
-        timeout=REQUEST_TIMEOUT_SECONDS,
+        timeout=max(TEAM_ROUTE_MIN_WORKER_SECONDS, int(timeout_seconds or REQUEST_TIMEOUT_SECONDS)),
     )
     if result.get("ok") and str(result.get("output_text") or "").strip():
         answer = str(result.get("output_text") or "").strip()
@@ -3753,6 +3811,21 @@ def _manager_synthesis(goal: str, session_key: str, steps: list[dict[str, Any]],
         for item in steps
     )
     fallback_artifact = _best_usable_step_artifact(steps, goal, skill_names)
+    if local_team_fallback:
+        append_session_event(session_key, {
+            "history_type": "manager_response",
+            "status": "degraded",
+            "agent_id": TEAM_MANAGER_AGENT_ID,
+            "speaker": "manager",
+            "text": local_team_fallback,
+            "provider_profile": manager_meta["provider_profile"],
+            "model": manager_meta["model"],
+            "transport_kind": manager_meta["transport_kind"],
+            "auth_mode": manager_meta["auth_mode"],
+            "execution_owner": "meridian",
+            "warnings": ["manager_synthesis_fallback_local_team_summary"],
+        }, loom_root=LOOM_ROOT)
+        return local_team_fallback
     if fallback_artifact:
         preface: list[str] = []
         if research_unverified:
@@ -3892,12 +3965,39 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
 
     steps: list[dict[str, Any]] = []
     final_job_id = ""
+    team_deadline_unix = time.time() + max(TEAM_ROUTE_MIN_WORKER_SECONDS, REQUEST_TIMEOUT_SECONDS)
+    worker_deadline_unix = team_deadline_unix - TEAM_ROUTE_SYNTHESIS_RESERVE_SECONDS
     for worker in plan.get("workers") or []:
         plan["steps"] = list(steps)
-        step = _run_specialist_step(str(worker), request, session_key, plan)
+        specialist = next(
+            (agent for agent in TEAM_TOPOLOGY.specialists if agent.env_key == str(worker)),
+            None,
+        )
+        if worker_deadline_unix <= time.time() and specialist is not None:
+            step = _specialist_deadline_timeout_receipt(
+                specialist,
+                session_key=session_key,
+                skills_used=skill_names,
+                remaining_seconds=max(0, int(worker_deadline_unix - time.time())),
+            )
+        else:
+            step = _run_specialist_step(
+                str(worker),
+                request,
+                session_key,
+                plan,
+                deadline_unix=worker_deadline_unix,
+            )
         steps.append(step)
         final_job_id = str(step.get("request_id") or final_job_id).strip()
-    answer = _manager_synthesis(request, session_key, steps, plan)
+    manager_timeout = max(1, int(team_deadline_unix - time.time()))
+    answer = _manager_synthesis(
+        request,
+        session_key,
+        steps,
+        plan,
+        timeout_seconds=manager_timeout,
+    )
     skill_names = [str(item.get("name") or "").strip() for item in (plan.get("skills") or []) if str(item.get("name") or "").strip()]
     lowered_skill_names = {item.strip().lower() for item in skill_names}
     repair_warnings: list[str] = []
@@ -8008,7 +8108,7 @@ def _build_user_session_court_candidates(
             "severity": manager_severity,
             "evidence": (
                 f"User-session delivery {delivery_fingerprint} on {session_key} shipped as {quality_status} "
-                f"from {artifact_source}. Leviathann had to carry final responsibility for the user-facing artifact."
+                f"from {artifact_source}. {TEAM_MANAGER_NAME} had to carry final responsibility for the user-facing artifact."
             ),
         }
     )
@@ -8837,6 +8937,95 @@ def _best_usable_step_artifact(
             best_score = score
             best_artifact = artifact
     return best_artifact if best_score > 0 else ""
+
+
+def _specialist_deadline_timeout_receipt(
+    specialist: Any,
+    *,
+    session_key: str,
+    skills_used: list[str],
+    remaining_seconds: int,
+) -> dict[str, Any]:
+    role_label = _specialist_role_label(specialist)
+    warnings = [
+        f"Team route deadline exhausted before {specialist.name} could complete within the request budget ({remaining_seconds}s remaining)."
+    ]
+    receipt = {
+        "agent_id": specialist.registry_id,
+        "role": role_label,
+        "task_kind": specialist.task_kind,
+        "request_id": "",
+        "session_key": session_key,
+        "provider_profile": specialist.profile_name,
+        "model": specialist.model,
+        "transport_kind": "deadline_guard",
+        "result": "",
+        "confidence": "",
+        "citations": [],
+        "warnings": warnings,
+        "status": "timeout",
+        "skills_used": skills_used,
+        "raw": {"deadline_guard": True, "remaining_seconds": remaining_seconds},
+    }
+    append_session_event(session_key, {
+        "history_type": "worker_receipt",
+        "status": receipt["status"],
+        "agent_id": specialist.registry_id,
+        "speaker": "worker",
+        "role": role_label,
+        "task_kind": specialist.task_kind,
+        "request_id": receipt["request_id"],
+        "provider_profile": specialist.profile_name,
+        "model": specialist.model,
+        "transport_kind": receipt["transport_kind"],
+        "text": receipt["result"],
+        "confidence": receipt["confidence"],
+        "citations": receipt["citations"],
+        "warnings": receipt["warnings"],
+        "skills_used": skills_used,
+    }, loom_root=LOOM_ROOT)
+    return receipt
+
+
+def _local_team_delivery_fallback(goal: str, steps: list[dict[str, Any]], plan: dict[str, Any] | None = None) -> str:
+    if not (_looks_like_software_delivery_request(goal) or str((plan or {}).get("reason") or "").strip() == "software_delivery_team_request"):
+        return ""
+    visible_steps = [step for step in steps if str(step.get("result") or "").strip() or _step_warning_texts(step)]
+    if not visible_steps:
+        return ""
+
+    lines = [
+        "Dev-Team Synthesis",
+        "",
+    ]
+    next_moves: list[str] = []
+    for step in visible_steps:
+        role = str(step.get("role") or step.get("agent_id") or "specialist").strip()
+        task_kind = str(step.get("task_kind") or "").strip()
+        status = _step_effective_status(step)
+        artifact = _coerce_request_specific_artifact(_step_result_text(step), goal)
+        warnings = _step_warning_texts(step)
+        heading = f"{role}"
+        if task_kind:
+            heading = f"{heading} [{task_kind}]"
+        lines.append(f"{heading}:")
+        if artifact:
+            lines.append(artifact)
+            next_moves.append(f"{role}: use this contribution as the execution handoff.")
+        elif warnings:
+            lines.append(f"Blocked or incomplete: {warnings[0]}")
+            next_moves.append(f"{role}: resolve the blocker before treating this lane as complete.")
+        else:
+            lines.append(f"Blocked or incomplete: status={status or 'unknown'}.")
+            next_moves.append(f"{role}: rerun this lane with a wider timeout or a narrower brief.")
+        lines.append("")
+
+    if next_moves:
+        lines.append("Manager Handoff:")
+        for move in next_moves[:4]:
+            lines.append(f"- {move}")
+
+    return "\n".join(lines).strip()
 
 
 def _request_wants_protocol_artifact(request: str) -> bool:
@@ -10003,7 +10192,7 @@ def _salvage_mail_artifact(request: str) -> str:
                 Đây là bản cập nhật ngắn về trạng thái hiện tại của Meridian và các Agent trên host đang chạy:
 
                 - **Meridian:** đang vận hành theo hướng governed Trust Ops, với boundary công khai và các proof route đang hoạt động trên host hiện tại.
-                - **Leviathann:** giữ vai trò manager, điều phối output cuối và route các lane theo boundary hiện tại.
+                - **Manager:** giữ vai trò manager, điều phối output cuối và route các lane theo boundary hiện tại.
                 - **Atlas:** phụ trách research và signal discovery cho các lane cần evidence hoặc watch output.
                 - **Quill:** phụ trách drafting các artifact gửi người dùng như email, brief, questionnaire pack, và output buyer-facing.
                 - **Aegis / Sentinel:** phụ trách quality gate, contradiction check, và cảnh báo khi output không đủ proof.
@@ -10033,7 +10222,7 @@ def _salvage_mail_artifact(request: str) -> str:
             Here is a short update on the current status of Meridian and the agents running on the current host:
 
             - **Meridian:** operating as a governed Trust Ops system with a public boundary and live proof routes on the current host.
-            - **Leviathann:** acting as the manager, routing work and choosing the final user-facing artifact.
+            - **Manager:** acting as the manager, routing work and choosing the final user-facing artifact.
             - **Atlas:** handling research and signal discovery for evidence-heavy and watch-oriented lanes.
             - **Quill:** drafting buyer-facing output such as emails, briefs, questionnaire packs, and communication artifacts.
             - **Aegis / Sentinel:** handling quality gates, contradiction checks, and warning when output lacks enough proof.
@@ -10380,6 +10569,8 @@ def _request_is_security_questionnaire(request: str, skills_used: list[str] | No
         return True
     if _request_wants_protocol_artifact(request):
         return False
+    if _looks_like_software_delivery_request(request):
+        return False
     
     # Exclude planning and migration tasks
     planning_exclusions = (
@@ -10391,6 +10582,8 @@ def _request_is_security_questionnaire(request: str, skills_used: list[str] | No
         "migration strategy",
         "implementation strategy",
         "roadmap",
+        "delivery plan",
+        "sprint plan",
     )
     if any(exclusion in lowered for exclusion in planning_exclusions):
         return False
@@ -11756,6 +11949,8 @@ class TelegramAdapter(ChannelAdapter):
         self.next_offset: int | None = None
         self.active_chats: set[int | str] = set()
         self.active_lock = threading.Lock()
+        self.polling_state = "idle"
+        self.polling_conflict_detail = ""
 
     def start(self) -> None:
         if not self.bot_token:
@@ -11766,6 +11961,7 @@ class TelegramAdapter(ChannelAdapter):
         self.thread.start()
         self.drain_thread = threading.Thread(target=self._drain_loop, name="telegram-drain", daemon=True)
         self.drain_thread.start()
+        self.polling_state = "polling"
         _log("telegram adapter started: polling active", color=ANSI_GREEN)
 
     def stop(self) -> None:
@@ -11897,6 +12093,8 @@ class TelegramAdapter(ChannelAdapter):
                 if self.next_offset is not None:
                     payload["offset"] = self.next_offset
                 body = self._telegram_request("getUpdates", payload)
+                self.polling_state = "polling"
+                self.polling_conflict_detail = ""
                 for update in body.get("result") or []:
                     if not isinstance(update, dict):
                         continue
@@ -11906,7 +12104,28 @@ class TelegramAdapter(ChannelAdapter):
                     message = update.get("message")
                     if isinstance(message, dict):
                         self._handle_message(message)
+            except urllib.error.HTTPError as exc:
+                if exc.code == 409:
+                    self.polling_state = "conflict"
+                    self.polling_conflict_detail = "another poller already owns this Telegram bot token"
+                    _record_gateway_audit(
+                        "telegram_poll_conflict",
+                        session_key="telegram:poller",
+                        channel="telegram",
+                        text="Polling disabled on this process because another live stack already owns the bot token.",
+                        extra_details={"http_status": "409", "state": self.polling_state},
+                    )
+                    _log(
+                        "telegram adapter passive: getUpdates conflict (409); another poller already owns this bot token",
+                        color=ANSI_YELLOW,
+                    )
+                    self.stop_event.wait(30)
+                    continue
+                self.polling_state = "error"
+                _log(f"telegram adapter warning: HTTP Error {exc.code}: {exc.reason}", color=ANSI_YELLOW)
+                self.stop_event.wait(2)
             except Exception as exc:
+                self.polling_state = "error"
                 _log(f"telegram adapter warning: {exc}", color=ANSI_YELLOW)
                 self.stop_event.wait(2)
 
