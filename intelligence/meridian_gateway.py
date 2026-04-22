@@ -31,7 +31,7 @@ from html import unescape
 from html.parser import HTMLParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from meridian_config import load_config
 
@@ -176,6 +176,10 @@ WORKSPACE_STATUS_REFRESH_LOCK = threading.RLock()
 WORKSPACE_STATUS_REFRESH_IN_FLIGHT = False
 WORKFLOW_SHOWCASE_REFRESH_LOCK = threading.RLock()
 WORKFLOW_SHOWCASE_REFRESH_IN_FLIGHT = False
+PROXY_CACHE_LOCK = threading.RLock()
+# path -> {"fetched_at_unix_ms": int, "status_code": int, "payload": dict,
+#          "refresh_in_flight": bool}
+PROXY_CACHE: dict[str, dict[str, Any]] = {}
 LOOM_ORG_ID = (
     os.environ.get("MERIDIAN_LOOM_ORG_ID")
     or os.environ.get("MERIDIAN_WORKSPACE_ORG_ID")
@@ -206,6 +210,16 @@ ROUTE_SCORE_DIRECT_GUARD_CONFIDENCE = int(os.environ.get("MERIDIAN_ROUTE_DIRECT_
 ROUTE_LOAD_CACHE_TTL_SECONDS = int(os.environ.get("MERIDIAN_ROUTE_LOAD_CACHE_TTL_SECONDS", "5"))
 WORKSPACE_STATUS_CACHE_TTL_SECONDS = int(os.environ.get("MERIDIAN_WORKSPACE_STATUS_CACHE_TTL_SECONDS", "5"))
 WORKFLOW_SHOWCASE_CACHE_TTL_SECONDS = int(os.environ.get("MERIDIAN_WORKFLOW_SHOWCASE_CACHE_TTL_SECONDS", "10"))
+# Short TTL cache for small, read-only, operator-visible gateway GET proxies
+# (e.g. treasury, institution template). These proxies re-read derived state
+# from the workspace on every hit today; a 2s default collapses hot refreshes
+# coming from dashboards/monitoring while staying fresh enough for humans.
+PROXY_CACHE_TREASURY_TTL_SECONDS = float(
+    os.environ.get("MERIDIAN_PROXY_CACHE_TREASURY_TTL_SECONDS", "2")
+)
+PROXY_CACHE_INSTITUTION_TEMPLATE_TTL_SECONDS = float(
+    os.environ.get("MERIDIAN_PROXY_CACHE_INSTITUTION_TEMPLATE_TTL_SECONDS", "10")
+)
 WORKSPACE_STATUS_UPSTREAM_TIMEOUT_SECONDS = float(
     os.environ.get("MERIDIAN_WORKSPACE_STATUS_UPSTREAM_TIMEOUT_SECONDS", "12")
 )
@@ -11580,6 +11594,78 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
         }
 
 
+def _workspace_proxied_get_cached(
+    path: str,
+    ttl_seconds: float,
+    *,
+    timeout_seconds: float = 20.0,
+    normalize: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Short-TTL cache for read-only GET proxies (shape: ``{ok, status_code, payload}``).
+
+    The cache stamps every hit with ``gateway_cache`` metadata so operators can
+    distinguish fresh / stale / degraded responses, mirroring the existing
+    ``_workspace_status_snapshot_cached`` contract. A non-zero TTL collapses hot
+    dashboard refreshes into a single upstream hop without changing behavior
+    under real staleness (the cache falls back to stale-with-refresh on
+    upstream error).
+
+    ``normalize`` is applied to a *copy* of the cached payload on every read,
+    so callers that mutate routing-scope fields (e.g. open-source boundary
+    rewriting) do not poison the cached shape.
+    """
+
+    now_ms = int(time.time() * 1000)
+    ttl_ms = int(max(0.0, float(ttl_seconds)) * 1000)
+
+    def _wrap(entry: dict[str, Any], state: str) -> dict[str, Any]:
+        payload = dict(entry.get("payload") or {})
+        if normalize is not None:
+            payload = normalize(payload)
+        payload["gateway_cache"] = {
+            "state": state,
+            "cached_at_unix_ms": int(entry.get("fetched_at_unix_ms") or 0),
+            "age_ms": max(0, now_ms - int(entry.get("fetched_at_unix_ms") or now_ms)),
+            "ttl_seconds": float(ttl_seconds),
+            "path": path,
+        }
+        return {
+            "ok": bool(entry.get("ok", True)),
+            "status_code": int(entry.get("status_code") or 200),
+            "payload": payload,
+        }
+
+    with PROXY_CACHE_LOCK:
+        entry = PROXY_CACHE.get(path)
+        if entry and ttl_ms > 0:
+            cached_at = int(entry.get("fetched_at_unix_ms") or 0)
+            if cached_at > 0 and (now_ms - cached_at) <= ttl_ms:
+                return _wrap(entry, "fresh")
+
+    proxied = _workspace_api_get_json(path, timeout_seconds=timeout_seconds)
+    upstream_ok = bool(proxied.get("ok")) and isinstance(proxied.get("payload"), dict)
+    if upstream_ok:
+        entry = {
+            "fetched_at_unix_ms": now_ms,
+            "status_code": int(proxied.get("status_code") or 200),
+            "payload": dict(proxied.get("payload") or {}),
+            "ok": True,
+        }
+        with PROXY_CACHE_LOCK:
+            PROXY_CACHE[path] = entry
+        return _wrap(entry, "fresh")
+
+    with PROXY_CACHE_LOCK:
+        stale = PROXY_CACHE.get(path)
+    if stale is not None:
+        wrapped = _wrap(stale, "stale_fallback")
+        wrapped["payload"]["gateway_cache"]["upstream_status_code"] = int(
+            proxied.get("status_code") or 0
+        )
+        return wrapped
+    return proxied
+
+
 class AgentRuntime:
     def __init__(self, skills: SkillRegistry) -> None:
         self.skills = skills
@@ -12512,7 +12598,10 @@ class WebAPIAdapter(ChannelAdapter):
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
                     return
                 if request_path == "/api/institution/template":
-                    proxied = _workspace_api_get_json(proxied_path)
+                    proxied = _workspace_proxied_get_cached(
+                        proxied_path,
+                        PROXY_CACHE_INSTITUTION_TEMPLATE_TTL_SECONDS,
+                    )
                     payload = _normalize_status_wording(dict(proxied.get("payload") or {}))
                     boundary = payload.get("boundary")
                     if isinstance(boundary, dict):
@@ -12627,7 +12716,13 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/commonwealth/memory/anchor",
                     "/api/commonwealth/proof-bundle",
                 }:
-                    proxied = _workspace_api_get_json(proxied_path)
+                    if request_path == "/api/treasury" and not parsed.query:
+                        proxied = _workspace_proxied_get_cached(
+                            proxied_path,
+                            PROXY_CACHE_TREASURY_TTL_SECONDS,
+                        )
+                    else:
+                        proxied = _workspace_api_get_json(proxied_path)
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
                     return
                 self._send_json(404, {"status": "error", "output": "not_found", "path": request_path})
