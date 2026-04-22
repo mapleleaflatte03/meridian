@@ -95,6 +95,43 @@ def _load_orgs():
         return json.load(f).get('organizations', {})
 
 
+def default_org_id():
+    for oid, org in _load_orgs().items():
+        if org.get('slug') == 'meridian':
+            return oid
+    return None
+
+
+def _resolve_slug_to_org_id(slug):
+    for oid, org in _load_orgs().items():
+        if org.get('slug') == slug:
+            return oid
+    return None
+
+
+def resolve_org_id(org_id=None):
+    founding_org_id = default_org_id()
+    if not org_id:
+        return founding_org_id
+
+    orgs = _load_orgs()
+    if org_id in orgs:
+        return org_id
+
+    resolved_from_slug = _resolve_slug_to_org_id(org_id)
+    if resolved_from_slug:
+        return resolved_from_slug
+
+    # Host-bound and freshly onboarded local installs may already know their
+    # exact org_id before organizations.json is fully synchronized. Accepting
+    # an explicit org_* identifier keeps governed calls alive without requiring
+    # users to hand-edit generated registry state.
+    if str(org_id).startswith('org_'):
+        return org_id
+
+    raise ValueError(f'Capsule cannot resolve org {org_id} — not a known org_id or slug')
+
+
 def _legacy_alias_candidates():
     if not os.path.exists(os.path.join(ECONOMY_DIR, 'ledger.json')):
         return []
