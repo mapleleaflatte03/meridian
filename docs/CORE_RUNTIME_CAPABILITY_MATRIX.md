@@ -38,10 +38,11 @@ Core should not require users to memorize low-level Loom subcommands for common 
 | Artifact-safe rendering | `core.sh ask` / `chat` | shipped | Long outputs auto-truncate with preview; `response page` for full paged view |
 | Artifact export/materialization | `core.sh response export DIR` | shipped | Exports latest artifact into a real directory tree when output includes file sections |
 | Attachment/file flow | `core.sh ask --file` / `chat /file` | shipped | Pass text files as context; multi-file, size-guarded, binary-rejected |
-| Provider/model switching | `core.sh provider *` | partial | inspect/login exists; higher-level switching UX still rough |
-| Config editing flow | `core.sh config *` | gap | inspect exists; safe edit/set workflow still missing |
+| Provider/model switching | `core.sh provider list/use` | shipped | `provider list` shows full plane; `provider use PROFILE --model M` switches; `ask --model M` for per-request; chat `/model` for sticky |
+| Config editing flow | `core.sh config set/get` | shipped | Allowlisted keys only; backup on write; `config get` shows source |
 | Session export | `core.sh session export ID DIR` | shipped | Exports session JSON + Markdown transcript |
-| Session archive lifecycle | `core.sh session *` | gap | export exists; archive/cleanup workflow not exposed |
+| Session archive lifecycle | `core.sh session archive` | shipped | Dry-run default; `--older-than DAYS --execute` for cleanup |
+| Gateway model override | `/api/run` `model` field | shipped | Per-request model override via JSON payload; env restored after |
 | Channel pairing/admin flow | `core.sh channel *` | gap | delivery health exposed; pairing/admin UX not surfaced in Core |
 | Scheduling daily automation | `core.sh schedule` / `schedules` | partial | simple recurring tasks exist; richer cron/routine UX still thin |
 | Web/dashboard bridge | Core-facing | partial | live stack exists; Core docs could expose when to jump to web UI |
@@ -52,12 +53,12 @@ Core should not require users to memorize low-level Loom subcommands for common 
 
 - ~~artifact-safe rendering for long code/app outputs~~ shipped
 - ~~attachment/file flow for `ask` and `chat`~~ shipped
-- safer higher-level provider/model switching flow
+- ~~safer higher-level provider/model switching flow~~ shipped
 
 ### P2
 
-- config editing helpers with guardrails
-- session export/archive
+- ~~config editing helpers with guardrails~~ shipped
+- ~~session export/archive~~ shipped
 - richer scheduling/routine UX
 
 ### P3
@@ -86,8 +87,21 @@ Core should not require users to memorize low-level Loom subcommands for common 
 - binary/oversized files rejected with clear warnings
 - per-file 512 KiB / total 2 MiB attachment limits
 
+### Completed: Tranche 4 — provider/model switching, config editing, session lifecycle
+
+- `core.sh provider list` — full provider plane table: active route, fallback chain, registry, effective manager execution
+- `core.sh provider use PROFILE --model M` — switch active provider/model via institution policy with auto-backup
+- `core.sh ask --model M` — per-request model override passed to gateway
+- Gateway `/api/run` accepts optional `model` field for per-request override (env restored after)
+- Chat `/model MODEL` — sticky model override for the chat session; `/model` clears
+- Chat `/provider` — show status; `/provider use PROFILE` — persistent switch
+- `core.sh config set KEY VALUE` — safe config editing with allowlisted keys + backup
+- `core.sh config get KEY` — shows value and source (overrides.env vs environment)
+- `core.sh session archive` — dry-run by default; `--older-than DAYS --execute` for cleanup
+- Session archive preserves current session, moves old event files to archive directory
+
 ### Next execution target
 
-- safer higher-level provider/model switching flow
-- config editing helpers with guardrails
-- session archive/cleanup lifecycle
+- richer scheduling/routine UX
+- channel pairing/admin cockpit in Core
+- stronger bridge between terminal Core and web operator surfaces

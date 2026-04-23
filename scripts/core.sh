@@ -419,12 +419,18 @@ PY
 cmd_ask() {
     local goal=""
     local -a file_paths=()
-    # Parse arguments: support --file PATH (repeatable) before or after the goal
+    local model_override=""
+    # Parse arguments: support --file PATH (repeatable), --model MODEL before or after the goal
     while [ $# -gt 0 ]; do
         case "$1" in
             --file|-f)
                 [ -n "${2:-}" ] || die "Usage: --file requires a PATH argument"
                 file_paths+=("$2")
+                shift 2
+                ;;
+            --model|-m)
+                [ -n "${2:-}" ] || die "Usage: --model requires a MODEL argument"
+                model_override="$2"
                 shift 2
                 ;;
             *)
@@ -437,7 +443,7 @@ cmd_ask() {
                 ;;
         esac
     done
-    [ -n "$goal" ] || die "Usage: core.sh ask [--file PATH ...] \"TASK\""
+    [ -n "$goal" ] || die "Usage: core.sh ask [--file PATH ...] [--model MODEL] \"TASK\""
     require_runtime
     ensure_core_state_dir
 
@@ -455,14 +461,16 @@ cmd_ask() {
     local session_id
     session_id="$(resolve_core_session_id)"
     local raw_output
-    raw_output="$(python3 - "$MERIDIAN_GATEWAY_URL" "$goal" "$session_id" "$CORE_LAST_RESPONSE_FILE" "$CORE_LAST_OUTPUT_FILE" "$attachments_json" <<'PY'
+    raw_output="$(python3 - "$MERIDIAN_GATEWAY_URL" "$goal" "$session_id" "$CORE_LAST_RESPONSE_FILE" "$CORE_LAST_OUTPUT_FILE" "$attachments_json" "$model_override" <<'PY'
 import json, sys, urllib.request, urllib.error
 
-base_url, goal, session_id, last_response_path, last_output_path, attachments_json = sys.argv[1:7]
+base_url, goal, session_id, last_response_path, last_output_path, attachments_json, model_override = sys.argv[1:8]
 attachments = json.loads(attachments_json)
 payload = {"goal": goal, "session_id": session_id}
 if attachments:
     payload["attachments"] = attachments
+if model_override:
+    payload["model"] = model_override
 request = urllib.request.Request(
     f"{base_url.rstrip('/')}/api/run",
     data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -658,15 +666,19 @@ cmd_chat() {
     local session_id
     session_id="$(resolve_core_session_id)"
     local -a pending_files=()
+    local chat_model_override=""
     cat <<EOF
 [core] interactive chat
 [core] session: $session_id
-[core] commands: /exit /new [id] /use ID /current /show /response /file PATH /page /help
+[core] commands: /exit /new [id] /use ID /current /show /response /file PATH /model MODEL /provider /page /help
 EOF
     while true; do
         local prompt_suffix=""
         if [ ${#pending_files[@]} -gt 0 ]; then
             prompt_suffix=" [${#pending_files[@]} file(s)]"
+        fi
+        if [ -n "$chat_model_override" ]; then
+            prompt_suffix="${prompt_suffix} [model:${chat_model_override}]"
         fi
         printf 'core%s> ' "$prompt_suffix"
         IFS= read -r line || break
@@ -691,6 +703,10 @@ EOF
 /attach PATH       Alias for /file
 /files             Show pending attached files
 /clear-files       Clear all pending file attachments
+/model MODEL       Set model override for subsequent messages (sticky)
+/model             Clear model override (revert to default)
+/provider          Show current provider status
+/provider use P    Switch provider profile (persists across sessions)
 /page              Page through the last long output
 /help              Show this help
 EOF
@@ -754,6 +770,35 @@ EOF
                     echo "[core] no output to page" >&2
                 fi
                 ;;
+            /model\ *)
+                local new_model="${line#"/model "}"
+                new_model="${new_model#"${new_model%%[![:space:]]*}"}"
+                new_model="${new_model%"${new_model##*[![:space:]]}"}"
+                if [ -n "$new_model" ]; then
+                    chat_model_override="$new_model"
+                    echo "[core] model override set: $chat_model_override (sticky for this chat session)"
+                else
+                    chat_model_override=""
+                    echo "[core] model override cleared (using default)"
+                fi
+                ;;
+            /model)
+                chat_model_override=""
+                echo "[core] model override cleared (using default)"
+                ;;
+            /provider\ use\ *)
+                local provider_args="${line#"/provider use "}"
+                provider_args="${provider_args#"${provider_args%%[![:space:]]*}"}"
+                provider_args="${provider_args%"${provider_args##*[![:space:]]}"}"
+                if [ -n "$provider_args" ]; then
+                    cmd_provider_use $provider_args
+                else
+                    echo "[core] usage: /provider use PROFILE [--model MODEL]" >&2
+                fi
+                ;;
+            /provider)
+                cmd_provider status
+                ;;
             /*)
                 echo "[core] unknown chat command: $line" >&2
                 ;;
@@ -763,6 +808,9 @@ EOF
                 for f in "${pending_files[@]}"; do
                     ask_args+=("--file" "$f")
                 done
+                if [ -n "$chat_model_override" ]; then
+                    ask_args+=("--model" "$chat_model_override")
+                fi
                 ask_args+=("$line")
                 cmd_ask "${ask_args[@]}"
                 # Clear pending files after sending
@@ -834,10 +882,217 @@ cmd_provider() {
         login)
             "$LOOM_BIN" provider login --root "$LOOM_ROOT" "${@}"
             ;;
+        list)
+            cmd_provider_list "${@}"
+            ;;
+        use)
+            cmd_provider_use "${@}"
+            ;;
         *)
-            die "Usage: core.sh provider <status|profiles|auth|route|login> [args]"
+            die "Usage: core.sh provider <status|profiles|auth|route|login|list|use> [args]"
             ;;
     esac
+}
+
+# ── provider list: human-readable table of providers, models, routes ──────
+
+cmd_provider_list() {
+    local org_id
+    org_id="$(resolve_org_id)"
+    [ -n "$org_id" ] || die "Could not resolve org_id. Run onboard.sh first."
+
+    python3 - "$MERIDIAN_ROOT" "$org_id" <<'PY'
+import json, os, sys
+
+meridian_root, org_id = sys.argv[1], sys.argv[2]
+sys.path.insert(0, os.path.join(meridian_root, "intelligence"))
+sys.path.insert(0, os.path.join(meridian_root, "intelligence", "company", "meridian_platform"))
+import institution_brain_policy
+from company.meridian_platform import brain_router
+
+status = institution_brain_policy.policy_status(org_id)
+
+# Active route summary
+active_route = status.get("active_route") or {}
+active_provider = status.get("active_provider") or {}
+active_model = status.get("active_model") or {}
+
+print("Meridian Provider Plane")
+print("=" * 60)
+print(f"  org_id:         {org_id}")
+print(f"  policy_status:  {status.get('status', 'unknown')}")
+print(f"  source:         {status.get('source', '?')}")
+if status.get("reason"):
+    print(f"  reason:         {status['reason']}")
+print()
+
+if active_route:
+    print("Active Route")
+    print("-" * 40)
+    print(f"  route_id:    {active_route.get('route_id', '')}")
+    print(f"  type:        {active_route.get('route_type', '')}")
+    print(f"  provider:    {active_route.get('provider_ref', '') or active_route.get('provider_profile', '')}")
+    print(f"  model:       {active_route.get('model', '') or '(not set)'}")
+    print(f"  health:      {active_route.get('last_health', 'unknown')}")
+    if active_route.get("last_health_reason"):
+        print(f"  health_note: {active_route['last_health_reason']}")
+    print(f"  budget_band: {active_route.get('budget_band', '') or 'standard'}")
+    print(f"  authority:   {'yes' if active_route.get('approved_by_authority', True) else 'NO'}")
+    print(f"  treasury:    {'yes' if active_route.get('allowed_by_treasury', True) else 'NO'}")
+    print()
+
+# Fallback chain
+fallback_chain = status.get("fallback_chain") or []
+if fallback_chain:
+    print("Fallback Chain")
+    print("-" * 40)
+    for i, fb in enumerate(fallback_chain, 1):
+        health = fb.get("last_health", "unknown")
+        print(f"  [{i}] {fb.get('route_id', '?')}  provider={fb.get('provider_ref', '?')}  model={fb.get('model', '?')}  health={health}")
+    print()
+
+# Provider registry
+provider_registry = status.get("provider_registry") or {}
+if provider_registry:
+    print("Registered Providers")
+    print("-" * 40)
+    for pid, pentry in sorted(provider_registry.items()):
+        display = pentry.get("display_name") or pid
+        caps = ", ".join(pentry.get("capabilities") or []) or "?"
+        print(f"  {pid:30s}  caps=[{caps}]")
+    print()
+
+# Model registry
+model_registry = status.get("model_registry") or {}
+if model_registry:
+    print("Registered Models")
+    print("-" * 40)
+    for mid, mentry in sorted(model_registry.items()):
+        model_name = mentry.get("model_name") or mid
+        provider_id = mentry.get("provider_id") or "?"
+        print(f"  {mid:40s}  model={model_name:20s}  provider={provider_id}")
+    print()
+
+# Env override check
+try:
+    meta = brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint="")
+    print("Effective Manager Execution")
+    print("-" * 40)
+    print(f"  profile:   {meta.get('provider_profile', '?')}")
+    print(f"  model:     {meta.get('model', '') or '(default)'}")
+    print(f"  transport: {meta.get('transport_kind', '?')}")
+    print(f"  auth:      {meta.get('auth_mode', '?')}")
+    print(f"  source:    {meta.get('source', '?')}")
+except Exception as exc:
+    print(f"[warn] could not resolve manager plan: {exc}")
+PY
+}
+
+# ── provider use: switch the active provider/model ────────────────────────
+
+cmd_provider_use() {
+    local profile="${1:-}"
+    [ -n "$profile" ] || die "Usage: core.sh provider use PROFILE [--model MODEL] [--endpoint URL] [--transport cli_session|http_json]"
+    shift
+
+    local model="" endpoint="" transport="" auth_env="" key_env_pool=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --model|-m)   model="${2:-}"; shift 2 ;;
+            --endpoint)   endpoint="${2:-}"; shift 2 ;;
+            --transport)  transport="${2:-}"; shift 2 ;;
+            --auth-env)   auth_env="${2:-}"; shift 2 ;;
+            --key-env)    key_env_pool="${2:-}"; shift 2 ;;
+            *)            die "Unknown flag: $1" ;;
+        esac
+    done
+
+    local org_id
+    org_id="$(resolve_org_id)"
+    [ -n "$org_id" ] || die "Could not resolve org_id. Run onboard.sh first."
+
+    python3 - "$MERIDIAN_ROOT" "$org_id" "$profile" "$model" "$endpoint" "$transport" "$auth_env" "$key_env_pool" <<'PY'
+import json, os, sys
+
+meridian_root = sys.argv[1]
+org_id, profile, model, endpoint, transport, auth_env, key_env_pool_csv = sys.argv[2:9]
+sys.path.insert(0, os.path.join(meridian_root, "intelligence"))
+sys.path.insert(0, os.path.join(meridian_root, "intelligence", "company", "meridian_platform"))
+import institution_brain_policy
+
+# Load current policy so we can show a before/after diff
+current_policy = institution_brain_policy.load_policy(org_id)
+current_route = institution_brain_policy.active_route(current_policy)
+
+# Auto-detect transport if not specified
+if not transport:
+    if current_route:
+        transport = str(current_route.get("route_type") or "").strip() or "cli_session"
+    else:
+        transport = "cli_session"
+
+# Resolve cli_bin and cli_home from current route or env
+cli_bin = ""
+cli_home = ""
+if transport == "cli_session":
+    if current_route:
+        cli_bin = str(current_route.get("cli_bin") or "").strip()
+        cli_home = str(current_route.get("cli_home") or "").strip()
+    if not cli_bin:
+        cli_bin = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_BIN") or os.environ.get("MERIDIAN_CODEX_BIN") or "").strip()
+    if not cli_home:
+        cli_home = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_HOME") or os.environ.get("MERIDIAN_CODEX_HOME") or os.environ.get("HOME") or "").strip()
+
+if not endpoint and transport == "http_json":
+    if current_route:
+        endpoint = str(current_route.get("endpoint") or "").strip()
+
+key_env_pool_list = [item.strip() for item in (key_env_pool_csv or "").split(",") if item.strip()]
+
+# Backup current policy
+backup_path = institution_brain_policy.policy_path(org_id) + ".bak"
+try:
+    current_raw = json.dumps(current_policy, indent=2, ensure_ascii=False)
+    os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+    with open(backup_path, "w", encoding="utf-8") as fh:
+        fh.write(current_raw + "\n")
+except Exception:
+    pass
+
+# Apply new configuration
+try:
+    new_policy = institution_brain_policy.configure_policy(
+        org_id,
+        route_type=transport,
+        provider_profile=profile,
+        model=model,
+        updated_by="core.sh provider use",
+        cli_bin=cli_bin,
+        cli_home=cli_home,
+        endpoint=endpoint,
+        auth_env=auth_env,
+        key_env_pool=key_env_pool_list or None,
+    )
+except Exception as exc:
+    print(f"[core] provider switch failed: {exc}", file=sys.stderr)
+    raise SystemExit(1)
+
+new_route = institution_brain_policy.active_route(new_policy)
+
+# Show before/after
+old_provider = str((current_route or {}).get("provider_ref") or (current_route or {}).get("provider_profile") or "").strip() or "(none)"
+old_model = str((current_route or {}).get("model") or "").strip() or "(none)"
+new_provider = str((new_route or {}).get("provider_ref") or profile).strip()
+new_model = str((new_route or {}).get("model") or "").strip() or "(none)"
+
+print(f"[core] provider switched")
+print(f"  before: provider={old_provider}  model={old_model}")
+print(f"  after:  provider={new_provider}  model={new_model}")
+print(f"  transport: {transport}")
+if backup_path:
+    print(f"  backup: {backup_path}")
+PY
+    echo "[core] run 'core.sh provider list' to verify"
 }
 
 cmd_config() {
@@ -850,10 +1105,100 @@ cmd_config() {
         show)
             "$LOOM_BIN" config show --root "$LOOM_ROOT" "${@}"
             ;;
+        set)
+            cmd_config_set "${@}"
+            ;;
+        get)
+            cmd_config_get "${@}"
+            ;;
         *)
-            die "Usage: core.sh config <show> [args]"
+            die "Usage: core.sh config <show|set|get> [args]"
             ;;
     esac
+}
+
+# Allowed config keys for safe editing via 'core.sh config set'
+CORE_CONFIG_ALLOWED_KEYS="MERIDIAN_BRAIN_MANAGER_MODEL MERIDIAN_BRAIN_MANAGER_TRANSPORT MERIDIAN_BRAIN_MANAGER_ENDPOINT MERIDIAN_BRAIN_MANAGER_PROFILE_NAME MERIDIAN_BRAIN_MANAGER_CLI_BIN MERIDIAN_BRAIN_MANAGER_CLI_HOME MERIDIAN_BRAIN_MANAGER_MAX_TOKENS MERIDIAN_CORE_LONG_OUTPUT_CHARS MERIDIAN_CORE_LONG_OUTPUT_LINES MERIDIAN_GATEWAY_URL MERIDIAN_SESSION_ID"
+
+cmd_config_set() {
+    local key="${1:-}"
+    local value="${2:-}"
+    [ -n "$key" ] || die "Usage: core.sh config set KEY VALUE"
+    [ -n "$value" ] || die "Usage: core.sh config set KEY VALUE"
+
+    # Validate key is in allowed list
+    local allowed=false
+    for allowed_key in $CORE_CONFIG_ALLOWED_KEYS; do
+        if [ "$key" = "$allowed_key" ]; then
+            allowed=true
+            break
+        fi
+    done
+    if [ "$allowed" != "true" ]; then
+        echo "[core] key '$key' is not in the safe-edit allowlist" >&2
+        echo "[core] allowed keys:" >&2
+        for allowed_key in $CORE_CONFIG_ALLOWED_KEYS; do
+            echo "  $allowed_key" >&2
+        done
+        exit 1
+    fi
+
+    ensure_core_state_dir
+    local config_file="${CORE_STATE_DIR}/overrides.env"
+
+    # Backup existing config if present
+    if [ -f "$config_file" ]; then
+        cp "$config_file" "${config_file}.bak"
+    fi
+
+    # Update or insert the key=value line
+    python3 - "$config_file" "$key" "$value" <<'PY'
+import os, sys
+
+config_path, key, value = sys.argv[1], sys.argv[2], sys.argv[3]
+lines = []
+found = False
+if os.path.exists(config_path):
+    with open(config_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            stripped = line.strip()
+            if stripped.startswith(f"{key}=") or stripped.startswith(f"export {key}="):
+                lines.append(f"export {key}={value}\n")
+                found = True
+            else:
+                lines.append(line)
+if not found:
+    lines.append(f"export {key}={value}\n")
+os.makedirs(os.path.dirname(config_path), exist_ok=True)
+with open(config_path, "w", encoding="utf-8") as fh:
+    fh.writelines(lines)
+print(f"[core] config set: {key}={value}")
+print(f"[core] written to: {config_path}")
+print(f"[core] source this file or restart to apply: source {config_path}")
+PY
+}
+
+cmd_config_get() {
+    local key="${1:-}"
+    [ -n "$key" ] || die "Usage: core.sh config get KEY"
+
+    # First check overrides file
+    local config_file="${CORE_STATE_DIR}/overrides.env"
+    local found_value=""
+    if [ -f "$config_file" ]; then
+        found_value="$(grep -m1 "^export ${key}=" "$config_file" 2>/dev/null | sed "s/^export ${key}=//" || true)"
+        if [ -z "$found_value" ]; then
+            found_value="$(grep -m1 "^${key}=" "$config_file" 2>/dev/null | sed "s/^${key}=//" || true)"
+        fi
+    fi
+
+    if [ -n "$found_value" ]; then
+        echo "$key=$found_value  (source: overrides.env)"
+    elif [ -n "${!key:-}" ]; then
+        echo "$key=${!key}  (source: environment)"
+    else
+        echo "$key=(not set)"
+    fi
 }
 
 cmd_runtime() {
@@ -1058,10 +1403,123 @@ PY
             rm -f "$CORE_CURRENT_SESSION_FILE"
             echo "[core] current session reset"
             ;;
+        archive)
+            cmd_session_archive "${@}"
+            ;;
         *)
-            die "Usage: core.sh session <current|use|new|list|show|export|reset> [args]"
+            die "Usage: core.sh session <current|use|new|list|show|export|reset|archive> [args]"
             ;;
     esac
+}
+
+# ── session archive: lifecycle cleanup for old sessions ───────────────────
+
+cmd_session_archive() {
+    local older_than_days="30"
+    local dry_run=true
+    local archive_dir=""
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --older-than) older_than_days="${2:-30}"; shift 2 ;;
+            --execute)    dry_run=false; shift ;;
+            --archive-dir) archive_dir="${2:-}"; shift 2 ;;
+            *)            die "Usage: core.sh session archive [--older-than DAYS] [--archive-dir DIR] [--execute]" ;;
+        esac
+    done
+
+    ensure_core_state_dir
+    [ -n "$archive_dir" ] || archive_dir="${CORE_STATE_DIR}/archived_sessions"
+
+    python3 - "$LOOM_ROOT" "$CORE_SESSION_REGISTRY_FILE" "$CORE_CURRENT_SESSION_FILE" "$older_than_days" "$dry_run" "$archive_dir" <<'PY'
+import glob, json, os, shutil, sys, time
+
+loom_root = sys.argv[1]
+registry_path = sys.argv[2]
+current_path = sys.argv[3]
+older_than_days = int(sys.argv[4])
+dry_run = sys.argv[5] == "True"
+archive_dir = sys.argv[6]
+
+cutoff_ms = int((time.time() - older_than_days * 86400) * 1000)
+
+# Load current session to exclude
+current_sid = ""
+if os.path.exists(current_path):
+    try:
+        current_sid = str(json.load(open(current_path, encoding="utf-8")).get("session_id") or "").strip()
+    except Exception:
+        pass
+
+# Load registry
+data = {"sessions": {}}
+if os.path.exists(registry_path):
+    try:
+        data = json.load(open(registry_path, encoding="utf-8"))
+    except Exception:
+        data = {"sessions": {}}
+
+sessions = dict(data.get("sessions") or {})
+candidates = []
+kept = {}
+
+for sid, entry in sessions.items():
+    last_used = int(entry.get("last_used_unix_ms") or 0)
+    if sid == current_sid:
+        kept[sid] = entry
+        continue
+    if last_used > 0 and last_used < cutoff_ms:
+        candidates.append(entry)
+    else:
+        kept[sid] = entry
+
+if not candidates:
+    print(f"[core] no sessions older than {older_than_days} days found")
+    raise SystemExit(0)
+
+print(f"[core] session archive: {len(candidates)} session(s) older than {older_than_days} days")
+for entry in sorted(candidates, key=lambda e: int(e.get("last_used_unix_ms") or 0)):
+    sid = str(entry.get("session_id") or "").strip()
+    last_used = int(entry.get("last_used_unix_ms") or 0)
+    marker = "  [DRY-RUN]" if dry_run else "  [ARCHIVE]"
+    print(f"{marker} {sid}  last_used={last_used}")
+
+if dry_run:
+    print(f"\n[core] dry-run: would archive {len(candidates)} session(s)")
+    print(f"[core] re-run with --execute to apply")
+    raise SystemExit(0)
+
+# Archive: export session event files, then prune from registry
+os.makedirs(archive_dir, exist_ok=True)
+archived_count = 0
+event_dir = os.path.join(loom_root, "state", "session-history", "events")
+
+for entry in candidates:
+    sid = str(entry.get("session_id") or "").strip()
+    session_key = f"web_api:{sid}"
+    # Find matching event file
+    event_files = sorted(glob.glob(os.path.join(event_dir, "*.json")), key=os.path.getmtime, reverse=True)
+    for epath in event_files:
+        try:
+            edata = json.load(open(epath, encoding="utf-8"))
+        except Exception:
+            continue
+        if str(edata.get("session_key") or "").strip() != session_key:
+            continue
+        dest = os.path.join(archive_dir, os.path.basename(epath))
+        shutil.move(epath, dest)
+        archived_count += 1
+        break
+
+# Update registry
+data["sessions"] = kept
+with open(registry_path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+
+print(f"\n[core] archived {archived_count} event file(s) to: {archive_dir}")
+print(f"[core] registry updated: {len(kept)} session(s) remaining")
+PY
 }
 
 # ── Command: browse ───────────────────────────────────────────────────────
@@ -1454,7 +1912,7 @@ cmd_help() {
 Meridian Core — daily-use task runner
 
 Commands:
-  ask [--file PATH ...] "TASK"   Run a daily prompt (with optional file attachments)
+  ask [--file PATH ...] [--model M] "TASK"   Run a daily prompt (with optional file attachments / model override)
   session current        Show the current Core conversation session id
   session new [ID]       Start a fresh Core session and make it current
   session use ID         Switch the current Core session
@@ -1462,6 +1920,7 @@ Commands:
   session show [ID]      Show recent history for a Core session
   session export [ID] D  Export a Core session to JSON + Markdown in directory D
   session reset          Clear the current Core session pointer
+  session archive        Archive old sessions (dry-run by default, --execute to apply)
   response show          Show the most recent Core ask output
   response meta          Show route/session metadata for the last Core ask
   response path          Show the JSON receipt path for the last Core ask
@@ -1474,7 +1933,11 @@ Commands:
   provider profiles      Show provider profiles
   provider auth          Show provider auth readiness
   provider route ...     Inspect provider route decisions
+  provider list          Show all providers, models, routes, and health
+  provider use PROFILE   Switch active provider/model (--model M, --transport T, --endpoint URL)
   config show            Show effective runtime config
+  config set KEY VALUE   Set a config override (safe allowlisted keys only)
+  config get KEY         Show current value for a config key
   runtime status         Show loom runtime status
   runtime health         Show loom doctor-derived health summary
   runtime logs           Show recent loom runtime logs
@@ -1508,6 +1971,23 @@ File attachments:
   core.sh ask --file src/main.py "review this code"
   core.sh ask -f a.py -f b.py "compare these two files"
   In chat mode: /file PATH to queue, then type your message
+
+Model override (per-request):
+  core.sh ask --model gpt-4o "summarize this"
+  In chat mode: /model gpt-4o (sticky for the chat session)
+
+Provider switching (persistent):
+  core.sh provider list                          show all providers/models/routes
+  core.sh provider use my_profile --model gpt-4o switch active provider+model
+  In chat mode: /provider use my_profile --model gpt-4o
+
+Session lifecycle:
+  core.sh session archive                           dry-run: list old sessions
+  core.sh session archive --older-than 7 --execute   archive sessions older than 7 days
+
+Config editing:
+  core.sh config set MERIDIAN_BRAIN_MANAGER_MODEL gpt-4o
+  core.sh config get MERIDIAN_BRAIN_MANAGER_MODEL
 
 Long output handling:
   Long responses are auto-truncated with a preview.

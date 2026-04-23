@@ -64,8 +64,14 @@ Meridian now defaults Team mode to a 7-agent software-delivery team preset. See 
 ./scripts/core.sh response export /tmp/core-artifact
 ./scripts/core.sh chat
 ./scripts/core.sh doctor
+./scripts/core.sh ask --model gpt-4o "quick question"
 ./scripts/core.sh provider status
+./scripts/core.sh provider list
+./scripts/core.sh provider use my_profile --model gpt-4o
 ./scripts/core.sh config show
+./scripts/core.sh config set MERIDIAN_BRAIN_MANAGER_MODEL gpt-4o
+./scripts/core.sh config get MERIDIAN_BRAIN_MANAGER_MODEL
+./scripts/core.sh session archive --older-than 7
 ./scripts/core.sh browse https://example.com
 ./scripts/core.sh research "summarize this week"
 ./scripts/core.sh remember my_note "something useful"

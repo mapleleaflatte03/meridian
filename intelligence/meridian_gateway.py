@@ -14684,6 +14684,14 @@ class WebAPIAdapter(ChannelAdapter):
                         attachment_context += f"\n<file name=\"{att_name}\">\n{att_content}\n</file>\n"
                 if attachment_context:
                     goal = f"[Attached files: {', '.join(attachment_names)}]\n{attachment_context}\n{goal.strip()}"
+                # ── Model override support ────────────────────────
+                # Accepts optional "model" string in the payload.
+                # When set, overrides the default manager model for
+                # this single request via MERIDIAN_BRAIN_MANAGER_MODEL.
+                request_model_override = str(payload.get("model") or "").strip()
+                _saved_model_env = os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL")
+                if request_model_override:
+                    os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = request_model_override
                 web_session = _resolve_web_request_session(payload, self.headers, goal.strip())
                 session_id = str(web_session.get("session_id") or "").strip()
                 ingress = _loom_channel_ingest("web_api", LOOM_ORG_ID, goal.strip(), thread_id=session_id)
@@ -14764,6 +14772,12 @@ class WebAPIAdapter(ChannelAdapter):
                     delivery_id=delivery_id,
                     extra_details={"response_channel": "http_response"},
                 )
+                # Restore model env after request completes
+                if request_model_override:
+                    if _saved_model_env is None:
+                        os.environ.pop("MERIDIAN_BRAIN_MANAGER_MODEL", None)
+                    else:
+                        os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = _saved_model_env
 
             def log_message(self, format: str, *args: object) -> None:  # noqa: A003
                 return

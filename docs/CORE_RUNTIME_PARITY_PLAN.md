@@ -117,15 +117,29 @@ Completed:
 - `core.sh response page` for paged full-output viewing via `$PAGER`
 - configurable thresholds via `MERIDIAN_CORE_LONG_OUTPUT_CHARS` / `_LINES`
 
-### Tranche 4: safer default runtime ergonomics
+### Tranche 4: provider/model switching, config editing, session lifecycle
+
+Completed:
+
+- `core.sh provider list` — full provider plane table (active route, fallback chain, provider + model registries, effective manager execution)
+- `core.sh provider use PROFILE --model M` — switch active provider/model via `institution_brain_policy.configure_policy()` with auto-backup of previous policy
+- `core.sh ask --model M` — per-request model override passed through to gateway
+- Gateway `/api/run` accepts optional `model` field — sets `MERIDIAN_BRAIN_MANAGER_MODEL` for the request, restores after
+- Chat `/model MODEL` — sticky per-session model override; `/model` clears back to default
+- Chat `/provider` — shows current provider status; `/provider use P` switches persistently
+- `core.sh config set KEY VALUE` — safe config editing: allowlisted keys only, backup before write, creates `overrides.env`
+- `core.sh config get KEY` — shows effective value and whether it came from overrides.env or environment
+- `core.sh session archive` — dry-run by default lists old sessions; `--older-than DAYS --execute` moves event files to archive directory, prunes registry, preserves current session
+
+### Tranche 5: remaining runtime ergonomics
 
 Next:
 
 - bounded shell presets for common daily tasks
 - clearer browser restrictions and host allowlists
 - safer destructive-action guardrails in Core mode
-- higher-level provider/model switching flow
-- config editing helpers with guardrails
+- richer scheduling/routine UX
+- channel pairing/admin cockpit in Core
 
 ## Non-goals
 
