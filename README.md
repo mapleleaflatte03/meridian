@@ -52,10 +52,28 @@ Meridian now defaults Team mode to a 7-agent software-delivery team preset. See 
 ## First commands
 
 ```bash
+./scripts/core.sh ask "summarize this week"
+./scripts/core.sh ask --file src/main.py "review this code"
+./scripts/core.sh ask -f a.py -f b.py "compare these files"
+./scripts/core.sh session new workbench
+./scripts/core.sh ask "continue the plan from earlier"
+./scripts/core.sh session show
+./scripts/core.sh session export workbench /tmp/core-session
+./scripts/core.sh response meta
+./scripts/core.sh response page
+./scripts/core.sh response export /tmp/core-artifact
+./scripts/core.sh chat
+./scripts/core.sh doctor
+./scripts/core.sh provider status
+./scripts/core.sh config show
 ./scripts/core.sh browse https://example.com
 ./scripts/core.sh research "summarize this week"
 ./scripts/core.sh remember my_note "something useful"
 ./scripts/core.sh recall my_note
+./scripts/core.sh agent inspect
+./scripts/core.sh channel health
+./scripts/core.sh job list
+./scripts/core.sh memory overview
 ./scripts/core.sh inspect
 ```
 
@@ -97,6 +115,7 @@ cd intelligence && python3 -m unittest -v test_gateway_brain_router.py
 - [Proofs](https://app.welliam.codes/proofs)
 - [Benchmark lane](scripts/benchmark_meridian.sh)
 - [Migration guide](docs/MIGRATION_FROM_CLAW.md)
+- [Core runtime capability matrix](docs/CORE_RUNTIME_CAPABILITY_MATRIX.md)
 - [Onboarding contract](docs/ONBOARDING_CONTRACT.md)
 - [Team runtime config](docs/TEAM_RUNTIME_CONFIG.md)
 

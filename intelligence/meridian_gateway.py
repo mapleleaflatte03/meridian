@@ -162,14 +162,17 @@ LOOM_MEMORY_PATH = "workspace/MEMORY.md"
 LOOM_BIN = runtime_value('binary_path', preferred_loom_bin())
 LOOM_ROOT = runtime_value('runtime_root', preferred_loom_root())
 SKILL_QUALITY_STATE_PATH = Path(LOOM_ROOT) / "state" / "skill-quality" / "quality.json"
-USER_SESSION_SCORE_STATE_PATH = Path(os.path.realpath(capsule_ledger_path())).with_name("user_session_scores.json")
 TELEGRAM_DEDUP_STATE_PATH = Path(LOOM_ROOT) / "state" / "gateway" / "telegram_dedup.json"
+EXTERNAL_CHANNEL_DEDUP_STATE_PATH = Path(LOOM_ROOT) / "state" / "gateway" / "external_channel_dedup.json"
 MEMORY_RECALL_STATE_PATH = Path(LOOM_ROOT) / "state" / "gateway" / "memory_recall.json"
 TRUST_EVIDENCE_STATE_PATH = Path(LOOM_ROOT) / "state" / "gateway" / "trust_evidence.json"
 TRUST_ASSURANCE_STATE_PATH = Path(LOOM_ROOT) / "state" / "gateway" / "trust_assurance.json"
 ROUTE_DECISION_TRACE_PATH = Path(LOOM_ROOT) / "state" / "gateway" / "route_decision_trace.jsonl"
 TELEGRAM_INBOUND_DEDUP_WINDOW_SECONDS = int(os.environ.get("MERIDIAN_TELEGRAM_INBOUND_DEDUP_WINDOW_SECONDS", "120"))
 TELEGRAM_OUTBOUND_DEDUP_WINDOW_SECONDS = int(os.environ.get("MERIDIAN_TELEGRAM_OUTBOUND_DEDUP_WINDOW_SECONDS", "900"))
+EXTERNAL_CHANNEL_INBOUND_DEDUP_WINDOW_SECONDS = int(os.environ.get("MERIDIAN_EXTERNAL_CHANNEL_INBOUND_DEDUP_WINDOW_SECONDS", "180"))
+EXTERNAL_CHANNEL_OUTBOUND_DEDUP_WINDOW_SECONDS = int(os.environ.get("MERIDIAN_EXTERNAL_CHANNEL_OUTBOUND_DEDUP_WINDOW_SECONDS", "900"))
+EXTERNAL_WEBHOOK_CHANNELS = ("discord", "messenger", "whatsapp", "zalo")
 SKILL_AUTONOMY_LOCK = threading.RLock()
 ROUTE_LOAD_CACHE_LOCK = threading.RLock()
 ROUTE_LOAD_CACHE: dict[str, Any] = {"fetched_at_unix_ms": 0, "snapshot": {}}
@@ -191,6 +194,22 @@ LOOM_ORG_ID = (
     or runtime_value('org_id', '')
     or "org_local_default"
 )
+
+
+def _resolve_user_session_score_state_path() -> Path:
+    fallback = Path(LOOM_ROOT) / "state" / "gateway" / "user_session_scores.json"
+    try:
+        ledger = Path(os.path.realpath(capsule_ledger_path()))
+    except Exception:
+        return fallback
+    try:
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        return fallback
+    return ledger.with_name("user_session_scores.json")
+
+
+USER_SESSION_SCORE_STATE_PATH = _resolve_user_session_score_state_path()
 LOOM_AGENT_ID = os.environ.get("MERIDIAN_LOOM_AGENT_ID", "agent_manager")
 MERIDIAN_CODEX_HOME = os.environ.get(
     "MERIDIAN_CODEX_HOME",
@@ -827,6 +846,32 @@ def _load_runtime_job_result(job_id: str) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _loom_registered_channel_ids() -> set[str]:
+    path = Path(LOOM_ROOT) / "state" / "channels" / "registry.json"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return set()
+    channels = payload.get("channels") if isinstance(payload, dict) else None
+    if not isinstance(channels, list):
+        return set()
+    registered: set[str] = set()
+    for item in channels:
+        if not isinstance(item, dict):
+            continue
+        channel_id = str(item.get("channel_id") or item.get("id") or "").strip()
+        if channel_id:
+            registered.add(channel_id)
+    return registered
+
+
+def _loom_channel_registered(channel_id: str) -> bool:
+    normalized = str(channel_id or "").strip()
+    if not normalized:
+        return False
+    return normalized in _loom_registered_channel_ids()
+
+
 def _loom_channel_ingest(channel_id: str, peer_id: str, text: str, *, thread_id: str = "") -> dict[str, Any]:
     command = [
         LOOM_BIN,
@@ -1039,6 +1084,117 @@ def _recent_telegram_delivery_duplicate(recipient: str, text: str) -> dict[str, 
         if status not in {"queued", "pending", "delivered"}:
             continue
         candidate_text = _normalize_telegram_dedup_text(payload.get("display_text") or "")
+        if candidate_text != normalized_text:
+            continue
+        matches.append(payload)
+    return matches[0] if matches else None
+
+
+def _normalize_external_channel_dedup_text(text: Any) -> str:
+    value = unicodedata.normalize("NFKC", str(text or ""))
+    value = re.sub(r"\s+", " ", value).strip().lower()
+    return value[:8000]
+
+
+def _load_external_channel_dedup_state() -> dict[str, Any]:
+    path = EXTERNAL_CHANNEL_DEDUP_STATE_PATH
+    if not path.exists():
+        return {"recent_ingress": {}}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"recent_ingress": {}}
+    if not isinstance(payload, dict):
+        return {"recent_ingress": {}}
+    payload.setdefault("recent_ingress", {})
+    if not isinstance(payload.get("recent_ingress"), dict):
+        payload["recent_ingress"] = {}
+    return payload
+
+
+def _save_external_channel_dedup_state(state: dict[str, Any]) -> None:
+    EXTERNAL_CHANNEL_DEDUP_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    EXTERNAL_CHANNEL_DEDUP_STATE_PATH.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
+
+
+def _prune_external_channel_dedup_state(state: dict[str, Any], *, now_unix_ms: int | None = None) -> None:
+    now_ms = int(now_unix_ms or time.time() * 1000)
+    cutoff_ms = now_ms - max(
+        EXTERNAL_CHANNEL_INBOUND_DEDUP_WINDOW_SECONDS,
+        EXTERNAL_CHANNEL_OUTBOUND_DEDUP_WINDOW_SECONDS,
+    ) * 1000 * 2
+    recent_ingress = state.get("recent_ingress", {})
+    if isinstance(recent_ingress, dict):
+        for fingerprint, item in list(recent_ingress.items()):
+            if not isinstance(item, dict):
+                recent_ingress.pop(fingerprint, None)
+                continue
+            seen_at = int(item.get("seen_at_unix_ms") or 0)
+            if seen_at and seen_at < cutoff_ms:
+                recent_ingress.pop(fingerprint, None)
+
+
+def _external_channel_ingress_fingerprint(channel: str, sender_id: Any, message_id: Any, text: Any) -> str:
+    normalized = {
+        "channel": str(channel or "").strip().lower(),
+        "sender_id": str(sender_id or "").strip(),
+        "message_id": str(message_id or "").strip(),
+        "text": _normalize_external_channel_dedup_text(text),
+    }
+    raw = json.dumps(normalized, ensure_ascii=False, sort_keys=True)
+    return f"xing_{hashlib.sha1(raw.encode('utf-8')).hexdigest()[:20]}"
+
+
+def _external_channel_inbound_seen_recently(channel: str, sender_id: Any, message_id: Any, text: Any) -> bool:
+    fingerprint = _external_channel_ingress_fingerprint(channel, sender_id, message_id, text)
+    state = _load_external_channel_dedup_state()
+    _prune_external_channel_dedup_state(state)
+    recent = state.get("recent_ingress", {})
+    if not isinstance(recent, dict):
+        recent = {}
+        state["recent_ingress"] = recent
+    now_ms = int(time.time() * 1000)
+    existing = recent.get(fingerprint)
+    if isinstance(existing, dict):
+        seen_at = int(existing.get("seen_at_unix_ms") or 0)
+        if seen_at and now_ms - seen_at <= EXTERNAL_CHANNEL_INBOUND_DEDUP_WINDOW_SECONDS * 1000:
+            existing["seen_at_unix_ms"] = now_ms
+            _save_external_channel_dedup_state(state)
+            return True
+    recent[fingerprint] = {
+        "channel": str(channel or "").strip().lower(),
+        "sender_id": str(sender_id or "").strip(),
+        "message_id": str(message_id or "").strip(),
+        "text_preview": str(text or "").strip()[:200],
+        "seen_at_unix_ms": now_ms,
+    }
+    _save_external_channel_dedup_state(state)
+    return False
+
+
+def _recent_external_channel_delivery_duplicate(channel: str, recipient: str, text: str) -> dict[str, Any] | None:
+    normalized_text = _normalize_external_channel_dedup_text(text)
+    if not normalized_text:
+        return None
+    cutoff_ms = int(time.time() * 1000) - EXTERNAL_CHANNEL_OUTBOUND_DEDUP_WINDOW_SECONDS * 1000
+    delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
+    matches: list[dict[str, Any]] = []
+    for path in sorted(delivery_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(payload.get("channel_id") or "").strip() != str(channel or "").strip():
+            continue
+        if str(payload.get("recipient") or "").strip() != str(recipient or "").strip():
+            continue
+        submitted_at = int(payload.get("submitted_at_unix_ms") or 0)
+        if submitted_at and submitted_at < cutoff_ms:
+            continue
+        status = str(payload.get("status") or "").strip().lower()
+        if status not in {"queued", "pending", "delivered"}:
+            continue
+        candidate_text = _normalize_external_channel_dedup_text(payload.get("display_text") or "")
         if candidate_text != normalized_text:
             continue
         matches.append(payload)
@@ -2209,13 +2365,21 @@ def _council_role_instruction(agent_key: str) -> str:
     return ""
 
 
-def _run_codex_exec(*, system_prompt: str, user_prompt: str, model: str, timeout: int = REQUEST_TIMEOUT_SECONDS) -> dict[str, Any]:
+def _run_codex_exec(
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    model: str,
+    timeout: int = REQUEST_TIMEOUT_SECONDS,
+    max_tokens: int | None = None,
+) -> dict[str, Any]:
     return brain_router.execute_manager(
         runtime_env=os.environ,
         system_prompt=system_prompt,
         user_prompt=user_prompt,
         model=model,
         timeout=timeout,
+        max_tokens_override=max_tokens,
     )
 
 
@@ -2268,6 +2432,12 @@ def _software_delivery_worker_hints(text: str) -> list[str]:
     lowered = str(text or "").strip().lower()
     if not lowered:
         return []
+    mobile_native_surface = any(
+        term in lowered for term in ("mobile", "ios", "android", "flutter", "react native", "swiftui", "swift", "kotlin")
+    )
+    backend_surface = any(
+        term in lowered for term in ("backend", "api", "service layer", "database", "schema", "fastapi", "django", "server-side")
+    )
     hinted: list[str] = []
     if any(term in lowered for term in ("architect", "architecture", "system design", "design a system", "migration plan", "technical design")):
         hinted.append("ATLAS")
@@ -2275,12 +2445,23 @@ def _software_delivery_worker_hints(text: str) -> list[str]:
         hinted.append("FORGE")
     if any(term in lowered for term in ("frontend", "ui", "ux", "react", "next.js", "css", "tailwind", "design system")):
         hinted.append("QUILL")
+    if any(term in lowered for term in ("mobile", "ios", "android", "flutter", "react native", "swiftui", "swift", "kotlin")):
+        hinted.append("QUILL")
     if any(term in lowered for term in ("devops", "platform", "ci/cd", "ci", "cd", "deploy", "release", "kubernetes", "terraform", "observability")):
         hinted.append("PULSE")
     if any(term in lowered for term in ("qa", "test plan", "testing", "reliability", "regression", "acceptance criteria", "acceptance test")):
         hinted.append("AEGIS")
     if any(term in lowered for term in ("security", "threat model", "auth", "authz", "authentication", "authorization", "review")):
         hinted.append("SENTINEL")
+    if _request_wants_build_artifact(text):
+        if mobile_native_surface and "ATLAS" not in hinted:
+            hinted.append("ATLAS")
+        if (backend_surface or not mobile_native_surface) and "FORGE" not in hinted:
+            hinted.append("FORGE")
+        if (_request_targets_ui_surface(text) or mobile_native_surface) and "QUILL" not in hinted:
+            hinted.append("QUILL")
+        if "AEGIS" not in hinted:
+            hinted.append("AEGIS")
     return _normalize_worker_selection(hinted, text)
 
 
@@ -2304,6 +2485,9 @@ def _looks_like_software_delivery_request(text: str) -> bool:
             "platform",
             "test plan",
             "security review",
+            "mobile app",
+            "ios app",
+            "android app",
         )
     )
     has_software_surface = any(
@@ -2316,6 +2500,14 @@ def _looks_like_software_delivery_request(text: str) -> bool:
             "fastapi",
             "django",
             "web app",
+            "mobile app",
+            "flutter",
+            "react native",
+            "swiftui",
+            "swift",
+            "kotlin",
+            "ios",
+            "android",
             "dashboard",
             "deployment",
             "ci/cd",
@@ -2325,6 +2517,190 @@ def _looks_like_software_delivery_request(text: str) -> bool:
         )
     )
     return has_build_context and has_software_surface
+
+
+def _request_targets_ui_surface(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    return any(
+        term in lowered
+        for term in (
+            "frontend",
+            "ui",
+            "ux",
+            "web app",
+            "dashboard",
+            "landing page",
+            "mobile",
+            "ios",
+            "android",
+            "flutter",
+            "react native",
+            "swiftui",
+            "next.js",
+            "react",
+        )
+    )
+
+
+def _request_targets_mobile_surface(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    return any(
+        term in lowered
+        for term in ("mobile", "ios", "android", "flutter", "react native", "swiftui", "swift", "kotlin")
+    )
+
+
+def _specialist_execution_profile_override(agent_key: str, request: str) -> tuple[str, str]:
+    if (
+        agent_key == "QUILL"
+        and _request_wants_build_artifact(request)
+        and _request_targets_ui_surface(request)
+    ):
+        return "executor_tooling", "llama-3.3-70b-instruct"
+    specialist = next((agent for agent in TEAM_TOPOLOGY.specialists if agent.env_key == agent_key), None)
+    if specialist is not None:
+        return specialist.profile_name, specialist.model
+    return "", ""
+
+
+def _request_wants_build_artifact(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    action_terms = (
+        "build",
+        "implement",
+        "create",
+        "scaffold",
+        "ship",
+    )
+    artifact_terms = (
+        "return full code",
+        "return complete code",
+        "complete code",
+        "file tree",
+        "runnable",
+        "working app",
+        "full-stack",
+        "complete app",
+        "every file needed",
+        "run instructions",
+    )
+    software_terms = (
+        "web app",
+        "mobile app",
+        "frontend",
+        "backend",
+        "api",
+        "fastapi",
+        "django",
+        "react",
+        "next.js",
+        "flutter",
+        "react native",
+        "swiftui",
+        "swift",
+        "kotlin",
+        "ios",
+        "android",
+    )
+    return (
+        any(term in lowered for term in action_terms)
+        and any(term in lowered for term in artifact_terms)
+        and any(term in lowered for term in software_terms)
+    )
+
+
+def _request_wants_small_code_artifact(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered or _request_wants_build_artifact(text) or _looks_like_software_delivery_request(text):
+        return False
+    if any(
+        term in lowered
+        for term in (
+            "web app",
+            "mobile app",
+            "frontend",
+            "backend",
+            "project",
+            "file tree",
+            "full-stack",
+            "ios",
+            "android",
+            "flutter",
+            "react native",
+            "react",
+            "next.js",
+            "fastapi",
+            "django",
+        )
+    ):
+        return False
+    code_terms = (
+        "write code",
+        "write a function",
+        "hãy viết hàm",
+        "hay viet ham",
+        "viết hàm",
+        "viet ham",
+        "write a script",
+        "implement a function",
+        "implement fibonacci",
+        "python function",
+        "javascript function",
+        "typescript function",
+        "code snippet",
+        "runnable code",
+        "complete runnable code",
+        "code runnable",
+        "code runnable hoàn chỉnh",
+        "code runnable hoan chinh",
+        "return only code",
+        "return only complete runnable code",
+        "chỉ trả về code",
+        "chi tra ve code",
+        "chỉ trả về code runnable hoàn chỉnh",
+        "chi tra ve code runnable hoan chinh",
+        "unit test",
+        "simple tests",
+        "3 test",
+        "3 tests",
+        "kèm 3 test",
+        "kem 3 test",
+        "tests for",
+    )
+    return any(term in lowered for term in code_terms)
+
+
+def _request_is_short_memory_turn(text: str) -> bool:
+    lowered = str(text or "").strip().lower()
+    if not lowered:
+        return False
+    direct_prefixes = (
+        "remember ",
+        "remember:",
+        "remember-",
+        "remember this",
+        "ghi nhớ ",
+        "ghi nho ",
+        "hãy ghi nhớ",
+        "hay ghi nho",
+    )
+    recall_phrases = (
+        "what did i just",
+        "what code name did i just",
+        "what did i tell you",
+        "nhắc lại",
+        "toi vua",
+        "tôi vừa",
+        "mình vừa",
+        "minh vua",
+    )
+    return lowered.startswith(direct_prefixes) or any(term in lowered for term in recall_phrases)
 
 
 def _software_delivery_manager_brief(request: str, workers: list[str]) -> str:
@@ -2337,11 +2713,17 @@ def _software_delivery_manager_brief(request: str, workers: list[str]) -> str:
         "SENTINEL": "Sentinel should own security review, auth/risk scrutiny, and skeptical validation.",
     }
     lines = [responsibilities[key] for key in workers if key in responsibilities]
-    return (
+    brief = (
         "Treat this as a software delivery team request. Decompose the work like a real dev team, not a generic analyst/writer workflow. "
         "Use concise role handoffs, highlight dependencies, and end with a manager-ready execution summary. "
         + " ".join(lines)
     ).strip()
+    if _request_wants_build_artifact(request):
+        brief = (
+            f"{brief} The final answer must ship a build artifact, not a research memo: return a concrete stack choice, "
+            "a file tree, and complete code for every file needed to run the requested app."
+        ).strip()
+    return brief
 
 
 def _fallback_team_workers(text: str) -> list[str]:
@@ -2392,6 +2774,13 @@ def _refine_skill_routed_workers(request: str, matched_skills: list[dict[str, An
         return _normalize_worker_selection(explicitly_requested, request)
     
     selected = _normalize_worker_selection(workers, request)
+    if _request_wants_build_artifact(request):
+        build_workers = _software_delivery_worker_hints(request) or selected
+        if "FORGE" not in build_workers:
+            build_workers.append("FORGE")
+        if _request_targets_ui_surface(request) and "QUILL" not in build_workers:
+            build_workers.append("QUILL")
+        return _normalize_worker_selection(build_workers, request)
     if _request_wants_protocol_artifact(request) or any("protocol" in name for name in lowered_skills):
         return _normalize_worker_selection(["QUILL", "AEGIS"], request)
     if "security-questionnaire" in lowered_skills or _request_is_security_questionnaire(request, list(lowered_skills)):
@@ -2417,6 +2806,23 @@ def _refine_skill_routed_workers(request: str, matched_skills: list[dict[str, An
 
 def _specialist_timeout_for_request(agent_key: str, request: str, skills_used: list[str]) -> int:
     lowered_skills = {str(item or "").strip().lower() for item in skills_used}
+    if _request_wants_build_artifact(request):
+        if _request_targets_mobile_surface(request) and agent_key == "QUILL":
+            return 70
+        if _request_targets_ui_surface(request) and not _request_targets_mobile_surface(request) and agent_key == "QUILL":
+            return 55
+        if _request_targets_mobile_surface(request) and agent_key == "ATLAS":
+            return 38
+        if _request_targets_mobile_surface(request) and agent_key == "AEGIS":
+            return 30
+        if agent_key == "ATLAS":
+            return 32
+        if agent_key == "SENTINEL":
+            return 26
+        if agent_key in {"FORGE", "QUILL", "PULSE"}:
+            return 40
+        if agent_key == "AEGIS":
+            return 24
     if _looks_like_software_delivery_request(request):
         if agent_key == "ATLAS":
             return 28
@@ -2471,6 +2877,12 @@ def _prefer_direct_provider_first(agent_key: str, request: str, skills_used: lis
     fast_lane_skills = {"mail-gui", "book-meeting", "safe-web-research", "security-questionnaire"}
     protocol_lane = _request_wants_protocol_artifact(request) or any("protocol" in name for name in lowered_skills)
     software_delivery_lane = _looks_like_software_delivery_request(request)
+    if _request_wants_build_artifact(request):
+        return bool(
+            agent_key == "QUILL"
+            and _request_targets_ui_surface(request)
+            and not _request_targets_mobile_surface(request)
+        )
     customer_research_lane = any(
         "research" in name and any(token in name for token in ("khach", "customer", "persona", "jtbd", "icp"))
         for name in lowered_skills
@@ -2496,6 +2908,10 @@ def _direct_provider_timeout_for_request(
 ) -> int:
     if not _prefer_direct_provider_first(agent_key, request, skills_used):
         return max(6, min(specialist_timeout, 15))
+    if _request_wants_build_artifact(request):
+        if agent_key == "QUILL" and _request_targets_ui_surface(request) and not _request_targets_mobile_surface(request):
+            return min(60, max(40, specialist_timeout - 6))
+        return min(24, max(16, specialist_timeout - 8))
     lowered_skills = {str(item or "").strip().lower() for item in skills_used}
     if _request_wants_protocol_artifact(request) or any("protocol" in name for name in lowered_skills):
         return min(12 if agent_key == "QUILL" else 10, max(8, specialist_timeout // 2))
@@ -2515,6 +2931,10 @@ def _route_requires_team_execution(request: str, skill_names: list[str]) -> bool
     lowered_skills = {str(item or "").strip().lower() for item in skill_names if str(item or "").strip()}
     if not request.strip():
         return False
+    if _request_wants_small_code_artifact(request):
+        return False
+    if _request_wants_build_artifact(request):
+        return True
     if _looks_like_software_delivery_request(request):
         return True
     if _request_wants_protocol_artifact(request):
@@ -2759,6 +3179,42 @@ def _team_route_plan(text: str, session_key: str) -> dict[str, Any]:
         return {"mode": "direct", "reason": "empty"}
     if stripped.lower() in {"hi", "hello", "hey", "yo", "ping"}:
         return {"mode": "direct", "reason": "greeting"}
+    if _request_wants_small_code_artifact(stripped):
+        return {
+            "mode": "direct",
+            "topic": stripped,
+            "depth": "quick",
+            "criteria": "factual",
+            "workers": [],
+            "manager_brief": stripped,
+            "reason": "small_code_direct",
+            "skills": [],
+        }
+    if _request_is_short_memory_turn(stripped):
+        return {
+            "mode": "direct",
+            "topic": stripped,
+            "depth": "quick",
+            "criteria": "consistency",
+            "workers": [],
+            "manager_brief": stripped,
+            "reason": "short_memory_direct",
+            "skills": [],
+        }
+    if _request_wants_build_artifact(stripped):
+        workers = _software_delivery_worker_hints(stripped) or _normalize_worker_selection(["ATLAS", "FORGE", "QUILL", "AEGIS"], stripped)
+        if len(workers) < 2:
+            workers = _normalize_worker_selection(["ATLAS", "FORGE", "QUILL", "AEGIS"], stripped)
+        return {
+            "mode": "team",
+            "topic": stripped,
+            "depth": "deep",
+            "criteria": "consistency",
+            "workers": workers,
+            "manager_brief": _software_delivery_manager_brief(stripped, workers),
+            "reason": "software_delivery_build_artifact",
+            "skills": [],
+        }
     skill_bundle = _skill_bundle_for_request(
         stripped,
         session_key,
@@ -3065,6 +3521,7 @@ def _manager_direct_response(goal: str, session_key: str, plan: dict[str, Any] |
         system_prompt=(
             f"You are {TEAM_MANAGER_NAME}, Meridian's manager. "
             "Answer the user directly. Use conversation continuity when relevant. "
+            f"{_request_language_instruction(goal)} "
             "Do not mention internal specialist routing unless asked. "
             "Use governed memory recall only as bounded context, never as a substitute for verified live facts."
         ),
@@ -3421,39 +3878,57 @@ def _run_specialist_step(
             """
         ).strip()
     else:
-        prompt = textwrap.dedent(
-            f"""
-            You are {specialist.name}, Meridian's {specialist_role}.
-            Purpose: {specialist_purpose}
-            Manager brief: {str(plan.get('manager_brief') or request).strip()}
-            Verified Meridian host facts (treat these as the only trusted factual baseline):
-            {verified_facts_block}
-            Shared council context pack:
-            {council_context_block or '(none)'}
-            Your council role in this meeting:
-            {council_role_block or '(none)'}
-            Relevant internal skills:
-            {skill_guidance_block or '(none)'}
-            Execution constraints for this request:
-            {skill_execution_addendum or '(none)'}
-            Conversation continuity:
-            {context_block or '(none)'}
-            Governed memory recall:
-            {memory_context_block or '(none)'}
-            Governed trust evidence:
-            {trust_evidence_context_block or '(none)'}
+        ownership_prompt = _build_artifact_specialist_ownership_prompt(specialist.env_key, request)
+        if (
+            _request_wants_build_artifact(request)
+            and specialist.env_key == "QUILL"
+            and _request_targets_ui_surface(request)
+            and not _request_targets_mobile_surface(request)
+        ):
+            prompt = _compact_frontend_build_prompt(
+                specialist_name=specialist.name,
+                specialist_role=specialist_role,
+                specialist_purpose=specialist_purpose,
+                manager_brief=str(plan.get("manager_brief") or request),
+                ownership_prompt=ownership_prompt or "Own the frontend slice only.",
+                request=request,
+            )
+        else:
+            prompt = textwrap.dedent(
+                f"""
+                You are {specialist.name}, Meridian's {specialist_role}.
+                Purpose: {specialist_purpose}
+                Manager brief: {str(plan.get('manager_brief') or request).strip()}
+                Verified Meridian host facts (treat these as the only trusted factual baseline):
+                {verified_facts_block}
+                Shared council context pack:
+                {council_context_block or '(none)'}
+                Your council role in this meeting:
+                {council_role_block or '(none)'}
+                Relevant internal skills:
+                {skill_guidance_block or '(none)'}
+                Execution constraints for this request:
+                {skill_execution_addendum or '(none)'}
+                Your owned delivery slice:
+                {ownership_prompt or '(none)'}
+                Conversation continuity:
+                {context_block or '(none)'}
+                Governed memory recall:
+                {memory_context_block or '(none)'}
+                Governed trust evidence:
+                {trust_evidence_context_block or '(none)'}
 
-            User request:
-            {request.strip()}
+                User request:
+                {request.strip()}
 
-            If the request is underspecified, do not invent recipients, attendees, email addresses, dates, exact times,
-            locations, availability, or confirmation state. Return the closest executable draft with placeholders or
-            explicit draft/unknown markers, and list the missing fields in warnings.
-            Return strict JSON only with keys:
-            result, confidence, citations, warnings.
-            Do not introduce governance facts, citations, controls, or delivery claims that are not supported by the verified facts above.
-            """
-        ).strip()
+                If the request is underspecified, do not invent recipients, attendees, email addresses, dates, exact times,
+                locations, availability, or confirmation state. Return the closest executable draft with placeholders or
+                explicit draft/unknown markers, and list the missing fields in warnings.
+                Return strict JSON only with keys:
+                result, confidence, citations, warnings.
+                Do not introduce governance facts, citations, controls, or delivery claims that are not supported by the verified facts above.
+                """
+            ).strip()
     specialist_timeout = _specialist_timeout_for_request(specialist.env_key, request, skills_used)
     if deadline_unix is not None:
         remaining_seconds = int(deadline_unix - time.time())
@@ -3465,13 +3940,26 @@ def _run_specialist_step(
                 remaining_seconds=max(0, remaining_seconds),
             )
         specialist_timeout = min(specialist_timeout, remaining_seconds)
-    specialist_max_tokens = 900
+    build_artifact_lane = _request_wants_build_artifact(request)
+    execution_profile_name, execution_model = _specialist_execution_profile_override(specialist.env_key, request)
+    execution_profile_name = execution_profile_name or specialist.profile_name
+    execution_model = execution_model or specialist.model
+    specialist_max_tokens = 1800 if build_artifact_lane else 900
     if specialist.env_key == "SENTINEL":
         specialist_max_tokens = 450
-    if skill_execution_addendum and specialist.env_key == "QUILL":
+    if build_artifact_lane and specialist.env_key in {"FORGE", "QUILL", "PULSE"}:
+        specialist_max_tokens = 2600
+    if build_artifact_lane and _request_targets_ui_surface(request) and not _request_targets_mobile_surface(request) and specialist.env_key == "QUILL":
+        specialist_max_tokens = 4200
+    if build_artifact_lane and _request_targets_mobile_surface(request) and specialist.env_key == "QUILL":
+        specialist_max_tokens = 4200
+    elif skill_execution_addendum and specialist.env_key == "QUILL":
         specialist_max_tokens = 420
     direct_fallback = None
     fallback_warning = ""
+    direct_retry_count = 1
+    if build_artifact_lane and specialist.env_key == "QUILL" and _request_targets_ui_surface(request):
+        direct_retry_count = 3
     compact_fallback_prompt = textwrap.dedent(
         f"""
         User request:
@@ -3492,12 +3980,15 @@ def _run_specialist_step(
             skills_used,
             specialist_timeout,
         )
-        direct_fallback = mcp_server._specialist_direct_provider_fallback(  # type: ignore[attr-defined]
-            specialist.registry_id,
+        direct_fallback = _run_specialist_direct_provider_fallback(
+            specialist,
             system_prompt=f"You are {specialist.name}. {specialist_purpose}",
             user_prompt=prompt,
             max_tokens=specialist_max_tokens,
             timeout=direct_provider_timeout,
+            profile_name_override=execution_profile_name,
+            model_override=execution_model,
+            retry_count=direct_retry_count,
         )
         if direct_fallback.get("ok") and str(direct_fallback.get("output_text") or "").strip():
             loom_result = {
@@ -3515,12 +4006,17 @@ def _run_specialist_step(
         else:
             direct_fallback = None
             loom_timeout = max(8, specialist_timeout - min(direct_provider_timeout, max(specialist_timeout - 6, 0)))
+            if build_artifact_lane and specialist.env_key == "QUILL":
+                if _request_targets_mobile_surface(request):
+                    loom_timeout = max(28, loom_timeout)
+                elif _request_targets_ui_surface(request):
+                    loom_timeout = max(22, loom_timeout)
             loom_result = mcp_server._shared_run_loom_capability(  # type: ignore[attr-defined]
                 _safe_runtime_context(),
                 "loom.llm.inference.v1",
                 {
-                    "provider_profile": specialist.profile_name,
-                    "model": specialist.model,
+                    "provider_profile": execution_profile_name,
+                    "model": execution_model,
                     "system_prompt": f"You are {specialist.name}. {specialist_purpose}",
                     "user_prompt": prompt,
                     "max_tokens": specialist_max_tokens,
@@ -3536,8 +4032,8 @@ def _run_specialist_step(
             _safe_runtime_context(),
             "loom.llm.inference.v1",
             {
-                "provider_profile": specialist.profile_name,
-                "model": specialist.model,
+                "provider_profile": execution_profile_name,
+                "model": execution_model,
                 "system_prompt": f"You are {specialist.name}. {specialist_purpose}",
                 "user_prompt": prompt,
                 "max_tokens": specialist_max_tokens,
@@ -3570,15 +4066,22 @@ def _run_specialist_step(
         or "Not found:" in loom_error
         or "Loom service submit failed" in output_text
         or _specialist_output_needs_retry(output_text, payload)
+        or _build_artifact_contribution_is_too_thin(output_text, request, specialist.env_key)
     ):
-        recovery_timeout = min(20, max(8, specialist_timeout // 3))
+        recovery_timeout = min(
+            70 if build_artifact_lane and _request_targets_mobile_surface(request) else 45,
+            max(12, specialist_timeout // 2 if build_artifact_lane else specialist_timeout // 3),
+        )
         fallback_prompt = compact_fallback_prompt if specialist.env_key == "SENTINEL" else prompt
-        direct_fallback = mcp_server._specialist_direct_provider_fallback(  # type: ignore[attr-defined]
-            specialist.registry_id,
+        direct_fallback = _run_specialist_direct_provider_fallback(
+            specialist,
             system_prompt=f"You are {specialist.name}. {specialist_purpose}",
             user_prompt=fallback_prompt,
             max_tokens=500 if specialist.env_key == "SENTINEL" else specialist_max_tokens,
             timeout=recovery_timeout,
+            profile_name_override=execution_profile_name,
+            model_override=execution_model,
+            retry_count=direct_retry_count,
         )
         if direct_fallback.get("ok") and str(direct_fallback.get("output_text") or "").strip():
             output_text = _strip_leading_think_block(str(direct_fallback.get("output_text") or "").strip())
@@ -3612,6 +4115,9 @@ def _run_specialist_step(
         transport_kind = "loom_capability"
     warnings = list(dict.fromkeys([item for item in warnings if str(item).strip()]))
     result_text = str((payload or {}).get("result") or output_text or loom_result.get("error") or "").strip()
+    if _build_artifact_contribution_is_too_thin(result_text, request, specialist.env_key):
+        warnings = [*warnings, "build_artifact_contribution_missing_code_or_file_output"]
+        result_text = ""
     lowered_skill_names = {str(item).strip().lower() for item in skills_used}
     if specialist.env_key == "QUILL" and skills_used and (
         _looks_like_scope_document(result_text)
@@ -3635,8 +4141,8 @@ def _run_specialist_step(
         "task_kind": specialist.task_kind,
         "request_id": str(loom_result.get("job_id") or ""),
         "session_key": session_key,
-        "provider_profile": specialist.profile_name,
-        "model": specialist.model,
+        "provider_profile": execution_profile_name,
+        "model": execution_model,
         "transport_kind": transport_kind,
         "result": result_text,
         "confidence": str((payload or {}).get("confidence") or "").strip(),
@@ -3657,8 +4163,8 @@ def _run_specialist_step(
         "role": specialist_role,
         "task_kind": specialist.task_kind,
         "request_id": receipt["request_id"],
-        "provider_profile": specialist.profile_name,
-        "model": specialist.model,
+        "provider_profile": execution_profile_name,
+        "model": execution_model,
         "transport_kind": receipt["transport_kind"],
         "text": receipt["result"],
         "confidence": receipt["confidence"],
@@ -3679,10 +4185,29 @@ def _qa_gate_allows_manager_fastpath(steps: list[dict[str, Any]]) -> bool:
     if not qa_steps:
         return False
     for step in qa_steps:
-        if "fail" in _step_result_text(step).lower():
+        result_text = _step_result_text(step).lower()
+        if "partial" in result_text:
+            return False
+        if '"verification"' in result_text and '"fail"' in result_text:
             return False
         for warning in _step_warning_texts(step):
             if _warning_is_hard_blocker(warning) or _warning_is_runtime_failure(warning):
+                return False
+            lowered_warning = str(warning or "").strip().lower()
+            if any(
+                token in lowered_warning
+                for token in (
+                    "blocked",
+                    "missing",
+                    "syntax error",
+                    "compile",
+                    "runtime",
+                    "non-runnable",
+                    "truncated",
+                    "incomplete",
+                    "no run instructions",
+                )
+            ):
                 return False
     return True
 
@@ -3694,22 +4219,65 @@ def _manager_fastpath_artifact(
 ) -> tuple[str, str]:
     lowered_skill_names = {str(item or "").strip().lower() for item in skill_names}
     best_worker_artifact = _best_usable_step_artifact(steps, goal, skill_names)
+    qa_fastpath_allowed = _qa_gate_allows_manager_fastpath(steps)
     if _request_is_customer_research(goal, skill_names) and not _request_wants_research_writer(goal):
         if best_worker_artifact and _artifact_matches_skill_shape(best_worker_artifact, goal, skill_names):
             return best_worker_artifact, "manager_synthesis_fastpathed_to_best_worker_artifact"
         return _salvage_customer_research_artifact(goal), "manager_synthesis_fastpathed_to_customer_research_starter"
+    if _request_wants_build_artifact(goal) and best_worker_artifact:
+        if qa_fastpath_allowed and _artifact_matches_skill_shape(best_worker_artifact, goal, skill_names):
+            return best_worker_artifact, "manager_synthesis_fastpathed_to_best_worker_artifact"
     if (
         _request_is_security_questionnaire(goal, skill_names)
         or _request_is_ai_stack_watch(goal, skill_names)
     ) and best_worker_artifact:
         if _artifact_matches_skill_shape(best_worker_artifact, goal, skill_names):
             return best_worker_artifact, "manager_synthesis_fastpathed_to_best_worker_artifact"
-    if not _qa_gate_allows_manager_fastpath(steps):
+    if not qa_fastpath_allowed:
         return "", ""
     if ("scan-doi-thu" in lowered_skill_names or "safe-web-research" in lowered_skill_names) and best_worker_artifact:
         if _artifact_matches_skill_shape(best_worker_artifact, goal, skill_names):
             return best_worker_artifact, "manager_synthesis_fastpathed_to_best_worker_artifact"
     return "", ""
+
+
+def _qa_findings_block(goal: str, steps: list[dict[str, Any]]) -> str:
+    if not _request_wants_build_artifact(goal):
+        return ""
+    findings: list[str] = []
+    for step in (steps or []):
+        if str(step.get("task_kind") or "").strip() != "qa_gate":
+            continue
+        for warning in step.get("warnings") or []:
+            if isinstance(warning, dict):
+                location = str(warning.get("location") or "").strip()
+                issue = str(warning.get("issue") or warning.get("description") or "").strip()
+                if issue:
+                    findings.append(f"- {location + ': ' if location else ''}{issue}")
+            else:
+                text = str(warning or "").strip()
+                if text:
+                    findings.append(f"- {text}")
+        for issue in _artifact_has_obvious_web_build_contract_errors(_step_result_text(step)):
+            findings.append(f"- {issue}")
+    for step in (steps or []):
+        if str(step.get("task_kind") or "").strip() == "qa_gate":
+            continue
+        for issue in _artifact_has_obvious_web_build_contract_errors(_step_result_text(step)):
+            findings.append(f"- {issue}")
+    deduped = list(dict.fromkeys(item for item in findings if item))
+    return "\n".join(deduped[:12]).strip()
+
+
+def _best_partial_step_artifact(steps: list[dict[str, Any]]) -> str:
+    candidates: list[str] = []
+    for step in (steps or []):
+        text = _step_result_text(step)
+        if len(text) >= 200:
+            candidates.append(text)
+    if not candidates:
+        return ""
+    return max(candidates, key=len)
 
 
 def _manager_synthesis(
@@ -3775,6 +4343,7 @@ def _manager_synthesis(
             f"You are {TEAM_MANAGER_NAME}, Meridian's manager. "
             "Given specialist outputs, produce the final user-facing reply. "
             "Resolve conflicts, call out uncertainty, and keep the answer concise but complete. "
+            f"{_request_language_instruction(goal)} "
             "Treat worker warnings and empty citations as first-class truth. "
             "Verified Meridian host facts are the source of truth over worker claims. "
             "Governed memory recall is useful bounded context, but it never outranks live verified facts or explicit worker warnings. "
@@ -3794,6 +4363,7 @@ def _manager_synthesis(
         ),
         model=manager_defaults["model"],
         timeout=max(TEAM_ROUTE_MIN_WORKER_SECONDS, int(timeout_seconds or REQUEST_TIMEOUT_SECONDS)),
+        max_tokens=_manager_max_tokens_for_goal(goal),
     )
     if result.get("ok") and str(result.get("output_text") or "").strip():
         answer = str(result.get("output_text") or "").strip()
@@ -3830,6 +4400,80 @@ def _manager_synthesis(
         for item in steps
     )
     fallback_artifact = _best_usable_step_artifact(steps, goal, skill_names)
+    if _request_wants_build_artifact(goal) and fallback_artifact and build_qa_findings:
+        repair = _run_codex_exec(
+            system_prompt=(
+                f"You are {TEAM_MANAGER_NAME}, Meridian's manager. "
+                "You are repairing a build artifact after QA findings. "
+                f"{_request_language_instruction(goal)} "
+                "Return the corrected final artifact only."
+            ),
+            user_prompt=(
+                    f"Original request:\n{goal.strip()}\n\n"
+                    "Repair this build artifact so it satisfies the required response shape and resolves the QA findings.\n\n"
+                    f"Artifact to repair:\n{fallback_artifact}\n\n"
+                    f"QA findings to fix:\n{build_qa_findings}\n\n"
+                    f"Required response shape:\n{response_shape}\n\n"
+                    f"Repair rules:\n{_build_artifact_repair_instructions(goal)}\n"
+                ),
+            model=manager_defaults["model"],
+            timeout=max(TEAM_ROUTE_MIN_WORKER_SECONDS, int(timeout_seconds or REQUEST_TIMEOUT_SECONDS)),
+            max_tokens=_manager_max_tokens_for_goal(goal),
+        )
+        repaired_answer = str(repair.get("output_text") or "").strip()
+        if repaired_answer and _artifact_matches_skill_shape(repaired_answer, goal, skill_names):
+            append_session_event(session_key, {
+                "history_type": "manager_response",
+                "status": "completed",
+                "agent_id": TEAM_MANAGER_AGENT_ID,
+                "speaker": "manager",
+                "text": repaired_answer,
+                "provider_profile": manager_meta["provider_profile"],
+                "model": manager_meta["model"],
+                "transport_kind": manager_meta["transport_kind"],
+                "auth_mode": manager_meta["auth_mode"],
+                "execution_owner": "meridian",
+                "warnings": ["manager_synthesis_repaired_from_qa_findings"],
+            }, loom_root=LOOM_ROOT)
+            return repaired_answer
+    if _request_wants_build_artifact(goal) and build_qa_findings:
+        partial_artifact = _best_partial_step_artifact(steps)
+        if partial_artifact:
+            repair = _run_codex_exec(
+                system_prompt=(
+                    f"You are {TEAM_MANAGER_NAME}, Meridian's manager. "
+                    "You are repairing a partial build artifact after QA findings. "
+                    f"{_request_language_instruction(goal)} "
+                    "Return the corrected final artifact only."
+                ),
+                user_prompt=(
+                    f"Original request:\n{goal.strip()}\n\n"
+                    "Repair this partial build artifact so it satisfies the required response shape and resolves the QA findings.\n\n"
+                    f"Partial artifact to repair:\n{partial_artifact}\n\n"
+                    f"QA findings to fix:\n{build_qa_findings}\n\n"
+                    f"Required response shape:\n{response_shape}\n\n"
+                    f"Repair rules:\n{_build_artifact_repair_instructions(goal)}\n"
+                ),
+                model=manager_defaults["model"],
+                timeout=max(TEAM_ROUTE_MIN_WORKER_SECONDS, int(timeout_seconds or REQUEST_TIMEOUT_SECONDS)),
+                max_tokens=_manager_max_tokens_for_goal(goal),
+            )
+            repaired_answer = str(repair.get("output_text") or "").strip()
+            if repaired_answer and _artifact_matches_skill_shape(repaired_answer, goal, skill_names):
+                append_session_event(session_key, {
+                    "history_type": "manager_response",
+                    "status": "completed",
+                    "agent_id": TEAM_MANAGER_AGENT_ID,
+                    "speaker": "manager",
+                    "text": repaired_answer,
+                    "provider_profile": manager_meta["provider_profile"],
+                    "model": manager_meta["model"],
+                    "transport_kind": manager_meta["transport_kind"],
+                    "auth_mode": manager_meta["auth_mode"],
+                    "execution_owner": "meridian",
+                    "warnings": ["manager_synthesis_repaired_from_partial_artifact_and_qa_findings"],
+                }, loom_root=LOOM_ROOT)
+                return repaired_answer
     if local_team_fallback:
         append_session_event(session_key, {
             "history_type": "manager_response",
@@ -3984,7 +4628,7 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
 
     steps: list[dict[str, Any]] = []
     final_job_id = ""
-    team_deadline_unix = time.time() + max(TEAM_ROUTE_MIN_WORKER_SECONDS, REQUEST_TIMEOUT_SECONDS)
+    team_deadline_unix = time.time() + _team_request_deadline_seconds(request, plan)
     worker_deadline_unix = team_deadline_unix - TEAM_ROUTE_SYNTHESIS_RESERVE_SECONDS
     for worker in plan.get("workers") or []:
         plan["steps"] = list(steps)
@@ -4038,6 +4682,13 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
         skill_names,
         final_artifact=answer,
     )
+    if (
+        _request_wants_build_artifact(request)
+        and _final_artifact_is_usable(answer, skill_names)
+        and _final_build_artifact_passes_qa(answer, session_key=session_key)
+    ):
+        quality_status = "success"
+        quality_reasons = []
     if repair_warnings:
         quality_reasons = [*quality_reasons, *repair_warnings]
     artifact_source = _artifact_source_from_repairs(repair_warnings)
@@ -4765,6 +5416,8 @@ def _explicitly_requested_specialists(request: str) -> list[str]:
 def _request_prefers_safe_web_research(text: str) -> bool:
     lowered = str(text or "").strip().lower()
     if not lowered:
+        return False
+    if _request_wants_build_artifact(text) or _looks_like_software_delivery_request(text):
         return False
     if _extract_request_url(lowered):
         return True
@@ -9006,6 +9659,14 @@ def _specialist_deadline_timeout_receipt(
     return receipt
 
 
+def _team_request_deadline_seconds(request: str, plan: dict[str, Any] | None = None) -> int:
+    if _request_wants_build_artifact(request) or str((plan or {}).get("reason") or "").strip() == "software_delivery_build_artifact":
+        return max(150, REQUEST_TIMEOUT_SECONDS)
+    if _looks_like_software_delivery_request(request):
+        return max(90, REQUEST_TIMEOUT_SECONDS)
+    return max(TEAM_ROUTE_MIN_WORKER_SECONDS, REQUEST_TIMEOUT_SECONDS)
+
+
 def _local_team_delivery_fallback(goal: str, steps: list[dict[str, Any]], plan: dict[str, Any] | None = None) -> str:
     if not (_looks_like_software_delivery_request(goal) or str((plan or {}).get("reason") or "").strip() == "software_delivery_team_request"):
         return ""
@@ -9129,6 +9790,259 @@ def _artifact_looks_like_protocol_answer(text: str) -> bool:
     )
 
 
+def _artifact_matches_build_request_shape(text: str, request: str) -> bool:
+    artifact = str(text or "").strip()
+    lowered = artifact.lower()
+    build_request = _request_wants_build_artifact(request)
+    small_code_request = _request_wants_small_code_artifact(request)
+    if not artifact or (not build_request and not small_code_request):
+        return False
+    if any(
+        section in lowered
+        for section in (
+            "watched changes",
+            "impact on trust answers",
+            "verified source",
+            "likely buyer",
+            "next move",
+            "trust answer",
+        )
+    ):
+        return False
+    if small_code_request:
+        return (
+            "```" in artifact
+            or any(token in lowered for token in ("def ", "function ", "class ", "import ", "const ", "let "))
+        )
+    return _artifact_looks_like_build_output(artifact)
+
+
+def _build_code_section_label(request: str) -> str:
+    lowered = str(request or "").strip().lower()
+    if "complete code" in lowered:
+        return "Complete Code"
+    return "Code"
+
+
+def _structured_build_artifact_payload(text: str) -> dict[str, Any] | None:
+    artifact = str(text or "").strip()
+    if not artifact or not artifact.lstrip().startswith("{"):
+        return None
+    payload = _extract_json_value(artifact)
+    return payload if isinstance(payload, dict) else None
+
+
+def _structured_build_artifact_sections(payload: dict[str, Any]) -> dict[str, Any]:
+    return {str(key).strip().lower().replace("_", " "): value for key, value in payload.items()}
+
+
+def _artifact_code_fence_language(path: str) -> str:
+    suffix = str(Path(path).suffix or "").strip().lower()
+    return {
+        ".py": "python",
+        ".js": "javascript",
+        ".ts": "typescript",
+        ".tsx": "tsx",
+        ".jsx": "jsx",
+        ".html": "html",
+        ".css": "css",
+        ".json": "json",
+        ".dart": "dart",
+        ".yml": "yaml",
+        ".yaml": "yaml",
+        ".md": "markdown",
+        ".sh": "bash",
+    }.get(suffix, "")
+
+
+def _render_artifact_tree(value: Any, *, prefix: str = "") -> list[str]:
+    if isinstance(value, dict):
+        lines: list[str] = []
+        for key, child in value.items():
+            name = str(key or "").strip()
+            if not name:
+                continue
+            full = f"{prefix}{name}" if not prefix else f"{prefix}/{name}"
+            if isinstance(child, dict) and child:
+                lines.append(full)
+                lines.extend(_render_artifact_tree(child, prefix=full))
+            else:
+                lines.append(full)
+        return lines
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    text = str(value or "").strip()
+    return [text] if text else []
+
+
+def _build_artifact_payload_to_text(text: str, request: str) -> str:
+    payload = _structured_build_artifact_payload(text)
+    if not isinstance(payload, dict):
+        return ""
+    normalized = _structured_build_artifact_sections(payload)
+    stack = normalized.get("stack")
+    file_tree = normalized.get("file tree") or normalized.get("file_tree")
+    code_blocks = (
+        normalized.get("complete code")
+        or normalized.get("code")
+        or normalized.get("code blocks")
+        or normalized.get("code_blocks")
+    )
+    run_instructions = normalized.get("run instructions") or normalized.get("run_instructions")
+    if not stack or not file_tree or not code_blocks or not run_instructions:
+        return ""
+    code_section_label = _build_code_section_label(request)
+    lines = ["### Stack", str(stack).strip(), "", "### File Tree", "```"]
+    tree_lines = _render_artifact_tree(file_tree)
+    lines.extend(tree_lines if tree_lines else [str(file_tree).strip()])
+    lines.extend(["```", "", f"### {code_section_label}"])
+    if isinstance(code_blocks, dict):
+        for path, source in code_blocks.items():
+            file_path = str(path or "").strip()
+            if not file_path:
+                continue
+            lines.append(f"**{file_path}**")
+            language = _artifact_code_fence_language(file_path)
+            lines.append(f"```{language}" if language else "```")
+            lines.append(str(source or "").rstrip())
+            lines.append("```")
+            lines.append("")
+    else:
+        lines.append(str(code_blocks).strip())
+        lines.append("")
+    lines.append("### Run Instructions")
+    lines.append(str(run_instructions).strip())
+    return "\n".join(lines).strip()
+
+
+def _structured_build_artifact_code_map(text: str) -> dict[str, str]:
+    payload = _structured_build_artifact_payload(text)
+    if not isinstance(payload, dict):
+        return {}
+    normalized = _structured_build_artifact_sections(payload)
+    code_blocks = (
+        normalized.get("complete code")
+        or normalized.get("code")
+        or normalized.get("code blocks")
+        or normalized.get("code_blocks")
+    )
+    if not isinstance(code_blocks, dict):
+        return {}
+    parsed: dict[str, str] = {}
+    for path, source in code_blocks.items():
+        key = str(path or "").strip()
+        value = str(source or "")
+        if key and value.strip():
+            parsed[key] = value
+    return parsed
+
+
+def _structured_build_artifact_python_is_valid(text: str) -> bool:
+    code_map = _structured_build_artifact_code_map(text)
+    python_files = {path: source for path, source in code_map.items() if path.endswith(".py")}
+    if not python_files:
+        return True
+    for source in python_files.values():
+        try:
+            ast.parse(source)
+        except SyntaxError:
+            return False
+    return True
+
+
+def _artifact_looks_like_build_output(text: str) -> bool:
+    artifact = str(text or "").strip()
+    lowered = artifact.lower()
+    if not all(section in lowered for section in ("stack", "file tree", "code", "run instructions")):
+        return False
+    file_mentions = re.findall(r"(?:^|[\s`])([A-Za-z0-9_./-]+\.(?:py|ts|tsx|js|jsx|html|css|json|dart|swift|kt|sql|md|ya?ml))(?=$|[\s`])", artifact)
+    code_fence_count = artifact.count("```")
+    if artifact.lstrip().startswith("{"):
+        payload = _structured_build_artifact_payload(artifact)
+        if isinstance(payload, dict):
+            normalized = _structured_build_artifact_sections(payload)
+            file_tree = normalized.get("file tree") or normalized.get("file_tree")
+            code_blocks = (
+                normalized.get("complete code")
+                or normalized.get("code")
+                or normalized.get("code blocks")
+                or normalized.get("code_blocks")
+            )
+            run_instructions = normalized.get("run instructions") or normalized.get("run_instructions")
+            if isinstance(code_blocks, dict):
+                return (
+                    bool(str(file_tree or "").strip())
+                    and len(code_blocks) >= 1
+                    and bool(str(run_instructions or "").strip())
+                )
+            if isinstance(code_blocks, str):
+                return (
+                    bool(str(file_tree or "").strip())
+                    and len(code_blocks.strip()) >= 200
+                    and bool(str(run_instructions or "").strip())
+                )
+            return False
+    if len(set(file_mentions)) >= 2 and "run instructions" in lowered:
+        code_markers = (
+            "main.py:",
+            "main.dart:",
+            "pubspec.yaml:",
+            "index.html:",
+            "app.js:",
+            "style.css:",
+            "styles.css:",
+        )
+        if code_fence_count >= 2 or any(marker in lowered for marker in code_markers):
+            return not _artifact_has_obvious_web_build_contract_errors(artifact)
+    if len(set(file_mentions)) >= 2 and code_fence_count >= 2:
+        return not _artifact_has_obvious_web_build_contract_errors(artifact)
+    return False
+
+
+def _artifact_has_obvious_web_build_contract_errors(text: str) -> list[str]:
+    artifact = str(text or "").strip()
+    lowered = artifact.lower()
+    if not artifact:
+        return []
+    findings: list[str] = []
+    if "fastapi" not in lowered and "@app.post(" not in lowered:
+        return findings
+    if 'app.mount("/static"' in artifact and '@app.get("/static/index.html")' in artifact:
+        findings.append("FastAPI artifact redundantly mounts /static and also defines GET /static/index.html.")
+    sends_json_object = "json.stringify({" in lowered and "application/json" in lowered
+    signature_match = re.search(
+        r"@app\.post\([^\n]*\)\s*(?:async\s+)?def\s+\w+\(([^)]*)\)",
+        artifact,
+        flags=re.IGNORECASE | re.DOTALL,
+    )
+    if sends_json_object and signature_match:
+        signature = str(signature_match.group(1) or "").strip().lower()
+        uses_request_body = (
+            "request" in signature
+            or "body(" in signature
+            or "annotated[" in signature
+            or "dict" in signature
+            or "payload:" in signature
+            or "item:" in signature
+            or "input" in signature
+            or "data:" in signature
+            or "from pydantic import" in lowered
+            or "basemodel" in lowered
+            or "await request.json" in lowered
+        )
+        scalar_signature = bool(
+            re.fullmatch(
+                r"(?:self,\s*)?(?:[a-z_][a-z0-9_]*\s*:\s*(?:str|int|float|bool)(?:\s*=\s*[^,]+)?\s*,?\s*)+",
+                signature,
+            )
+        )
+        if scalar_signature and not uses_request_body:
+            findings.append(
+                "Frontend submits JSON body but FastAPI POST handler still looks like scalar query parameters instead of request-body parsing."
+            )
+    return findings
+
+
 def _artifact_matches_skill_shape(text: str, request: str, skill_names: list[str] | None = None) -> bool:
     lowered_skills = {str(item or "").strip().lower() for item in (skill_names or [])}
     artifact = str(text or "").strip()
@@ -9136,6 +10050,10 @@ def _artifact_matches_skill_shape(text: str, request: str, skill_names: list[str
     if not artifact:
         return False
     if _looks_like_scope_document(artifact):
+        return False
+    if _artifact_matches_build_request_shape(artifact, request):
+        return True
+    if _request_wants_build_artifact(request) or _request_wants_small_code_artifact(request):
         return False
     if _artifact_matches_protocol_request_shape(artifact, request):
         return True
@@ -9230,6 +10148,8 @@ def _final_artifact_is_usable(final_artifact: str, skill_names: list[str] | None
     text = str(final_artifact or "").strip()
     if not text:
         return False
+    if _artifact_looks_like_build_output(text):
+        return True
     if _artifact_looks_like_protocol_answer(text):
         return True
     if "security-questionnaire" in lowered_skills:
@@ -9258,6 +10178,33 @@ def _final_artifact_is_usable(final_artifact: str, skill_names: list[str] | None
     if _request_is_customer_research("", list(skill_names or [])):
         lowered = text.lower()
         return all(section in lowered for section in ("status", "likely buyer", "what must be validated", "next move"))
+    return False
+
+
+def _final_build_artifact_passes_qa(final_artifact: str, *, session_key: str) -> bool:
+    artifact = str(final_artifact or "").strip()
+    if not artifact or not _artifact_looks_like_build_output(artifact):
+        return False
+    if (
+        not _artifact_has_obvious_web_build_contract_errors(artifact)
+        and _structured_build_artifact_python_is_valid(artifact)
+    ):
+        return True
+    try:
+        result = mcp_server.do_qa_verify_route(  # type: ignore[attr-defined]
+            artifact,
+            "runnable build artifact quality",
+            agent_id="agent_aegis",
+            session_id=session_key,
+            timeout=30,
+        )
+    except Exception:
+        return False
+    verification = str(result.get("verification") or "").strip().lower()
+    if verification.startswith("pass"):
+        return True
+    if '"verification"' in verification and '"pass"' in verification:
+        return True
     return False
 
 
@@ -9337,6 +10284,8 @@ def _assess_skill_quality_outcome(
 
 
 def _short_prompt_skill_candidate(text: str) -> bool:
+    if _request_wants_small_code_artifact(text) or _request_wants_build_artifact(text) or _looks_like_software_delivery_request(text):
+        return False
     tokens = _request_tokens(text)
     return 1 <= len(tokens) <= 6 and len(str(text or "").split()) <= 10
 
@@ -9479,6 +10428,11 @@ def _skill_bundle_for_request(
     manager_brief: str = "",
     allow_create: bool = False,
 ) -> dict[str, Any]:
+    build_artifact_request = (
+        _request_wants_build_artifact(request)
+        or _request_wants_small_code_artifact(request)
+        or _looks_like_software_delivery_request(request)
+    )
     matches = TEAM_SKILLS.search(request, limit=2)
     if matches:
         filtered = [
@@ -9513,6 +10467,13 @@ def _skill_bundle_for_request(
         ]
         if safe_matches:
             matches = safe_matches
+    if matches and build_artifact_request:
+        blocked_skill_names = {"founder-update", "safe-web-research", "ai-stack-watch", "ops-snapshot"}
+        matches = [
+            item
+            for item in matches
+            if str(item.get("name") or "").strip().lower() not in blocked_skill_names
+        ]
     if matches and allow_create and _autonomy_skill_candidate(request):
         strongest = max(int(item.get("score") or 0) for item in matches)
         if _request_prefers_specific_skill(request, matches):
@@ -9766,6 +10727,14 @@ def _skill_bundle_for_request(
             if filtered:
                 matches = filtered
                 names = {"founder-update"}
+        if build_artifact_request and names.intersection({"founder-update", "safe-web-research", "ai-stack-watch", "ops-snapshot"}):
+            filtered = [
+                item
+                for item in matches
+                if str(item.get("name") or "").strip().lower() not in {"founder-update", "safe-web-research", "ai-stack-watch", "ops-snapshot"}
+            ]
+            matches = filtered
+            names = {str(item.get("name") or "").strip().lower() for item in matches}
         if "mail-gui" in names and any(term in lowered for term in ("mail", "email", "gửi mail", "gui mail")):
             filtered = [
                 item
@@ -9960,6 +10929,71 @@ def _specialist_output_needs_retry(text: str, payload: dict[str, Any] | None) ->
     return False
 
 
+def _build_artifact_worker_contribution_looks_usable(text: str, request: str, agent_key: str | None = None) -> bool:
+    raw = str(text or "").strip()
+    lowered = raw.lower()
+    if not raw:
+        return False
+    if _artifact_has_obvious_web_build_contract_errors(raw):
+        return False
+    file_mentions = re.findall(
+        r"(?:^|[\s`])([A-Za-z0-9_./-]+\.(?:py|ts|tsx|js|jsx|html|css|json|dart|swift|kt|sql|md|ya?ml))(?=$|[\s`])",
+        raw,
+    )
+    if len(set(file_mentions)) >= 1 and "```" in raw:
+        return True
+    if _request_targets_mobile_surface(request) and str(agent_key or "").strip().upper() == "QUILL":
+        return "lib/main.dart" in lowered and ("shared_preferences" in lowered or "flutter" in lowered)
+    if not _request_targets_mobile_surface(request) and _request_targets_ui_surface(request):
+        lane = str(agent_key or "").strip().upper()
+        if lane == "QUILL":
+            return any(token in lowered for token in ("index.html", ".css", ".js", "<html", "document.getelementbyid", "fetch("))
+        if lane == "FORGE":
+            return any(token in lowered for token in ("main.py", "fastapi", "@app.", "requirements.txt"))
+    return len(raw) >= 180 and any(token in lowered for token in ("```", ".py", ".html", ".dart", ".js", ".css", "file tree"))
+
+
+def _build_artifact_contribution_is_too_thin(text: str, request: str, agent_key: str | None = None) -> bool:
+    if not _request_wants_build_artifact(request):
+        return False
+    raw = str(text or "").strip()
+    lowered = raw.lower()
+    if not raw:
+        return True
+    if lowered in {"success", "done", "completed", "ok"}:
+        return True
+    if any(token in lowered for token in ("timed out", "blocked", "incomplete", "cannot run")):
+        return True
+    if _artifact_has_obvious_web_build_contract_errors(raw):
+        return True
+    if agent_key:
+        return not _build_artifact_worker_contribution_looks_usable(raw, request, agent_key)
+    if not all(section in lowered for section in ("stack", "file tree", "code", "run instructions")):
+        return True
+    if _artifact_looks_like_build_output(raw):
+        return False
+    if "```" in raw and re.search(r"[A-Za-z0-9_./-]+\.(?:py|ts|tsx|js|jsx|html|css|json|dart|swift|kt|ya?ml)", raw):
+        return False
+    if len(raw) < 140:
+        return True
+    return not any(
+        token in lowered
+        for token in (
+            "```",
+            ".py",
+            ".js",
+            ".html",
+            ".css",
+            ".dart",
+            ".swift",
+            ".kt",
+            ".yaml",
+            ".yml",
+            "file tree",
+        )
+    )
+
+
 def _string_list(value: Any) -> list[str]:
     if isinstance(value, list):
         return [str(item).strip() for item in value if str(item).strip()]
@@ -10039,6 +11073,10 @@ def _coerce_request_specific_artifact(text: str, request: str) -> str:
     artifact = str(text or "").strip()
     if not artifact:
         return ""
+    if _request_wants_build_artifact(request):
+        normalized = _build_artifact_payload_to_text(artifact, request)
+        if normalized:
+            return normalized
     if _request_wants_protocol_artifact(request):
         normalized = _protocol_payload_to_artifact(artifact, request)
         if normalized:
@@ -10119,7 +11157,36 @@ def _request_prefers_vietnamese(text: str) -> bool:
     if any(ch in raw for ch in "ăâêôơưđĂÂÊÔƠƯĐ"):
         return True
     lowered = raw.lower()
-    return any(token in lowered for token in ("gửi", "gui", "khách", "lịch", "lich", "sáng mai", "toi", "tôi"))
+    return any(
+        token in lowered
+        for token in (
+            "gửi",
+            "gui",
+            "khách",
+            "lịch",
+            "lich",
+            "sáng mai",
+            "toi",
+            "tôi",
+            "tiếng việt",
+            "tieng viet",
+            "trả lời",
+            "tra loi",
+            "hãy",
+            "hay",
+        )
+    )
+
+
+def _request_language_instruction(text: str) -> str:
+    if _request_prefers_vietnamese(text):
+        return (
+            "Respond in Vietnamese. Keep technical code identifiers unchanged, but write all prose, headings, "
+            "instructions, and user-facing explanations in Vietnamese."
+        )
+    return (
+        "Respond in English. Keep the answer in the user's language unless the request explicitly asks for another language."
+    )
 
 
 def _mail_request_wants_status_update(request: str) -> bool:
@@ -10853,6 +11920,31 @@ def _manager_response_shape(goal: str, plan: dict[str, Any] | None = None) -> st
             "Return a bounded competitor scan with short sections: Status, Verified findings, Unknowns, Next move. "
             "If no verified findings are available, say that plainly and keep the answer compact."
         )
+    if _request_wants_build_artifact(goal):
+        code_section_label = _build_code_section_label(goal)
+        extra = ""
+        lowered_goal = str(goal or "").strip().lower()
+        if "fastapi" in lowered_goal or ("web app" in lowered_goal and not _request_targets_mobile_surface(goal)):
+            extra = (
+                " If the frontend sends JSON with fetch(), the backend must parse a JSON request body with "
+                "a Pydantic model, Body(...), dict parsing, or Request JSON parsing instead of plain query parameters. "
+                "Do not define a redundant /static/index.html route when StaticFiles is already mounted unless the request explicitly needs it."
+            )
+        return (
+            "Do not write advisory prose, watch briefs, or internal notes. "
+            f"Return a shippable build artifact with four parts in this order: Stack, File Tree, {code_section_label}, Run Instructions. "
+            "The File Tree must list every file needed to run the requested app. "
+            f"The {code_section_label} section must include complete code blocks for each file. "
+            "Run Instructions must be executable and specific. "
+            "Self-check imports, dependency declarations, file references, and framework bootstrapping before answering. "
+            "If any file is missing or any obvious compile/runtime dependency is unresolved, say it is blocked instead of pretending the app is complete."
+            f"{extra}"
+        )
+    if _request_wants_small_code_artifact(goal):
+        return (
+            "Do not write analysis or planning prose. "
+            "Return the requested code directly, with tests if the user asked for them."
+        )
     if bool(skill_names.intersection({"mail-gui", "book-meeting"})) or any("follow" in name for name in skill_names):
         return (
             "Do not write internal analysis, worker summaries, or council language. "
@@ -10861,10 +11953,239 @@ def _manager_response_shape(goal: str, plan: dict[str, Any] | None = None) -> st
     return "Return a concise end-user answer, not internal minutes."
 
 
+def _manager_max_tokens_for_goal(goal: str) -> int | None:
+    if _request_wants_build_artifact(goal):
+        return 3200 if _request_targets_mobile_surface(goal) else 2600
+    if _request_wants_small_code_artifact(goal):
+        return 900
+    return None
+
+
+def _chunk_telegram_text(text: str, *, limit: int = 3500) -> list[str]:
+    raw = str(text or "").strip()
+    if not raw:
+        return []
+    if len(raw) <= limit:
+        return [raw]
+    chunks: list[str] = []
+    remaining = raw
+    while remaining:
+        if len(remaining) <= limit:
+            chunks.append(remaining.strip())
+            break
+        window = remaining[:limit]
+        split_at = max(
+            window.rfind("\n\n"),
+            window.rfind("\n"),
+            window.rfind("```"),
+            window.rfind(". "),
+            window.rfind(" "),
+        )
+        if split_at < int(limit * 0.45):
+            split_at = limit
+        piece = remaining[:split_at].strip()
+        if not piece:
+            piece = remaining[:limit].strip()
+            split_at = len(piece)
+        chunks.append(piece)
+        remaining = remaining[split_at:].lstrip()
+    total = len(chunks)
+    if total <= 1:
+        return chunks
+    return [f"[{index}/{total}]\n{chunk}" for index, chunk in enumerate(chunks, start=1)]
+
+
+def _sanitize_telegram_user_visible_text(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    patterns = [
+        r"^\[Rerun[^\]]*\]\s*",
+        r"^\[Meridian channel test[^\]]*\]\s*",
+        r"^Reply with this exact prompt to test [^\n:]+:\s*\n+\s*",
+        r"^Hãy reply đúng prompt này để test [^\n:]+:\s*\n+\s*",
+    ]
+    cleaned = raw
+    for pattern in patterns:
+        cleaned = re.sub(pattern, "", cleaned, flags=re.IGNORECASE).strip()
+    return cleaned or raw
+
+
+def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    channel = str(channel or "").strip().lower()
+    if channel == "messenger":
+        messages: list[dict[str, Any]] = []
+        for entry in list(payload.get("entry") or []):
+            if not isinstance(entry, dict):
+                continue
+            for event in list(entry.get("messaging") or []):
+                if not isinstance(event, dict):
+                    continue
+                sender_id = str(dict(event.get("sender") or {}).get("id") or "").strip()
+                message = dict(event.get("message") or {})
+                text = str(message.get("text") or "").strip()
+                message_id = str(message.get("mid") or event.get("timestamp") or "").strip()
+                if sender_id and text:
+                    messages.append({"sender_id": sender_id, "text": text, "message_id": message_id})
+        return messages
+    if channel == "whatsapp":
+        messages = []
+        for entry in list(payload.get("entry") or []):
+            if not isinstance(entry, dict):
+                continue
+            for change in list(entry.get("changes") or []):
+                if not isinstance(change, dict):
+                    continue
+                value = dict(change.get("value") or {})
+                for message in list(value.get("messages") or []):
+                    if not isinstance(message, dict):
+                        continue
+                    sender_id = str(message.get("from") or "").strip()
+                    text = str(dict(message.get("text") or {}).get("body") or "").strip()
+                    message_id = str(message.get("id") or "").strip()
+                    if sender_id and text:
+                        messages.append({"sender_id": sender_id, "text": text, "message_id": message_id})
+        return messages
+    if channel == "discord":
+        sender_id = str(dict(payload.get("author") or {}).get("id") or payload.get("channel_id") or "").strip()
+        text = str(payload.get("content") or "").strip()
+        message_id = str(payload.get("id") or "").strip()
+        return [{"sender_id": sender_id, "text": text, "message_id": message_id}] if sender_id and text else []
+    if channel == "zalo":
+        sender_id = str(
+            payload.get("fromuid")
+            or dict(payload.get("sender") or {}).get("id")
+            or payload.get("user_id")
+            or payload.get("chat_id")
+            or ""
+        ).strip()
+        text = str(
+            payload.get("text")
+            or dict(payload.get("message") or {}).get("text")
+            or dict(payload.get("data") or {}).get("text")
+            or ""
+        ).strip()
+        message_id = str(payload.get("msg_id") or payload.get("message_id") or payload.get("id") or "").strip()
+        return [{"sender_id": sender_id, "text": text, "message_id": message_id}] if sender_id and text else []
+    sender_id = str(
+        payload.get("sender_id")
+        or dict(payload.get("sender") or {}).get("id")
+        or dict(payload.get("from") or {}).get("id")
+        or dict(payload.get("user") or {}).get("id")
+        or payload.get("recipient")
+        or ""
+    ).strip()
+    text = str(
+        payload.get("text")
+        or dict(payload.get("message") or {}).get("text")
+        or dict(payload.get("content") or {}).get("text")
+        or payload.get("body")
+        or payload.get("content")
+        or ""
+    ).strip()
+    message_id = str(payload.get("message_id") or dict(payload.get("message") or {}).get("id") or payload.get("id") or "").strip()
+    return [{"sender_id": sender_id, "text": text, "message_id": message_id}] if sender_id and text else []
+
+
+def _external_channel_verify_query(channel: str, query: dict[str, list[str]], verify_token: str) -> tuple[bool, str]:
+    if not verify_token:
+        return False, ""
+    token = str((query.get("hub.verify_token") or [""])[0] or "").strip()
+    challenge = str((query.get("hub.challenge") or [""])[0] or "").strip()
+    mode = str((query.get("hub.mode") or [""])[0] or "").strip().lower()
+    if channel in {"messenger", "whatsapp"} and mode == "subscribe" and token == verify_token and challenge:
+        return True, challenge
+    return False, ""
+
+
+def _run_specialist_direct_provider_fallback(
+    specialist: TeamSpecialist,
+    *,
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    timeout: int,
+    profile_name_override: str,
+    model_override: str,
+    retry_count: int = 1,
+) -> dict[str, Any]:
+    attempts = max(1, int(retry_count or 1))
+    last_result: dict[str, Any] = {}
+    for _ in range(attempts):
+        result = mcp_server._specialist_direct_provider_fallback(  # type: ignore[attr-defined]
+            specialist.registry_id,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            max_tokens=max_tokens,
+            timeout=timeout,
+            profile_name_override=profile_name_override,
+            model_override=model_override,
+        )
+        last_result = result if isinstance(result, dict) else {}
+        if last_result.get("ok") and str(last_result.get("output_text") or "").strip():
+            return last_result
+    return last_result
+
+
+def _build_artifact_repair_instructions(goal: str) -> str:
+    lowered_goal = str(goal or "").strip().lower()
+    code_section_label = _build_code_section_label(goal)
+    lines = [
+        "Return the repaired artifact only, not commentary about the repair.",
+        f"Use exactly four sections in this order: Stack, File Tree, {code_section_label}, Run Instructions.",
+        f"The File Tree must only include files that actually appear in {code_section_label} or are explicitly generated by the framework scaffold.",
+        "Every custom file listed in the app tree must have a complete code block.",
+        "Remove invented infrastructure that the user did not ask for.",
+        "Prefer the smallest runnable implementation that satisfies the request cleanly.",
+    ]
+    if "fastapi" in lowered_goal or ("web app" in lowered_goal and not _request_targets_mobile_surface(goal)):
+        lines.extend(
+            [
+                "For FastAPI web builds, ensure route decorators are syntactically correct and imports resolve.",
+                "If frontend JavaScript sends JSON, the backend must parse a JSON request body instead of relying on query parameters.",
+                "Do not include Docker, Postgres, or extra infrastructure unless the request explicitly asks for them.",
+                "If templates are used, include the actual template wiring and required dependencies.",
+            ]
+        )
+    if _request_targets_mobile_surface(goal):
+        lines.extend(
+            [
+                "For mobile builds, keep the app offline-first and include only the minimal files required to run.",
+                "Do not reference packages that are missing from pubspec.yaml.",
+            ]
+        )
+    return "\n".join(f"- {line}" for line in lines)
+
+
 def _skill_specific_execution_addendum(request: str, matched_skills: list[dict[str, Any]]) -> str:
     names = {str(item.get("name") or "").strip().lower() for item in matched_skills}
     lowered = str(request or "").strip().lower()
     lines: list[str] = []
+    if _request_wants_build_artifact(request):
+        lines.extend(
+            [
+                "The expected artifact is a runnable build output, not a research memo, watch brief, or product strategy note.",
+                "Return a concrete stack choice, a complete file tree, and full code for each file needed to run the requested app.",
+                "Do not omit frontend, mobile, config, or bootstrap files if they are required for the app to start.",
+                "Self-check the artifact before returning it: imports must resolve, dependencies must be declared, and run instructions must match the file tree.",
+                "If you cannot satisfy those checks, return a blocked artifact explicitly instead of partial code disguised as complete.",
+            ]
+        )
+        lowered_request = str(request or "").strip().lower()
+        if "fastapi" in lowered_request or ("web app" in lowered_request and not _request_targets_mobile_surface(request)):
+            lines.extend(
+                [
+                    "For FastAPI or similar web builds, if the frontend sends JSON with fetch(), the backend must parse a JSON request body instead of plain query parameters.",
+                    "Avoid redundant static-file routes when StaticFiles is already mounted unless the request explicitly needs both.",
+                ]
+            )
+    if _request_wants_small_code_artifact(request):
+        lines.extend(
+            [
+                "The expected artifact is the code itself, not a team memo or commentary.",
+                "Return the function, class, or script directly, plus tests if the user requested them.",
+            ]
+        )
     if _request_wants_protocol_artifact(request):
         lines.extend(
             [
@@ -10941,6 +12262,78 @@ def _skill_specific_execution_addendum(request: str, matched_skills: list[dict[s
             ]
         )
     return "\n".join(f"- {line}" for line in lines).strip()
+
+
+def _build_artifact_specialist_ownership_prompt(agent_key: str, request: str) -> str:
+    if not _request_wants_build_artifact(request):
+        return ""
+    lane = str(agent_key or "").strip().upper()
+    if _request_targets_mobile_surface(request):
+        if lane == "QUILL":
+            return (
+                "Own the mobile implementation slice only. Return the concrete mobile files you own, such as lib/main.dart "
+                "and any directly required app-side config, with runnable code. Do not rewrite the full team artifact or invent backend services unless requested."
+            )
+        if lane == "ATLAS":
+            return (
+                "Own the mobile architecture and app-structure slice only. Return concise implementation guidance or code-adjacent structure that helps the manager ship the app."
+            )
+        if lane == "AEGIS":
+            return (
+                "Own QA only. Return PASS/FAIL plus concrete findings about missing files, runtime risks, persistence gaps, or obvious build blockers."
+            )
+        if lane == "FORGE":
+            return "Only return backend or service files if the mobile request explicitly requires a backend surface."
+        return ""
+    if _request_targets_ui_surface(request):
+        if lane == "QUILL":
+            return (
+                "Own the frontend slice only. Return only the user-facing files you own, such as static/index.html, styles, or client-side JavaScript. "
+                "Do not restate backend files or the full stack unless they are needed to explain the frontend contract."
+            )
+        if lane == "FORGE":
+            return (
+                "Own the backend slice only. Return backend/bootstrap files such as main.py and requirements.txt, including request-body parsing and API contract details. "
+                "Do not spend tokens rewriting frontend markup unless the request explicitly makes you own it."
+            )
+        if lane == "AEGIS":
+            return (
+                "Own QA only. Return PASS/FAIL plus concrete findings about API contract mismatches, missing files, runtime issues, and release blockers."
+            )
+    return ""
+
+
+def _compact_frontend_build_prompt(
+    *,
+    specialist_name: str,
+    specialist_role: str,
+    specialist_purpose: str,
+    manager_brief: str,
+    ownership_prompt: str,
+    request: str,
+) -> str:
+    return textwrap.dedent(
+        f"""
+        You are {specialist_name}, Meridian's {specialist_role}.
+        Purpose: {specialist_purpose}
+        Manager brief: {manager_brief.strip()}
+        Ownership: {ownership_prompt.strip()}
+
+        User request:
+        {request.strip()}
+
+        Return strict JSON only with keys:
+        result, confidence, citations, warnings.
+
+        Result requirements:
+        - Return only the frontend/UI slice you own.
+        - Include concrete files with full code, not prose.
+        - Prefer files such as index.html, style.css, script.js, or equivalent user-facing files.
+        - The JavaScript must call the backend with the contract implied by the request.
+        - Do not restate backend files, architecture notes, governance notes, or generic commentary.
+        - Do not include markdown fences around the whole JSON object.
+        """
+    ).strip()
 
 
 def _manager_step_view(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -11076,6 +12469,55 @@ def _load_runtime_config_or_exit() -> dict[str, Any]:
         os.environ.get("MERIDIAN_ALLOWED_ORIGIN")
         or str(config.get("allowed_origin") or "")
     ).strip()
+    config["discord_webhook_url"] = (
+        os.environ.get("MERIDIAN_DISCORD_WEBHOOK_URL")
+        or os.environ.get("MERIDIAN_DISCORD_OUTBOUND_URL")
+        or str(config.get("discord_webhook_url") or "")
+    ).strip()
+    config["discord_inbound_secret"] = (
+        os.environ.get("MERIDIAN_DISCORD_INBOUND_SECRET")
+        or str(config.get("discord_inbound_secret") or "")
+    ).strip()
+    config["messenger_outbound_url"] = (
+        os.environ.get("MERIDIAN_MESSENGER_OUTBOUND_URL")
+        or str(config.get("messenger_outbound_url") or "")
+    ).strip()
+    config["messenger_inbound_secret"] = (
+        os.environ.get("MERIDIAN_MESSENGER_INBOUND_SECRET")
+        or str(config.get("messenger_inbound_secret") or "")
+    ).strip()
+    config["messenger_verify_token"] = (
+        os.environ.get("MERIDIAN_MESSENGER_VERIFY_TOKEN")
+        or str(config.get("messenger_verify_token") or "")
+    ).strip()
+    config["whatsapp_outbound_url"] = (
+        os.environ.get("MERIDIAN_WHATSAPP_OUTBOUND_URL")
+        or str(config.get("whatsapp_outbound_url") or "")
+    ).strip()
+    config["whatsapp_inbound_secret"] = (
+        os.environ.get("MERIDIAN_WHATSAPP_INBOUND_SECRET")
+        or str(config.get("whatsapp_inbound_secret") or "")
+    ).strip()
+    config["whatsapp_verify_token"] = (
+        os.environ.get("MERIDIAN_WHATSAPP_VERIFY_TOKEN")
+        or str(config.get("whatsapp_verify_token") or "")
+    ).strip()
+    config["zalo_outbound_url"] = (
+        os.environ.get("MERIDIAN_ZALO_OUTBOUND_URL")
+        or str(config.get("zalo_outbound_url") or "")
+    ).strip()
+    config["zalo_inbound_secret"] = (
+        os.environ.get("MERIDIAN_ZALO_INBOUND_SECRET")
+        or str(config.get("zalo_inbound_secret") or "")
+    ).strip()
+    config["zalo_bot_token"] = (
+        os.environ.get("MERIDIAN_ZALO_BOT_TOKEN")
+        or str(config.get("zalo_bot_token") or "")
+    ).strip()
+    if not config["zalo_outbound_url"] and config["zalo_bot_token"]:
+        config["zalo_outbound_url"] = (
+            f"https://bot-api.zaloplatforms.com/bot{config['zalo_bot_token']}/sendMessage"
+        )
 
     LLM_BASE_URL = str(config.get("llm_base_url") or "").strip()
     LLM_MODEL = str(config.get("llm_model") or "").strip()
@@ -12072,36 +13514,43 @@ class TelegramAdapter(ChannelAdapter):
         return body
 
     def _send_direct(self, chat_id: int | str, text: str, *, reply_to_message_id: int | None = None) -> dict[str, Any]:
-        payload: dict[str, Any] = {"chat_id": chat_id, "text": text}
-        if reply_to_message_id is not None:
-            payload["reply_to_message_id"] = reply_to_message_id
-        body = self._telegram_request("sendMessage", payload)
-        result = body.get("result") if isinstance(body, dict) else {}
-        return result if isinstance(result, dict) else {}
+        last_result: dict[str, Any] = {}
+        visible_text = _sanitize_telegram_user_visible_text(text)
+        chunks = _chunk_telegram_text(visible_text)
+        for index, chunk in enumerate(chunks or [visible_text]):
+            payload: dict[str, Any] = {"chat_id": chat_id, "text": chunk}
+            if reply_to_message_id is not None and index == 0:
+                payload["reply_to_message_id"] = reply_to_message_id
+            body = self._telegram_request("sendMessage", payload)
+            result = body.get("result") if isinstance(body, dict) else {}
+            if isinstance(result, dict):
+                last_result = result
+        return last_result
 
     def send_message(self, text: str, *, source: str = "runtime") -> None:
+        visible_text = _sanitize_telegram_user_visible_text(text)
         with self.active_lock:
             targets = list(self.active_chats)
         for chat_id in targets:
             session_key = f"telegram:{chat_id}"
-            duplicate = _recent_telegram_delivery_duplicate(str(chat_id), text)
+            duplicate = _recent_telegram_delivery_duplicate(str(chat_id), visible_text)
             if duplicate:
                 _record_gateway_audit(
                     "telegram_proactive_delivery_deduped",
                     session_key=session_key,
                     channel="telegram",
-                    text=text,
+                    text=visible_text,
                     extra_details={
                         "existing_delivery_id": str(duplicate.get("delivery_id") or "").strip(),
                         "source": source,
                     },
                 )
                 continue
-            delivery = _loom_channel_send("telegram", str(chat_id), text)
+            delivery = _loom_channel_send("telegram", str(chat_id), visible_text)
             delivery_payload = delivery.get("payload") if isinstance(delivery, dict) else {}
             delivery_id = str((delivery_payload or {}).get("delivery_id") or "").strip()
             try:
-                result = self._send_direct(chat_id, text)
+                result = self._send_direct(chat_id, visible_text)
                 _loom_channel_update(
                     delivery_id,
                     "delivered",
@@ -12137,7 +13586,7 @@ class TelegramAdapter(ChannelAdapter):
                 continue
             delivery_id = str(record.get("delivery_id") or "").strip()
             recipient = str(record.get("recipient") or "").strip()
-            text = str(record.get("display_text") or "").strip()
+            text = _sanitize_telegram_user_visible_text(str(record.get("display_text") or "").strip())
             if not delivery_id or not recipient or not text:
                 continue
             duplicate = _recent_telegram_delivery_duplicate(recipient, text)
@@ -12253,20 +13702,21 @@ class TelegramAdapter(ChannelAdapter):
         answer, team_meta = _run_team_route(text.strip(), session_key, self.runtime)
         delivery_id = ""
         if answer:
-            duplicate = _recent_telegram_delivery_duplicate(str(chat_id), answer)
+            visible_answer = _sanitize_telegram_user_visible_text(answer)
+            duplicate = _recent_telegram_delivery_duplicate(str(chat_id), visible_answer)
             if duplicate:
                 delivery_id = str(duplicate.get("delivery_id") or "").strip()
                 _record_gateway_audit(
                     "manager_response_deduped",
                     session_key=session_key,
                     channel="telegram",
-                    text=answer,
+                    text=visible_answer,
                     ingress_request_id=ingress_request_id,
                     delivery_id=delivery_id,
                     extra_details={"telegram_chat_id": str(chat_id)},
                 )
             else:
-                delivery = _loom_channel_send("telegram", str(chat_id), answer)
+                delivery = _loom_channel_send("telegram", str(chat_id), visible_answer)
                 delivery_payload = delivery.get("payload") if isinstance(delivery, dict) else {}
                 delivery_id = str((delivery_payload or {}).get("delivery_id") or "").strip()
             if duplicate:
@@ -12280,7 +13730,7 @@ class TelegramAdapter(ChannelAdapter):
                 )
                 return
             try:
-                result = self._send_direct(chat_id, answer, reply_to_message_id=message_id if isinstance(message_id, int) else None)
+                result = self._send_direct(chat_id, visible_answer, reply_to_message_id=message_id if isinstance(message_id, int) else None)
                 _loom_channel_update(
                     delivery_id,
                     "delivered",
@@ -12293,7 +13743,7 @@ class TelegramAdapter(ChannelAdapter):
                     "manager_response_delivery_failed",
                     session_key=session_key,
                     channel="telegram",
-                    text=answer,
+                    text=visible_answer,
                     outcome="failed",
                     ingress_request_id=ingress_request_id,
                     delivery_id=delivery_id,
@@ -12320,10 +13770,205 @@ class TelegramAdapter(ChannelAdapter):
         )
 
 
+class ExternalWebhookAdapter(ChannelAdapter):
+    def __init__(
+        self,
+        runtime: AgentRuntime,
+        name: str,
+        *,
+        outbound_url: str = "",
+        inbound_secret: str = "",
+        verify_token: str = "",
+        auth_token: str = "",
+    ) -> None:
+        super().__init__(runtime, name)
+        self.outbound_url = str(outbound_url or "").strip()
+        self.inbound_secret = str(inbound_secret or "").strip()
+        self.verify_token = str(verify_token or "").strip()
+        self.auth_token = str(auth_token or "").strip()
+        self.active_peers: set[str] = set()
+        self.active_lock = threading.Lock()
+
+    def start(self) -> None:
+        if not self.outbound_url and not self.inbound_secret and not self.verify_token:
+            return
+        self._active = True
+        _log(f"{self.name} adapter enabled via webhook bridge", color=ANSI_GREEN)
+
+    def stop(self) -> None:
+        return
+
+    def authorize(self, headers: HTTPMessage, query: dict[str, list[str]] | None = None) -> bool:
+        if not self.inbound_secret:
+            return False
+        header_secret = str(headers.get("X-Meridian-Channel-Secret") or "").strip()
+        if header_secret and secrets.compare_digest(header_secret, self.inbound_secret):
+            return True
+        if query:
+            query_secret = str((query.get("secret") or [""])[0] or "").strip()
+            if query_secret and secrets.compare_digest(query_secret, self.inbound_secret):
+                return True
+        return False
+
+    def verify_query(self, query: dict[str, list[str]]) -> tuple[bool, str]:
+        return _external_channel_verify_query(self.name, query, self.verify_token)
+
+    def _message_limit(self) -> int:
+        if self.name == "discord":
+            return 1800
+        if self.name == "zalo":
+            return 1800
+        return 3500
+
+    def _outbound_request(self, recipient: str, text: str) -> tuple[dict[str, str], dict[str, Any]]:
+        headers = {"Content-Type": "application/json"}
+        if self.auth_token:
+            headers["Authorization"] = f"Bearer {self.auth_token}"
+        if self.name == "discord" and "discord.com/api/webhooks/" in self.outbound_url:
+            return headers, {"content": text}
+        if self.name == "zalo" and "bot-api.zaloplatforms.com/bot" in self.outbound_url:
+            return headers, {"chat_id": recipient, "text": text}
+        return headers, {"channel": self.name, "recipient": recipient, "text": text}
+
+    def _send_direct(self, recipient: str, text: str) -> dict[str, Any]:
+        visible_text = _sanitize_telegram_user_visible_text(text)
+        last_body: dict[str, Any] = {}
+        for chunk in _chunk_telegram_text(visible_text, limit=self._message_limit()) or [visible_text]:
+            headers, payload = self._outbound_request(recipient, chunk)
+            request = urllib.request.Request(
+                self.outbound_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers=headers,
+                method="POST",
+            )
+            with urllib.request.urlopen(request, timeout=40) as response:
+                raw = response.read().decode("utf-8", "replace").strip()
+                parsed = _extract_json(raw)
+                last_body = parsed if isinstance(parsed, dict) else {"status": getattr(response, "status", 200), "body": raw}
+        return last_body
+
+    def send_message(self, text: str, *, source: str = "runtime") -> None:
+        if not self.outbound_url:
+            return
+        visible_text = _sanitize_telegram_user_visible_text(text)
+        with self.active_lock:
+            targets = list(self.active_peers)
+        channel_registered = _loom_channel_registered(self.name)
+        for recipient in targets:
+            duplicate = _recent_external_channel_delivery_duplicate(self.name, recipient, visible_text)
+            if duplicate:
+                continue
+            delivery_id = ""
+            if channel_registered:
+                delivery = _loom_channel_send(self.name, recipient, visible_text)
+                delivery_payload = delivery.get("payload") if isinstance(delivery, dict) else {}
+                delivery_id = str((delivery_payload or {}).get("delivery_id") or "").strip()
+            try:
+                result = self._send_direct(recipient, visible_text)
+                if delivery_id:
+                    _loom_channel_update(
+                        delivery_id,
+                        "delivered",
+                        external_ref=str(result.get("id") or result.get("message_id") or recipient).strip(),
+                        detail="",
+                    )
+            except Exception as exc:
+                if delivery_id:
+                    _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                _log(f"{self.name} delivery failed for {recipient}: {exc}", color=ANSI_YELLOW)
+
+    def handle_inbound(self, payload: dict[str, Any]) -> dict[str, Any]:
+        messages = _flatten_external_channel_messages(self.name, payload)
+        if not messages:
+            return {"status": "ignored", "processed": 0, "reason": "no_text_messages"}
+        results: list[dict[str, Any]] = []
+        channel_registered = _loom_channel_registered(self.name)
+        for item in messages:
+            sender_id = str(item.get("sender_id") or "").strip()
+            text = str(item.get("text") or "").strip()
+            message_id = str(item.get("message_id") or "").strip()
+            if not sender_id or not text:
+                continue
+            if _external_channel_inbound_seen_recently(self.name, sender_id, message_id, text):
+                results.append({"sender_id": sender_id, "status": "deduped", "message_id": message_id})
+                continue
+            with self.active_lock:
+                self.active_peers.add(sender_id)
+            ingress_payload: dict[str, Any] = {}
+            ingress_request_id = ""
+            if channel_registered:
+                ingress = _loom_channel_ingest(self.name, sender_id, text, thread_id=message_id)
+                ingress_payload = ingress.get("payload") if isinstance(ingress, dict) else {}
+                ingress_request_id = str((ingress_payload or {}).get("ingress_id") or "").strip()
+            session_key = str((ingress_payload or {}).get("session_key") or f"{self.name}:{sender_id}").strip()
+            _record_gateway_audit(
+                "manager_request_received",
+                session_key=session_key,
+                channel=self.name,
+                text=text,
+                ingress_request_id=ingress_request_id,
+                extra_details={"external_sender_id": sender_id, "message_id": message_id},
+            )
+            answer, team_meta = _run_team_route(text, session_key, self.runtime)
+            visible_answer = _sanitize_telegram_user_visible_text(answer)
+            duplicate = _recent_external_channel_delivery_duplicate(self.name, sender_id, visible_answer) if visible_answer else None
+            delivery_id = ""
+            if visible_answer and not duplicate and channel_registered:
+                delivery = _loom_channel_send(self.name, sender_id, visible_answer)
+                delivery_payload = delivery.get("payload") if isinstance(delivery, dict) else {}
+                delivery_id = str((delivery_payload or {}).get("delivery_id") or "").strip()
+            elif duplicate:
+                delivery_id = str(duplicate.get("delivery_id") or "").strip()
+            if channel_registered:
+                _loom_session_route(
+                    session_key,
+                    agent_id=TEAM_MANAGER_AGENT_ID,
+                    org_id=LOOM_ORG_ID,
+                    ingress_request_id=ingress_request_id,
+                    delivery_id=delivery_id,
+                    job_id=str((team_meta or {}).get("job_id") or "").strip(),
+                )
+            if visible_answer and delivery_id and not duplicate:
+                try:
+                    result = self._send_direct(sender_id, visible_answer)
+                    _loom_channel_update(
+                        delivery_id,
+                        "delivered",
+                        external_ref=str(result.get("id") or result.get("message_id") or sender_id).strip(),
+                        detail="",
+                    )
+                except Exception as exc:
+                    _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                    _record_gateway_audit(
+                        "manager_response_delivery_failed",
+                        session_key=session_key,
+                        channel=self.name,
+                        text=visible_answer,
+                        outcome="failed",
+                        ingress_request_id=ingress_request_id,
+                        delivery_id=delivery_id,
+                        extra_details={"error": f"{exc.__class__.__name__}: {exc}"},
+                    )
+                    raise
+            elif visible_answer and not duplicate:
+                self._send_direct(sender_id, visible_answer)
+            results.append(
+                {
+                    "sender_id": sender_id,
+                    "status": "processed",
+                    "message_id": message_id,
+                    "route_mode": str((team_meta or {}).get("mode") or "").strip(),
+                    "delivery_id": delivery_id,
+                }
+            )
+        return {"status": "success", "processed": len(results), "results": results}
+
+
 class WebAPIAdapter(ChannelAdapter):
-    def __init__(self, runtime: AgentRuntime, allowed_origin: str) -> None:
+    def __init__(self, runtime: AgentRuntime, allowed_origin: str, external_adapters: dict[str, ExternalWebhookAdapter] | None = None) -> None:
         super().__init__(runtime, "web")
         self.allowed_origin = allowed_origin.strip()
+        self.external_adapters = dict(external_adapters or {})
         self.notifications: queue.Queue[dict[str, str]] = queue.Queue()
         self.stream_subscribers: set[queue.Queue[dict[str, str]]] = set()
         self.stream_subscribers_lock = threading.Lock()
@@ -12382,7 +14027,18 @@ class WebAPIAdapter(ChannelAdapter):
         class Handler(BaseHTTPRequestHandler):
             server_version = "MeridianGatewayWeb/0.1"
 
+            def _external_channel_adapter(self, request_path: str) -> ExternalWebhookAdapter | None:
+                normalized = str(request_path or "").strip()
+                prefix = "/api/channels/"
+                suffix = "/webhook"
+                if not normalized.startswith(prefix) or not normalized.endswith(suffix):
+                    return None
+                channel = normalized[len(prefix):-len(suffix)].strip().lower()
+                return adapter.external_adapters.get(channel)
+
             def _origin_allowed(self, request_path: str = "") -> bool:
+                if self._external_channel_adapter(request_path) is not None:
+                    return True
                 origin = str(self.headers.get("Origin") or "").strip()
                 if origin == adapter.allowed_origin:
                     return True
@@ -12445,6 +14101,14 @@ class WebAPIAdapter(ChannelAdapter):
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
+
+            def _send_text(self, status_code: int, body: str, *, content_type: str = "text/plain; charset=utf-8") -> None:
+                encoded = str(body or "").encode("utf-8")
+                self.send_response(status_code)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(encoded)))
+                self.end_headers()
+                self.wfile.write(encoded)
 
             def _reconcile_stale_web_deliveries(self) -> None:
                 cutoff_ms = int(time.time() * 1000) - 5000
@@ -12510,6 +14174,14 @@ class WebAPIAdapter(ChannelAdapter):
                 parsed = urlparse(self.path)
                 request_path = parsed.path
                 proxied_path = request_path + (f"?{parsed.query}" if parsed.query else "")
+                external_adapter = self._external_channel_adapter(request_path)
+                if external_adapter is not None:
+                    verified, challenge = external_adapter.verify_query(parse_qs(parsed.query or ""))
+                    if verified:
+                        self._send_text(200, challenge)
+                        return
+                    self._send_json(404, {"status": "error", "output": "not_found"})
+                    return
                 if self._trust_ops_route(request_path):
                     if not self._operator_authorized():
                         self._send_json(401, {"status": "error", "output": "operator_auth_required"})
@@ -12748,6 +14420,32 @@ class WebAPIAdapter(ChannelAdapter):
             def do_POST(self) -> None:  # noqa: N802
                 parsed = urlparse(self.path)
                 request_path = parsed.path
+                external_adapter = self._external_channel_adapter(request_path)
+                if external_adapter is not None:
+                    try:
+                        content_length = int(self.headers.get("Content-Length", "0"))
+                    except ValueError:
+                        self._send_json(400, {"status": "error", "output": "invalid_content_length"})
+                        return
+                    raw_body = self.rfile.read(content_length)
+                    try:
+                        payload = json.loads(raw_body.decode("utf-8"))
+                    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                        self._send_json(400, {"status": "error", "output": f"invalid_json: {exc}"})
+                        return
+                    if not isinstance(payload, dict):
+                        self._send_json(400, {"status": "error", "output": "json_object_required"})
+                        return
+                    if not external_adapter.authorize(self.headers, parse_qs(parsed.query or "")):
+                        self._send_json(401, {"status": "error", "output": "channel_secret_required"})
+                        return
+                    try:
+                        result = external_adapter.handle_inbound(payload)
+                    except Exception as exc:
+                        self._send_json(502, {"status": "error", "output": f"{exc.__class__.__name__}: {exc}"})
+                        return
+                    self._send_json(200, result if isinstance(result, dict) else {"status": "success"})
+                    return
                 if self._trust_ops_route(request_path):
                     if not self._operator_authorized():
                         self._send_json(401, {"status": "error", "output": "operator_auth_required"})
@@ -12965,6 +14663,27 @@ class WebAPIAdapter(ChannelAdapter):
                 if not isinstance(goal, str) or not goal.strip():
                     self._send_json(400, {"status": "error", "output": "goal_required"})
                     return
+                # ── Attachment support ─────────────────────────────
+                # Accepts optional "attachments" array in the payload.
+                # Each entry: {"name": "file.py", "content": "...",
+                #              "mime_type": "text/x-python"  (optional)}
+                # File content is prepended to the goal as context so
+                # the routing / LLM layer sees the full picture.
+                raw_attachments = payload.get("attachments") or []
+                attachment_context = ""
+                attachment_names: list[str] = []
+                if isinstance(raw_attachments, list):
+                    for att in raw_attachments:
+                        if not isinstance(att, dict):
+                            continue
+                        att_name = str(att.get("name") or "").strip()
+                        att_content = str(att.get("content") or "").strip()
+                        if not att_name or not att_content:
+                            continue
+                        attachment_names.append(att_name)
+                        attachment_context += f"\n<file name=\"{att_name}\">\n{att_content}\n</file>\n"
+                if attachment_context:
+                    goal = f"[Attached files: {', '.join(attachment_names)}]\n{attachment_context}\n{goal.strip()}"
                 web_session = _resolve_web_request_session(payload, self.headers, goal.strip())
                 session_id = str(web_session.get("session_id") or "").strip()
                 ingress = _loom_channel_ingest("web_api", LOOM_ORG_ID, goal.strip(), thread_id=session_id)
@@ -13115,8 +14834,36 @@ def main() -> int:
     loaded_skills = skills.items or skills.load()
     runtime = AgentRuntime(skills)
     telegram_adapter = TelegramAdapter(runtime, str(config.get("telegram_bot_token") or ""))
-    web_adapter = WebAPIAdapter(runtime, str(config.get("allowed_origin") or ""))
-    adapters: list[ChannelAdapter] = [telegram_adapter, web_adapter]
+    external_adapters: dict[str, ExternalWebhookAdapter] = {
+        "discord": ExternalWebhookAdapter(
+            runtime,
+            "discord",
+            outbound_url=str(config.get("discord_webhook_url") or ""),
+            inbound_secret=str(config.get("discord_inbound_secret") or ""),
+        ),
+        "messenger": ExternalWebhookAdapter(
+            runtime,
+            "messenger",
+            outbound_url=str(config.get("messenger_outbound_url") or ""),
+            inbound_secret=str(config.get("messenger_inbound_secret") or ""),
+            verify_token=str(config.get("messenger_verify_token") or ""),
+        ),
+        "whatsapp": ExternalWebhookAdapter(
+            runtime,
+            "whatsapp",
+            outbound_url=str(config.get("whatsapp_outbound_url") or ""),
+            inbound_secret=str(config.get("whatsapp_inbound_secret") or ""),
+            verify_token=str(config.get("whatsapp_verify_token") or ""),
+        ),
+        "zalo": ExternalWebhookAdapter(
+            runtime,
+            "zalo",
+            outbound_url=str(config.get("zalo_outbound_url") or ""),
+            inbound_secret=str(config.get("zalo_inbound_secret") or ""),
+        ),
+    }
+    web_adapter = WebAPIAdapter(runtime, str(config.get("allowed_origin") or ""), external_adapters)
+    adapters: list[ChannelAdapter] = [telegram_adapter, web_adapter, *external_adapters.values()]
     heartbeat = HeartbeatEngine(runtime, adapters) if HEARTBEAT_ENABLED else None
 
     _log("Meridian Gateway starting", color=ANSI_GREEN)
@@ -13126,6 +14873,8 @@ def main() -> int:
 
     web_adapter.start()
     telegram_adapter.start()
+    for external_adapter in external_adapters.values():
+        external_adapter.start()
     if heartbeat is not None:
         heartbeat.start()
         _log(f"heartbeat started: interval={HEARTBEAT_INTERVAL_SECONDS}s", color=ANSI_GREEN)
