@@ -682,9 +682,15 @@ def tally_proposal(proposal_id, org_id=None, quorum=1):
         raise ValueError(f'Proposal {proposal_id} cannot be tallied (status={proposal["status"]})')
 
     votes = proposal.get('votes', {})
-    count_for = sum(1 for v in votes.values() if v['vote'] == 'for')
-    count_against = sum(1 for v in votes.values() if v['vote'] == 'against')
-    count_abstain = sum(1 for v in votes.values() if v['vote'] == 'abstain')
+    count_for = count_against = count_abstain = 0
+    for v in votes.values():
+        vote_val = v.get('vote')
+        if vote_val == 'for':
+            count_for += 1
+        elif vote_val == 'against':
+            count_against += 1
+        elif vote_val == 'abstain':
+            count_abstain += 1
     total = len(votes)
 
     has_quorum = total >= quorum
