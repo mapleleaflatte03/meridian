@@ -5,6 +5,8 @@ Operator-first adapter templates for the priority connect transports:
 - `telegram.sample.json`
 - `discord.sample.json`
 - `whatsapp.sample.json`
+- `zalo.sample.json`
+- `messenger.sample.json`
 - `slack.sample.json`
 - `email.sample.json`
 - `browser.sample.json`

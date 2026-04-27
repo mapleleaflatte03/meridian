@@ -6,6 +6,7 @@ from __future__ import annotations
 import base64
 import ast
 import concurrent.futures
+import contextlib
 import datetime as dt
 import hashlib
 import importlib.util
@@ -1841,22 +1842,29 @@ def _render_meridian_internal_answer(_goal: str) -> str:
     telegram_delivered = int(telegram.get("delivered_count") or 0)
     telegram_failed = int(telegram.get("failed_count") or 0)
     telegram_latest = str(telegram.get("latest_status") or "unknown").strip() or "unknown"
+    multi_ch = _build_multi_channel_health()
+    multi_active = int(multi_ch.get("active_adapter_count") or 0)
+    multi_delivered = int(multi_ch.get("total_recent_delivered") or 0)
+    multi_failed = int(multi_ch.get("total_recent_failed") or 0)
     wants_compact, bullet_count = _request_prefers_compact_status_response(_goal)
     if wants_compact and bullet_count == 2:
         return (
             f"- Gateway runtime: `{runtime_id}` for `{org_id}`; preflight `{preflight}`; SLO `{slo_status}`.\n"
-            f"- Telegram delivery: latest `{telegram_latest}`, delivered `{telegram_delivered}/{telegram_checked}`, failed `{telegram_failed}`."
+            f"- Channels: `{multi_active}` active adapters, `{multi_delivered}` delivered, `{multi_failed}` failed; "
+            f"Telegram latest `{telegram_latest}` (`{telegram_delivered}/{telegram_checked}`)."
         )
     if wants_compact:
         return (
             f"Meridian runtime `{runtime_id}` is live (preflight `{preflight}`, SLO `{slo_status}`); "
-            f"Telegram latest `{telegram_latest}` with `{telegram_delivered}/{telegram_checked}` delivered and `{telegram_failed}` failed."
+            f"{multi_active} active channel adapters with {multi_delivered} delivered and {multi_failed} failed; "
+            f"Telegram latest `{telegram_latest}` with `{telegram_delivered}/{telegram_checked}` delivered."
         )
     return (
         f"Meridian is operating on {runtime_id} for {org_id} with preflight {preflight}, "
         f"SLO {slo_status}, {alert_count} queued alerts, treasury ${balance:.2f} against a ${reserve_floor:.2f} reserve floor, "
         f"{len(pending_approvals)} pending approvals, {open_cases} open cases, "
         f"{active_sessions} active sessions, {active_deliveries} active channel deliveries, "
+        f"{multi_active} active channel adapters with {multi_delivered} delivered and {multi_failed} failed across all channels, "
         f"and Telegram latest {telegram_latest} with {telegram_delivered}/{telegram_checked} delivered and {telegram_failed} failed."
     )
 
@@ -1887,6 +1895,128 @@ def _recent_telegram_delivery_summary(limit: int = 5) -> dict[str, Any]:
         "pending_count": sum(1 for item in records if str(item.get("status") or "").strip() not in {"delivered", "failed"}),
         "latest_status": str(records[0].get("status") or "").strip() if records else "",
         "latest_delivery_id": str(records[0].get("delivery_id") or "").strip() if records else "",
+    }
+
+
+def _recent_channel_delivery_summary(channel_id: str, limit: int = 10) -> dict[str, Any]:
+    """Delivery summary for any channel, not just telegram."""
+    delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
+    records: list[dict[str, Any]] = []
+    try:
+        candidates = sorted(delivery_dir.glob("*.json"), reverse=True)
+    except Exception:
+        candidates = []
+    for path in candidates:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("channel_id") or "").strip() != channel_id:
+            continue
+        records.append(payload)
+        if len(records) >= limit:
+            break
+    delivered = sum(1 for r in records if str(r.get("status") or "").strip() == "delivered")
+    failed = sum(1 for r in records if str(r.get("status") or "").strip() == "failed")
+    pending = sum(1 for r in records if str(r.get("status") or "").strip() not in {"delivered", "failed"})
+    return {
+        "channel_id": channel_id,
+        "checked_count": len(records),
+        "delivered_count": delivered,
+        "failed_count": failed,
+        "pending_count": pending,
+        "latest_status": str(records[0].get("status") or "").strip() if records else "",
+        "latest_delivery_id": str(records[0].get("delivery_id") or "").strip() if records else "",
+        "latest_at": str(records[0].get("created_at") or records[0].get("updated_at") or "").strip() if records else "",
+    }
+
+
+ALL_CHANNEL_IDS = ("telegram", "web_api", "discord", "messenger", "whatsapp", "zalo")
+
+
+def _build_multi_channel_health(adapters: list | None = None) -> dict[str, Any]:
+    """Build a multi-channel health snapshot covering all known channels."""
+    registry_path = Path(LOOM_ROOT) / "state" / "channels" / "registry.json"
+    registered: list[dict[str, Any]] = []
+    try:
+        data = json.loads(registry_path.read_text(encoding="utf-8"))
+        registered = list(data.get("channels") or []) if isinstance(data, dict) else []
+    except Exception:
+        pass
+    registered_ids = {str(ch.get("channel_id") or "").strip() for ch in registered}
+    channel_summaries: list[dict[str, Any]] = []
+    for cid in ALL_CHANNEL_IDS:
+        delivery = _recent_channel_delivery_summary(cid, limit=10)
+        adapter_active = False
+        if adapters:
+            for a in adapters:
+                if getattr(a, "name", "") == cid and getattr(a, "_active", False):
+                    adapter_active = True
+                    break
+                if cid == "web_api" and getattr(a, "name", "") == "web" and getattr(a, "_active", False):
+                    adapter_active = True
+                    break
+        health_status = "active" if adapter_active else ("registered" if cid in registered_ids else "inactive")
+        channel_summaries.append({
+            "channel_id": cid,
+            "health_status": health_status,
+            "registered": cid in registered_ids,
+            "adapter_active": adapter_active,
+            "delivery_summary": delivery,
+        })
+    total_delivered = sum(s["delivery_summary"]["delivered_count"] for s in channel_summaries)
+    total_failed = sum(s["delivery_summary"]["failed_count"] for s in channel_summaries)
+    total_pending = sum(s["delivery_summary"]["pending_count"] for s in channel_summaries)
+    active_count = sum(1 for s in channel_summaries if s["adapter_active"])
+    return {
+        "schema_version": "meridian.channels.health.v1",
+        "channel_count": len(channel_summaries),
+        "active_adapter_count": active_count,
+        "registered_count": len(registered_ids),
+        "total_recent_delivered": total_delivered,
+        "total_recent_failed": total_failed,
+        "total_recent_pending": total_pending,
+        "channels": channel_summaries,
+    }
+
+
+def _build_channel_diagnostics(channel_id: str, limit: int = 20) -> dict[str, Any]:
+    """Per-channel delivery diagnostics with recent delivery records."""
+    delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
+    records: list[dict[str, Any]] = []
+    try:
+        candidates = sorted(delivery_dir.glob("*.json"), reverse=True)
+    except Exception:
+        candidates = []
+    for path in candidates:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("channel_id") or "").strip() != channel_id:
+            continue
+        records.append({
+            "delivery_id": str(payload.get("delivery_id") or "").strip(),
+            "status": str(payload.get("status") or "").strip(),
+            "recipient": str(payload.get("recipient") or "").strip(),
+            "created_at": str(payload.get("created_at") or "").strip(),
+            "updated_at": str(payload.get("updated_at") or "").strip(),
+            "text_length": len(str(payload.get("text") or "")),
+            "external_ref": str(payload.get("external_ref") or "").strip(),
+            "detail": str(payload.get("detail") or "").strip(),
+        })
+        if len(records) >= limit:
+            break
+    summary = _recent_channel_delivery_summary(channel_id, limit=limit)
+    return {
+        "schema_version": "meridian.channels.diagnostics.v1",
+        "channel_id": channel_id,
+        "summary": summary,
+        "recent_deliveries": records,
     }
 
 
@@ -13964,11 +14094,30 @@ class ExternalWebhookAdapter(ChannelAdapter):
         return {"status": "success", "processed": len(results), "results": results}
 
 
+@contextlib.contextmanager
+def _temporary_manager_model_override(model_override: str):
+    """Temporarily override the manager model for a single request."""
+    normalized = str(model_override or "").strip()
+    saved = os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL")
+    if normalized:
+        os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = normalized
+    try:
+        yield
+    finally:
+        if not normalized:
+            return
+        if saved is None:
+            os.environ.pop("MERIDIAN_BRAIN_MANAGER_MODEL", None)
+        else:
+            os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = saved
+
+
 class WebAPIAdapter(ChannelAdapter):
     def __init__(self, runtime: AgentRuntime, allowed_origin: str, external_adapters: dict[str, ExternalWebhookAdapter] | None = None) -> None:
         super().__init__(runtime, "web")
         self.allowed_origin = allowed_origin.strip()
         self.external_adapters = dict(external_adapters or {})
+        self.all_adapters: list[ChannelAdapter] = []
         self.notifications: queue.Queue[dict[str, str]] = queue.Queue()
         self.stream_subscribers: set[queue.Queue[dict[str, str]]] = set()
         self.stream_subscribers_lock = threading.Lock()
@@ -14063,10 +14212,12 @@ class WebAPIAdapter(ChannelAdapter):
                 return _operator_token_valid(self.headers)
 
             def _public_read_allowed(self, request_path: str) -> bool:
-                return str(request_path or "").strip() in {
+                normalized = str(request_path or "").strip()
+                if normalized in {
                     "/api/events",
                     "/api/events/stream",
                     "/api/healthz",
+                    "/api/channels/health",
                     "/api/workflows/showcase",
                     "/api/status",
                     "/api/runtime-proof",
@@ -14082,7 +14233,11 @@ class WebAPIAdapter(ChannelAdapter):
                     "/api/marketplace/settlements",
                     "/api/marketplace/disputes",
                     "/api/execution-traces",
-                }
+                }:
+                    return True
+                if normalized.startswith("/api/channels/") and normalized.endswith("/diagnostics"):
+                    return True
+                return False
 
             def _send_cors_headers(self) -> None:
                 self.send_header("Access-Control-Allow-Origin", adapter.allowed_origin)
@@ -14233,6 +14388,20 @@ class WebAPIAdapter(ChannelAdapter):
                     payload = dict(proxied.get("payload") or {})
                     payload["gateway"] = "ok"
                     self._send_json(int(proxied.get("status_code") or 200), payload)
+                    return
+                if request_path == "/api/channels/health":
+                    health = _build_multi_channel_health(adapter.all_adapters)
+                    self._send_json(200, {"status": "success", "channels_health": health})
+                    return
+                if request_path.startswith("/api/channels/") and request_path.endswith("/diagnostics"):
+                    channel_id = request_path.removeprefix("/api/channels/").removesuffix("/diagnostics").strip().lower()
+                    if channel_id and channel_id in ALL_CHANNEL_IDS:
+                        query = parse_qs(parsed.query or "")
+                        diag_limit = min(int((query.get("limit") or ["20"])[0] or "20"), 100)
+                        diagnostics = _build_channel_diagnostics(channel_id, limit=diag_limit)
+                        self._send_json(200, {"status": "success", "diagnostics": diagnostics})
+                        return
+                    self._send_json(404, {"status": "error", "output": f"unknown channel: {channel_id}"})
                     return
                 if request_path == "/api/events/stream":
                     adapter._stream_events(self)
@@ -14689,95 +14858,87 @@ class WebAPIAdapter(ChannelAdapter):
                 # When set, overrides the default manager model for
                 # this single request via MERIDIAN_BRAIN_MANAGER_MODEL.
                 request_model_override = str(payload.get("model") or "").strip()
-                _saved_model_env = os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL")
-                if request_model_override:
-                    os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = request_model_override
-                web_session = _resolve_web_request_session(payload, self.headers, goal.strip())
-                session_id = str(web_session.get("session_id") or "").strip()
-                ingress = _loom_channel_ingest("web_api", LOOM_ORG_ID, goal.strip(), thread_id=session_id)
-                ingress_payload = ingress.get("payload") if isinstance(ingress, dict) else {}
-                session_key = _effective_web_session_key(session_id, ingress_payload)
-                ingress_request_id = str((ingress_payload or {}).get("ingress_id") or "").strip()
-                _record_gateway_audit(
-                    "manager_request_received",
-                    session_key=session_key,
-                    channel="web_api",
-                    text=goal.strip(),
-                    ingress_request_id=ingress_request_id,
-                )
-                answer, team_meta = _run_team_route(goal.strip(), session_key, adapter.runtime)
-                delivery_id = ""
-                if answer:
-                    delivery = _loom_channel_send("web_api", LOOM_ORG_ID, answer)
-                    delivery_payload = delivery.get("payload") if isinstance(delivery, dict) else {}
-                    delivery_id = str((delivery_payload or {}).get("delivery_id") or "").strip()
-                _loom_session_route(
-                    session_key,
-                    agent_id=TEAM_MANAGER_AGENT_ID,
-                    org_id=LOOM_ORG_ID,
-                    ingress_request_id=ingress_request_id,
-                    delivery_id=delivery_id,
-                    job_id=str((team_meta or {}).get("job_id") or "").strip(),
-                )
-                constitutional_trace = {}
-                try:
-                    constitutional_trace = build_constitutional_trace(
-                        org_id=LOOM_ORG_ID,
-                        session_key=session_key,
-                        agent_id=TEAM_MANAGER_AGENT_ID,
-                        plan=dict(team_meta.get("plan") or {}) if isinstance(team_meta, dict) else {},
-                        steps=list(team_meta.get("steps") or []) if isinstance(team_meta, dict) else [],
-                        output=answer,
-                        mode=str((team_meta or {}).get("mode") or ""),
-                    )
-                    persist_constitutional_trace(constitutional_trace)
-                except Exception as trace_exc:
-                    _log(f"constitutional trace build warning: {trace_exc}", color=ANSI_YELLOW)
-                try:
-                    response_payload = {
-                        "status": "success",
-                        "output": answer,
-                        "session_id": session_id,
-                        "session_key": session_key,
-                    }
-                    if constitutional_trace:
-                        response_payload["constitutional_trace"] = constitutional_trace
-                    self._send_json(200, response_payload)
-                except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError) as exc:
-                    if delivery_id:
-                        _loom_channel_update(
-                            delivery_id,
-                            "failed",
-                            detail=f"{exc.__class__.__name__}: {exc}",
-                        )
+                with _temporary_manager_model_override(request_model_override):
+                    web_session = _resolve_web_request_session(payload, self.headers, goal.strip())
+                    session_id = str(web_session.get("session_id") or "").strip()
+                    ingress = _loom_channel_ingest("web_api", LOOM_ORG_ID, goal.strip(), thread_id=session_id)
+                    ingress_payload = ingress.get("payload") if isinstance(ingress, dict) else {}
+                    session_key = _effective_web_session_key(session_id, ingress_payload)
+                    ingress_request_id = str((ingress_payload or {}).get("ingress_id") or "").strip()
                     _record_gateway_audit(
-                        "manager_response_delivery_failed",
+                        "manager_request_received",
+                        session_key=session_key,
+                        channel="web_api",
+                        text=goal.strip(),
+                        ingress_request_id=ingress_request_id,
+                    )
+                    answer, team_meta = _run_team_route(goal.strip(), session_key, adapter.runtime)
+                    delivery_id = ""
+                    if answer:
+                        delivery = _loom_channel_send("web_api", LOOM_ORG_ID, answer)
+                        delivery_payload = delivery.get("payload") if isinstance(delivery, dict) else {}
+                        delivery_id = str((delivery_payload or {}).get("delivery_id") or "").strip()
+                    _loom_session_route(
+                        session_key,
+                        agent_id=TEAM_MANAGER_AGENT_ID,
+                        org_id=LOOM_ORG_ID,
+                        ingress_request_id=ingress_request_id,
+                        delivery_id=delivery_id,
+                        job_id=str((team_meta or {}).get("job_id") or "").strip(),
+                    )
+                    constitutional_trace = {}
+                    try:
+                        constitutional_trace = build_constitutional_trace(
+                            org_id=LOOM_ORG_ID,
+                            session_key=session_key,
+                            agent_id=TEAM_MANAGER_AGENT_ID,
+                            plan=dict(team_meta.get("plan") or {}) if isinstance(team_meta, dict) else {},
+                            steps=list(team_meta.get("steps") or []) if isinstance(team_meta, dict) else [],
+                            output=answer,
+                            mode=str((team_meta or {}).get("mode") or ""),
+                        )
+                        persist_constitutional_trace(constitutional_trace)
+                    except Exception as trace_exc:
+                        _log(f"constitutional trace build warning: {trace_exc}", color=ANSI_YELLOW)
+                    try:
+                        response_payload = {
+                            "status": "success",
+                            "output": answer,
+                            "session_id": session_id,
+                            "session_key": session_key,
+                        }
+                        if constitutional_trace:
+                            response_payload["constitutional_trace"] = constitutional_trace
+                        self._send_json(200, response_payload)
+                    except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError) as exc:
+                        if delivery_id:
+                            _loom_channel_update(
+                                delivery_id,
+                                "failed",
+                                detail=f"{exc.__class__.__name__}: {exc}",
+                            )
+                        _record_gateway_audit(
+                            "manager_response_delivery_failed",
+                            session_key=session_key,
+                            channel="web_api",
+                            text=answer,
+                            outcome="failed",
+                            ingress_request_id=ingress_request_id,
+                            delivery_id=delivery_id,
+                            extra_details={"error": f"{exc.__class__.__name__}: {exc}"},
+                        )
+                        return
+                    if delivery_id:
+                        _loom_channel_update(delivery_id, "delivered", external_ref="http_response", detail="")
+                    _record_gateway_audit(
+                        "manager_response_delivered",
                         session_key=session_key,
                         channel="web_api",
                         text=answer,
-                        outcome="failed",
                         ingress_request_id=ingress_request_id,
                         delivery_id=delivery_id,
-                        extra_details={"error": f"{exc.__class__.__name__}: {exc}"},
+                        extra_details={"response_channel": "http_response"},
                     )
-                    return
-                if delivery_id:
-                    _loom_channel_update(delivery_id, "delivered", external_ref="http_response", detail="")
-                _record_gateway_audit(
-                    "manager_response_delivered",
-                    session_key=session_key,
-                    channel="web_api",
-                    text=answer,
-                    ingress_request_id=ingress_request_id,
-                    delivery_id=delivery_id,
-                    extra_details={"response_channel": "http_response"},
-                )
-                # Restore model env after request completes
-                if request_model_override:
-                    if _saved_model_env is None:
-                        os.environ.pop("MERIDIAN_BRAIN_MANAGER_MODEL", None)
-                    else:
-                        os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = _saved_model_env
 
             def log_message(self, format: str, *args: object) -> None:  # noqa: A003
                 return
@@ -14878,6 +15039,7 @@ def main() -> int:
     }
     web_adapter = WebAPIAdapter(runtime, str(config.get("allowed_origin") or ""), external_adapters)
     adapters: list[ChannelAdapter] = [telegram_adapter, web_adapter, *external_adapters.values()]
+    web_adapter.all_adapters = list(adapters)
     heartbeat = HeartbeatEngine(runtime, adapters) if HEARTBEAT_ENABLED else None
 
     _log("Meridian Gateway starting", color=ANSI_GREEN)

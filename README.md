@@ -63,7 +63,26 @@ Meridian now defaults Team mode to a 7-agent software-delivery team preset. See 
 ./scripts/core.sh response page
 ./scripts/core.sh response export /tmp/core-artifact
 ./scripts/core.sh chat
+./scripts/core.sh context add AGENTS.md docs/plan.md
+./scripts/core.sh context list
+./scripts/core.sh ask --no-context "one-off task without default project context"
+./scripts/core.sh playbook scaffold morning-brief
+./scripts/core.sh playbook add release-qa docs/release_qa.md
+./scripts/core.sh playbook capture latest-good-output
+./scripts/core.sh playbook run release-qa "Focus on regressions only"
+./scripts/core.sh playbook every release-qa 3600
+./scripts/core.sh playbook daily release-qa 08:30 UTC
+./scripts/core.sh playbook schedules
+./scripts/core.sh playbook run-scheduled playbook-release-qa
+./scripts/core.sh playbook unschedule release-qa
+./scripts/core.sh session search "provider-probe-ok"
+./scripts/core.sh session resume web_api:exportproof 281
+./scripts/core.sh session resume web_api:exportproof 281 --queue
+./scripts/core.sh session resume web_api:exportproof 281 --context
+./scripts/core.sh session reuse "core-proof-ok" --queue
+./scripts/core.sh session reuse "core-proof-ok" --context
 ./scripts/core.sh doctor
+./scripts/core.sh doctor summary
 ./scripts/core.sh ask --model gpt-4o "quick question"
 ./scripts/core.sh provider status
 ./scripts/core.sh provider list
@@ -72,8 +91,25 @@ Meridian now defaults Team mode to a 7-agent software-delivery team preset. See 
 ./scripts/core.sh config set MERIDIAN_BRAIN_MANAGER_MODEL gpt-4o
 ./scripts/core.sh config get MERIDIAN_BRAIN_MANAGER_MODEL
 ./scripts/core.sh session archive --older-than 7
+./scripts/core.sh schedule status
+./scripts/core.sh schedule list
+./scripts/core.sh schedule daily morning-brief 08:30 UTC
+./scripts/core.sh schedule run morning_brief
+./scripts/core.sh channel diagnostics
+./scripts/core.sh channel diagnostics telegram
+./scripts/core.sh channel diagnostics zalo 10
+./scripts/core.sh channel connect list
+./scripts/core.sh channel connect scaffold telegram-admin telegram meridian.runtime.v1
+./scripts/core.sh channel connect scorecard
+./scripts/core.sh web urls
+./scripts/core.sh web status
+./scripts/core.sh web browse-policy
+./scripts/core.sh shell list
+./scripts/core.sh shell run repo-status
+./scripts/core.sh proof local
+./scripts/core.sh proof summary
 ./scripts/core.sh browse https://example.com
-./scripts/core.sh research "summarize this week"
+./scripts/core.sh research "git status"
 ./scripts/core.sh remember my_note "something useful"
 ./scripts/core.sh recall my_note
 ./scripts/core.sh agent inspect

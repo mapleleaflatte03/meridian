@@ -24,6 +24,8 @@ bash scripts/acceptance_competitor_snapshot_lane.sh
 - `https://app.welliam.codes/workflows` — operator workflow showcase
 - `https://app.welliam.codes/community` — community ops guide
 - `https://app.welliam.codes/api/workflows/showcase` — JSON API (requires Origin header)
+- `https://app.welliam.codes/api/channels/health` — multi-channel adapter health dashboard (public)
+- `https://app.welliam.codes/api/channels/{id}/diagnostics` — per-channel delivery diagnostics (public)
 
 ## Key Constraints
 

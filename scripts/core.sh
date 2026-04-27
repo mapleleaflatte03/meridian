@@ -13,10 +13,12 @@
 #   ./scripts/core.sh memory receipts          — show recent memory receipts
 #   ./scripts/core.sh memory graph SOURCE_REF  — inspect memory graph fork/root
 #   ./scripts/core.sh schedule NAME every SEC  — add a recurring task
+#   ./scripts/core.sh playbook every NAME SEC  — schedule a saved Core playbook
 #   ./scripts/core.sh schedules                — list scheduled tasks
 #   ./scripts/core.sh agent inspect            — show live agent/operator state
 #   ./scripts/core.sh job list                 — inspect recent runtime jobs
 #   ./scripts/core.sh channel health           — inspect channel health/deliveries
+#   ./scripts/core.sh channel diagnostics      — multi-channel health or per-channel diagnostics
 #   ./scripts/core.sh queue status             — inspect local queue depth
 #   ./scripts/core.sh inspect                  — show last execution + agent state
 #   ./scripts/core.sh status                   — show runtime status
@@ -43,8 +45,20 @@ CORE_SESSION_REGISTRY_FILE="${CORE_STATE_DIR}/sessions.json"
 CORE_LAST_RESPONSE_FILE="${CORE_STATE_DIR}/last_response.json"
 CORE_LAST_OUTPUT_FILE="${CORE_STATE_DIR}/last_output.txt"
 CORE_LAST_EXPORT_DIR_FILE="${CORE_STATE_DIR}/last_export_dir.txt"
+CORE_LAST_PROOF_FILE="${CORE_STATE_DIR}/last_proof.json"
+CORE_LAST_DOCTOR_FILE="${CORE_STATE_DIR}/last_doctor.json"
+CORE_PENDING_FILES_FILE="${CORE_STATE_DIR}/pending_files.json"
+CORE_CONTEXT_FILES_FILE="${CORE_STATE_DIR}/context_files.json"
+CORE_LAST_RESUME_FILE="${CORE_STATE_DIR}/last_resume.txt"
+CORE_PLAYBOOKS_DIR="${CORE_STATE_DIR}/playbooks"
+CORE_PLAYBOOK_SCHEDULES_FILE="${CORE_STATE_DIR}/playbook_schedules.json"
 CORE_ARTIFACT_LONG_THRESHOLD="${MERIDIAN_CORE_LONG_OUTPUT_CHARS:-4000}"
 CORE_ARTIFACT_LONG_LINES="${MERIDIAN_CORE_LONG_OUTPUT_LINES:-80}"
+MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS="${MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS:-}"
+MERIDIAN_WORKSPACE_PORT="${MERIDIAN_WORKSPACE_PORT:-18901}"
+MERIDIAN_WORKSPACE_PEER_PORT="${MERIDIAN_WORKSPACE_PEER_PORT:-19001}"
+MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
+MERIDIAN_LOCAL_ENV_DIR="${MERIDIAN_LOCAL_ENV_DIR:-/home/ubuntu/.meridian}"
 
 # ── Resolve org_id ────────────────────────────────────────────────────────
 #
@@ -186,6 +200,286 @@ require_runtime() {
 
 ensure_core_state_dir() {
     mkdir -p "$CORE_STATE_DIR"
+}
+
+ensure_core_playbooks_dir() {
+    ensure_core_state_dir
+    mkdir -p "$CORE_PLAYBOOKS_DIR"
+}
+
+load_pending_files_json() {
+    ensure_core_state_dir
+    if [ -f "$CORE_PENDING_FILES_FILE" ]; then
+        cat "$CORE_PENDING_FILES_FILE"
+    else
+        printf '[]\n'
+    fi
+}
+
+save_pending_files_json() {
+    ensure_core_state_dir
+    printf '%s\n' "${1:-[]}" > "$CORE_PENDING_FILES_FILE"
+}
+
+load_context_files_json() {
+    ensure_core_state_dir
+    if [ -f "$CORE_CONTEXT_FILES_FILE" ]; then
+        cat "$CORE_CONTEXT_FILES_FILE"
+    else
+        printf '[]\n'
+    fi
+}
+
+save_context_files_json() {
+    ensure_core_state_dir
+    printf '%s\n' "${1:-[]}" > "$CORE_CONTEXT_FILES_FILE"
+}
+
+merge_pending_file_paths_json() {
+    python3 - "$@" <<'PY'
+import json, os, sys
+current = json.loads(sys.argv[1] or "[]")
+extras = sys.argv[2:]
+seen = set()
+merged = []
+for path in list(current) + extras:
+    path = os.path.abspath(os.path.expanduser(str(path)))
+    if not path or path in seen:
+        continue
+    if not os.path.isfile(path):
+        continue
+    seen.add(path)
+    merged.append(path)
+print(json.dumps(merged, ensure_ascii=False))
+PY
+}
+
+read_env_file_value() {
+    local file_path="$1"
+    local key="$2"
+    [ -f "$file_path" ] || return 1
+    python3 - "$file_path" "$key" <<'PY'
+import pathlib, re, sys
+path, key = sys.argv[1], sys.argv[2]
+for line in pathlib.Path(path).read_text(encoding="utf-8", errors="replace").splitlines():
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#"):
+        continue
+    m = re.match(r"^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$", stripped)
+    if not m or m.group(1) != key:
+        continue
+    value = m.group(2).strip()
+    if (value.startswith('"') and value.endswith('"')) or (value.startswith("'") and value.endswith("'")):
+        value = value[1:-1]
+    print(value)
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+resolve_loom_service_token() {
+    if [ -n "${LOOM_SERVICE_TOKEN:-}" ]; then
+        printf 'env:LOOM_SERVICE_TOKEN\t%s\n' "$LOOM_SERVICE_TOKEN"
+        return 0
+    fi
+    if [ -n "${MERIDIAN_LOOM_SERVICE_TOKEN:-}" ]; then
+        printf 'env:MERIDIAN_LOOM_SERVICE_TOKEN\t%s\n' "$MERIDIAN_LOOM_SERVICE_TOKEN"
+        return 0
+    fi
+
+    local gateway_env="${MERIDIAN_LOCAL_ENV_DIR}/.env.gateway"
+    local main_env="${MERIDIAN_LOCAL_ENV_DIR}/.env"
+    local value=""
+    value="$(read_env_file_value "$gateway_env" "LOOM_SERVICE_TOKEN" 2>/dev/null || true)"
+    if [ -n "$value" ]; then
+        printf 'file:%s#LOOM_SERVICE_TOKEN\t%s\n' "$gateway_env" "$value"
+        return 0
+    fi
+    value="$(read_env_file_value "$gateway_env" "MERIDIAN_LOOM_SERVICE_TOKEN" 2>/dev/null || true)"
+    if [ -n "$value" ]; then
+        printf 'file:%s#MERIDIAN_LOOM_SERVICE_TOKEN\t%s\n' "$gateway_env" "$value"
+        return 0
+    fi
+    value="$(read_env_file_value "$main_env" "LOOM_SERVICE_TOKEN" 2>/dev/null || true)"
+    if [ -n "$value" ]; then
+        printf 'file:%s#LOOM_SERVICE_TOKEN\t%s\n' "$main_env" "$value"
+        return 0
+    fi
+    value="$(read_env_file_value "$main_env" "MERIDIAN_LOOM_SERVICE_TOKEN" 2>/dev/null || true)"
+    if [ -n "$value" ]; then
+        printf 'file:%s#MERIDIAN_LOOM_SERVICE_TOKEN\t%s\n' "$main_env" "$value"
+        return 0
+    fi
+    return 1
+}
+
+quarantine_stale_ingress_requests() {
+    local requests_dir="${LOOM_ROOT}/run/ingress/requests"
+    local quarantine_dir="${LOOM_ROOT}/run/ingress/quarantine"
+    local max_age_seconds="${MERIDIAN_CORE_DOCTOR_INGRESS_MAX_AGE_SECONDS:-300}"
+    local scoped_max_age_seconds="${MERIDIAN_CORE_DOCTOR_SCOPED_INGRESS_MAX_AGE_SECONDS:-86400}"
+    python3 - "$requests_dir" "$quarantine_dir" "$max_age_seconds" "$scoped_max_age_seconds" <<'PY'
+import json, os, pathlib, re, shutil, sys, time
+
+requests_dir = pathlib.Path(sys.argv[1])
+quarantine_dir = pathlib.Path(sys.argv[2])
+max_age_seconds = int(sys.argv[3] or "300")
+scoped_max_age_seconds = int(sys.argv[4] or "86400")
+if not requests_dir.exists():
+    print(json.dumps({"moved_count": 0, "moved_files": [], "reason": "requests_dir_missing"}))
+    raise SystemExit(0)
+
+quarantine_dir.mkdir(parents=True, exist_ok=True)
+moved = []
+
+def stale_tmp_paths(payload: dict) -> list[str]:
+    hits = []
+    kernel_path = str(payload.get("kernel_path") or "").strip()
+    if kernel_path.startswith("/tmp/") and not os.path.exists(kernel_path):
+        hits.append(kernel_path)
+    raw = json.dumps(payload, ensure_ascii=False)
+    for match in re.findall(r"/tmp/[^\s\"'`]+", raw):
+        if not os.path.exists(match):
+            hits.append(match)
+    return sorted(set(hits))
+
+def stale_unowned_submit_action(path: pathlib.Path, payload: dict) -> str:
+    request_type = str(payload.get("request_type") or "").strip()
+    if request_type != "submit_action":
+        return ""
+    kernel_path = str(payload.get("kernel_path") or "").strip()
+    root = str(payload.get("root") or "").strip()
+    if kernel_path or root:
+        return ""
+    age_seconds = max(0, int(time.time() - path.stat().st_mtime))
+    if age_seconds < max_age_seconds:
+        return ""
+    return f"submit_action older than {max_age_seconds}s with no kernel_path/root (age={age_seconds}s)"
+
+def stale_scoped_staged_submit_action(path: pathlib.Path, payload: dict) -> str:
+    request_type = str(payload.get("request_type") or "").strip()
+    if request_type != "submit_action":
+        return ""
+    if str(payload.get("status") or "").strip() != "staged":
+        return ""
+    kernel_path = str(payload.get("kernel_path") or "").strip()
+    root = str(payload.get("root") or "").strip()
+    if not kernel_path and not root:
+        return ""
+    age_seconds = max(0, int(time.time() - path.stat().st_mtime))
+    if age_seconds < scoped_max_age_seconds:
+        return ""
+    return f"staged scoped submit_action older than {scoped_max_age_seconds}s (age={age_seconds}s)"
+
+for path in sorted(requests_dir.glob("*.json")):
+    try:
+        payload = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        continue
+    bad_paths = stale_tmp_paths(payload)
+    stale_reason = stale_unowned_submit_action(path, payload)
+    scoped_stale_reason = stale_scoped_staged_submit_action(path, payload)
+    if not bad_paths and not stale_reason and not scoped_stale_reason:
+        continue
+    dest = quarantine_dir / path.name
+    shutil.move(str(path), str(dest))
+    moved.append({
+        "file": path.name,
+        "stale_paths": bad_paths,
+        "stale_reason": stale_reason or scoped_stale_reason,
+    })
+
+print(json.dumps({"moved_count": len(moved), "moved_files": moved}, ensure_ascii=False))
+PY
+}
+
+render_ingress_snapshot() {
+    local bucket="${1:-pending}"
+    local limit="${2:-20}"
+    local max_age_seconds="${MERIDIAN_CORE_DOCTOR_INGRESS_MAX_AGE_SECONDS:-300}"
+    python3 - "$LOOM_ROOT" "$bucket" "$limit" "$max_age_seconds" <<'PY'
+import collections, json, os, pathlib, time, sys
+
+loom_root = pathlib.Path(sys.argv[1])
+bucket = sys.argv[2]
+limit = int(sys.argv[3] or "20")
+max_age_seconds = int(sys.argv[4] or "300")
+ingress_root = loom_root / "run" / "ingress"
+target = ingress_root / ("quarantine" if bucket == "quarantine" else "requests")
+
+print("[core] ingress status" if bucket == "pending" else "[core] ingress quarantine")
+print(f"  root:            {ingress_root}")
+print(f"  bucket:          {bucket}")
+print(f"  path:            {target}")
+print(f"  stale_after_s:   {max_age_seconds}")
+
+if not target.exists():
+    print("  total_files:     0")
+    print("  note:            ingress bucket missing")
+    raise SystemExit(0)
+
+rows = []
+breakdown = collections.Counter()
+now = time.time()
+for path in sorted(target.glob("*.json")):
+    try:
+        with open(path, encoding="utf-8") as fh:
+            payload = json.load(fh)
+    except Exception as exc:
+        rows.append({
+            "file": path.name,
+            "agent_id": "?",
+            "action_type": "?",
+            "resource": "?",
+            "age_seconds": max(0, int(now - path.stat().st_mtime)),
+            "state": "malformed",
+            "detail": str(exc),
+        })
+        breakdown[("malformed", "?")] += 1
+        continue
+    agent_id = str(payload.get("agent_id") or "?")
+    action_type = str(payload.get("action_type") or "?")
+    resource = str(payload.get("resource") or "?")
+    kernel_path = str(payload.get("kernel_path") or "")
+    root = str(payload.get("root") or "")
+    age_seconds = max(0, int(now - path.stat().st_mtime))
+    if kernel_path.startswith("/tmp/"):
+        state = "tmp_kernel"
+    elif not kernel_path and not root:
+        state = "unowned"
+    else:
+        state = "scoped"
+    rows.append({
+        "file": path.name,
+        "agent_id": agent_id,
+        "action_type": action_type,
+        "resource": resource,
+        "age_seconds": age_seconds,
+        "state": state,
+    })
+    breakdown[(agent_id, action_type)] += 1
+
+print(f"  total_files:     {len(rows)}")
+old_count = len([r for r in rows if int(r.get('age_seconds') or 0) >= max_age_seconds])
+print(f"  stale_files:     {old_count}")
+if breakdown:
+    print("  top_workloads:")
+    for (agent_id, action_type), count in breakdown.most_common(8):
+        print(f"    - {agent_id} / {action_type}: {count}")
+else:
+    print("  top_workloads:   (none)")
+
+if rows:
+    print(f"  newest_{min(limit, len(rows))}:")
+    for row in sorted(rows, key=lambda item: item.get("age_seconds", 0))[:limit]:
+        resource = str(row.get("resource") or "?")
+        if len(resource) > 48:
+            resource = resource[:45] + "..."
+        print(
+            f"    - {row['file']}  agent={row['agent_id']} action={row['action_type']} "
+            f"state={row['state']} age_s={row['age_seconds']} resource={resource}"
+        )
+PY
 }
 
 # ── File attachment helpers ────────────────────────────────────────────────
@@ -420,6 +714,8 @@ cmd_ask() {
     local goal=""
     local -a file_paths=()
     local model_override=""
+    local use_queued_files="0"
+    local use_context_files="1"
     # Parse arguments: support --file PATH (repeatable), --model MODEL before or after the goal
     while [ $# -gt 0 ]; do
         case "$1" in
@@ -427,6 +723,14 @@ cmd_ask() {
                 [ -n "${2:-}" ] || die "Usage: --file requires a PATH argument"
                 file_paths+=("$2")
                 shift 2
+                ;;
+            --queued-files|--files)
+                use_queued_files="1"
+                shift
+                ;;
+            --no-context)
+                use_context_files="0"
+                shift
                 ;;
             --model|-m)
                 [ -n "${2:-}" ] || die "Usage: --model requires a MODEL argument"
@@ -446,6 +750,51 @@ cmd_ask() {
     [ -n "$goal" ] || die "Usage: core.sh ask [--file PATH ...] [--model MODEL] \"TASK\""
     require_runtime
     ensure_core_state_dir
+
+    if [ "$use_queued_files" = "1" ]; then
+        local queued_files_json queued_joined
+        queued_files_json="$(load_pending_files_json)"
+        queued_joined="$(python3 - "$queued_files_json" <<'PY'
+import json, sys
+for item in json.loads(sys.argv[1] or "[]"):
+    print(item)
+PY
+)"
+        if [ -n "$queued_joined" ]; then
+            while IFS= read -r queued_path; do
+                [ -n "$queued_path" ] || continue
+                file_paths+=("$queued_path")
+            done <<< "$queued_joined"
+        fi
+    fi
+
+    if [ "$use_context_files" = "1" ]; then
+        local context_files_json context_joined
+        context_files_json="$(load_context_files_json)"
+        context_joined="$(python3 - "$context_files_json" <<'PY'
+import json, sys
+for item in json.loads(sys.argv[1] or "[]"):
+    print(item)
+PY
+)"
+        if [ -n "$context_joined" ]; then
+            while IFS= read -r context_path; do
+                [ -n "$context_path" ] || continue
+                file_paths+=("$context_path")
+            done <<< "$context_joined"
+        fi
+    fi
+
+    if [ ${#file_paths[@]} -gt 0 ]; then
+        local deduped_files_json
+        deduped_files_json="$(merge_pending_file_paths_json '[]' "${file_paths[@]}")"
+        mapfile -t file_paths < <(python3 - "$deduped_files_json" <<'PY'
+import json, sys
+for item in json.loads(sys.argv[1] or "[]"):
+    print(item)
+PY
+)
+    fi
 
     # Build attachment JSON if files were specified
     local attachments_json="[]"
@@ -600,14 +949,15 @@ complete_code = parse_section("Complete Code", output) or parse_section("Code", 
 file_tree = parse_section("File Tree", output)
 stack = parse_section("Stack", output)
 run_instructions = parse_section("Run Instructions", output)
+code_source = complete_code or output
 
 written = []
 
-if complete_code:
+if code_source:
     code_pattern = re.compile(
-        r"(?ms)^(?:\*\*|File:\s*|`{0,3})([^`\n*]+?\.[A-Za-z0-9._/-]+)(?:\*\*|`{0,3})\s*\n```[A-Za-z0-9_+-]*\n(.*?)\n```"
+        r"(?ms)^(?:#+\s*)?(?:\*\*|File:\s*|`{1,3})?([^`\n*]+?\.[A-Za-z0-9._/-]+)(?:\*\*|`{1,3})?\s*\n```[A-Za-z0-9_+-]*\n(.*?)\n```"
     )
-    matches = list(code_pattern.finditer(complete_code))
+    matches = list(code_pattern.finditer(code_source))
     if matches:
         for match in matches:
             rel = sanitize_relpath(match.group(1))
@@ -670,12 +1020,28 @@ cmd_chat() {
     cat <<EOF
 [core] interactive chat
 [core] session: $session_id
-[core] commands: /exit /new [id] /use ID /current /show /response /file PATH /model MODEL /provider /page /help
+[core] commands: /exit /new [id] /use ID /current /show /search QUERY /resume SESSION_KEY EVENT_INDEX [--queue] /reuse QUERY [--queue] /use-resume /response /file PATH /use-files /save-files /context /model MODEL /provider /page /help
 EOF
     while true; do
         local prompt_suffix=""
         if [ ${#pending_files[@]} -gt 0 ]; then
             prompt_suffix=" [${#pending_files[@]} file(s)]"
+        fi
+        local context_count="0"
+        context_count="$(python3 - "$CORE_CONTEXT_FILES_FILE" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if not path.exists():
+    print(0)
+else:
+    try:
+        print(len(json.loads(path.read_text(encoding="utf-8")) or []))
+    except Exception:
+        print(0)
+PY
+)"
+        if [ "${context_count:-0}" != "0" ]; then
+            prompt_suffix="${prompt_suffix} [context:${context_count}]"
         fi
         if [ -n "$chat_model_override" ]; then
             prompt_suffix="${prompt_suffix} [model:${chat_model_override}]"
@@ -698,11 +1064,20 @@ EOF
 /use ID            Switch current session
 /current           Show current session id
 /show [id]         Show recent history for current or named session
+/search QUERY      Search across session history text
+/resume SESSION_KEY EVENT_INDEX [--queue|--context]  Materialize one past event into a reusable context note
+/reuse QUERY [--queue|--context] Search latest matching event and materialize it immediately
+/use-resume        Add the last resumed context note to pending files
 /response          Show the last captured response
 /file PATH         Attach a file to the next message
 /attach PATH       Alias for /file
 /files             Show pending attached files
 /clear-files       Clear all pending file attachments
+/use-files         Load the persistent Core file queue into chat pending files
+/save-files        Save current chat pending files into the persistent Core file queue
+/context           Show persistent Core context files
+/context add PATH  Add a file to persistent Core context
+/context clear     Clear persistent Core context
 /model MODEL       Set model override for subsequent messages (sticky)
 /model             Clear model override (revert to default)
 /provider          Show current provider status
@@ -737,6 +1112,33 @@ EOF
             /show\ *)
                 cmd_session show "${line#"/show "}"
                 ;;
+            /search\ *)
+                cmd_session search "${line#"/search "}"
+                ;;
+            /resume\ *)
+                local resume_args="${line#"/resume "}"
+                cmd_session resume $resume_args
+                ;;
+            /reuse\ *)
+                local reuse_args="${line#"/reuse "}"
+                cmd_session reuse $reuse_args
+                ;;
+            /use-resume)
+                if [ ! -f "$CORE_LAST_RESUME_FILE" ]; then
+                    echo "[core] no resumed context note found" >&2
+                else
+                    pending_files+=("$CORE_LAST_RESUME_FILE")
+                    local merged_resume_json
+                    merged_resume_json="$(merge_pending_file_paths_json '[]' "${pending_files[@]}")"
+                    mapfile -t pending_files < <(python3 - "$merged_resume_json" <<'PY'
+import json, sys
+for item in json.loads(sys.argv[1] or "[]"):
+    print(item)
+PY
+)
+                    echo "[core] resumed context loaded (${#pending_files[@]} file(s) pending)"
+                fi
+                ;;
             /file\ *|/attach\ *)
                 local fpath="${line#*/file }"
                 fpath="${fpath#*/attach }"
@@ -758,6 +1160,48 @@ EOF
                     echo "[core] pending files:"
                     for f in "${pending_files[@]}"; do echo "  $f"; done
                 fi
+                ;;
+            /use-files)
+                local queued_json queued_joined
+                queued_json="$(load_pending_files_json)"
+                queued_joined="$(python3 - "$queued_json" <<'PY'
+import json, sys
+for item in json.loads(sys.argv[1] or "[]"):
+    print(item)
+PY
+)"
+                if [ -z "$queued_joined" ]; then
+                    echo "[core] no persistent files queued"
+                else
+                    while IFS= read -r queued_path; do
+                        [ -n "$queued_path" ] || continue
+                        pending_files+=("$queued_path")
+                    done <<< "$queued_joined"
+                    local merged_json
+                    merged_json="$(merge_pending_file_paths_json '[]' "${pending_files[@]}")"
+                    mapfile -t pending_files < <(python3 - "$merged_json" <<'PY'
+import json, sys
+for item in json.loads(sys.argv[1] or "[]"):
+    print(item)
+PY
+)
+                    echo "[core] loaded persistent files (${#pending_files[@]} file(s) pending)"
+                fi
+                ;;
+            /save-files)
+                local save_json
+                save_json="$(merge_pending_file_paths_json '[]' "${pending_files[@]}")"
+                save_pending_files_json "$save_json"
+                echo "[core] saved ${#pending_files[@]} file(s) to persistent queue"
+                ;;
+            /context\ add\ *)
+                cmd_context add "${line#"/context add "}"
+                ;;
+            /context\ clear)
+                cmd_context clear
+                ;;
+            /context)
+                cmd_context list
                 ;;
             /clear-files|/clear)
                 pending_files=()
@@ -820,15 +1264,8 @@ EOF
     done
 }
 
-cmd_doctor() {
-    require_loom
-    require_runtime
-
-    local doctor_fix=""
-    if [ "${1:-}" = "--fix" ] || [ "${1:-}" = "fix" ]; then
-        doctor_fix="--fix"
-    fi
-
+_render_doctor_overview() {
+    local doctor_fix="${1:-}"
     local personal_agent=""
     personal_agent="$(resolve_personal_agent_name)"
 
@@ -858,6 +1295,429 @@ cmd_doctor() {
         echo "[core] channel health ($personal_agent)"
         "$LOOM_BIN" channel health --root "$LOOM_ROOT" --agent "$personal_agent" --format human
     fi
+    echo ""
+    echo "[core] multi-channel health"
+    _render_multi_channel_health
+}
+
+_render_multi_channel_health() {
+    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local health_json=""
+    health_json="$(curl -sf "http://127.0.0.1:${gateway_port}/api/channels/health" 2>/dev/null || printf '{}')"
+    if [ -z "$health_json" ] || [ "$health_json" = "{}" ]; then
+        echo "  (gateway not reachable — channel health unavailable)"
+        return
+    fi
+    python3 - "$health_json" <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.argv[1])
+    health = data.get("channels_health") or data
+    channels = health.get("channels") or []
+    active = int(health.get("active_adapter_count") or 0)
+    delivered = int(health.get("total_recent_delivered") or 0)
+    failed = int(health.get("total_recent_failed") or 0)
+    print(f"  adapters: {active} active, {len(channels)} tracked")
+    print(f"  recent deliveries: {delivered} delivered, {failed} failed")
+    for ch in channels:
+        cid = ch.get("channel_id", "?")
+        status = ch.get("health_status", "unknown")
+        ds = ch.get("delivery_summary") or {}
+        d = int(ds.get("delivered_count") or 0)
+        f = int(ds.get("failed_count") or 0)
+        latest = ds.get("latest_status") or "-"
+        print(f"  {cid:12s}  {status:10s}  delivered={d}  failed={f}  latest={latest}")
+except Exception as exc:
+    print(f"  (channel health parse error: {exc})")
+PY
+}
+
+write_capsule_manifest_scaffold() {
+    local org_id="${1:-}"
+    [ -n "$org_id" ] || return 1
+    local capsules_dir="${LOOM_ROOT}/state/capsules/${org_id}"
+    local manifest_path="${capsules_dir}/manifest.json"
+    mkdir -p "$capsules_dir"
+    python3 - "$org_id" "$manifest_path" "$LOOM_ROOT" <<'PY'
+import json, os, sys
+from pathlib import Path
+
+org_id, manifest_path, loom_root = sys.argv[1:4]
+loom_root = Path(loom_root)
+manifest_path = Path(manifest_path)
+
+onboard_path = loom_root / "state" / "onboard.json"
+state_path = loom_root / "state" / "state.json"
+skills_registry = loom_root / "state" / "skills" / "registry.json"
+channels_registry = loom_root / "state" / "channels" / "registry.json"
+
+created_at = 0
+if onboard_path.exists():
+    try:
+        onboard = json.loads(onboard_path.read_text(encoding="utf-8"))
+        created_at = int((((onboard.get("wizard") or {}).get("lastRunAt")) or 0))
+    except Exception:
+        created_at = 0
+if not created_at and state_path.exists():
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        created_at = int(state.get("created_at") or 0)
+    except Exception:
+        created_at = 0
+
+files = []
+for candidate in (
+    "state/onboard.json",
+    "state/skills/registry.json",
+    "state/channels/registry.json",
+    "state/state.json",
+):
+    if (loom_root / candidate).exists():
+        files.append(candidate)
+
+payload = {
+    "org_id": org_id,
+    "state": "local_embedded_capsule",
+    "provenance": "doctor_fix_scaffold",
+    "created_at": created_at,
+    "files": files,
+}
+manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+print(str(manifest_path))
+PY
+}
+
+_write_doctor_receipt() {
+    local mode="$1"
+    local before_checks_json="$2"
+    local after_checks_json="$3"
+    local actions_json="$4"
+    local service_before_json="$5"
+    local service_after_json="$6"
+    local action_results_json="${7:-[]}"
+    ensure_core_state_dir
+    python3 - "$CORE_LAST_DOCTOR_FILE" "$mode" "$LOOM_ROOT" "$before_checks_json" "$after_checks_json" "$actions_json" "$service_before_json" "$service_after_json" "$action_results_json" <<'PY'
+import json, sys
+from datetime import datetime, timezone
+
+out_path, mode, loom_root, before_raw, after_raw, actions_raw, service_before_raw, service_after_raw, action_results_raw = sys.argv[1:10]
+before = json.loads(before_raw or "[]")
+after = json.loads(after_raw or "[]")
+actions = json.loads(actions_raw or "[]")
+service_before = json.loads(service_before_raw or "{}")
+service_after = json.loads(service_after_raw or "{}")
+action_results = json.loads(action_results_raw or "[]")
+
+def summarize(checks):
+    counts = {"OK": 0, "WARN": 0, "CRITICAL": 0, "UNKNOWN": 0}
+    for item in checks:
+        level = str(item.get("level") or "UNKNOWN").upper()
+        counts[level] = counts.get(level, 0) + 1
+    return counts
+
+payload = {
+    "schema_version": "meridian.core.doctor.v1",
+    "mode": mode,
+    "root": loom_root,
+    "captured_at": datetime.now(timezone.utc).isoformat(),
+    "summary_before": summarize(before),
+    "summary_after": summarize(after),
+    "actions": actions,
+    "action_results": action_results,
+    "service_before": service_before,
+    "service_after": service_after,
+    "checks_before": before,
+    "checks_after": after,
+}
+with open(out_path, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+PY
+}
+
+cmd_doctor_fix() {
+    require_loom
+    require_runtime
+
+    local before_checks_json service_before_json actions_json after_checks_json service_after_json
+    before_checks_json="$("$LOOM_BIN" doctor --root "$LOOM_ROOT" --format json)"
+    service_before_json="$("$LOOM_BIN" service status --root "$LOOM_ROOT" --format json 2>/dev/null || printf '{}')"
+    actions_json='[]'
+    local action_results_json='[]'
+    local org_id
+    org_id="$(resolve_org_id)"
+
+    echo "[core] doctor fix: apply safe runtime repairs"
+    "$LOOM_BIN" doctor --root "$LOOM_ROOT" --format human --fix
+
+    actions_json="$(python3 - "$before_checks_json" "$service_before_json" <<'PY'
+import json, sys
+checks = json.loads(sys.argv[1] or "[]")
+service = json.loads(sys.argv[2] or "{}")
+actions = []
+for item in checks:
+    label = str(item.get("label") or "").strip()
+    remediation = str(item.get("remediation") or "").strip()
+    if label == "service_runtime" and remediation == "loom service start":
+        if not bool(service.get("running")):
+            note = str(service.get("note") or "").strip()
+            if "stale state" in note.lower():
+                actions.append({"action": "service_stop_stale", "reason": note})
+            actions.append({"action": "service_start", "reason": remediation})
+print(json.dumps(actions))
+PY
+)"
+
+    if python3 - "$before_checks_json" <<'PY'
+import json, sys
+checks = json.loads(sys.argv[1] or "[]")
+for item in checks:
+    if str(item.get("label") or "").strip() == "capsule_manifest" and str(item.get("level") or "").upper() == "CRITICAL":
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+        local capsule_manifest_path=""
+        capsule_manifest_path="$(write_capsule_manifest_scaffold "$org_id")"
+        actions_json="$(python3 - "$actions_json" "$capsule_manifest_path" <<'PY'
+import json, sys
+actions = json.loads(sys.argv[1] or "[]")
+actions.append({"action": "capsule_manifest_scaffold", "reason": f"wrote capsule manifest scaffold {sys.argv[2]}"})
+print(json.dumps(actions))
+PY
+)"
+        action_results_json="$(python3 - "$action_results_json" "$capsule_manifest_path" <<'PY'
+import json, sys
+results = json.loads(sys.argv[1] or "[]")
+results.append({"action": "capsule_manifest_scaffold", "ok": True, "path": sys.argv[2]})
+print(json.dumps(results))
+PY
+)"
+        echo "[core] wrote capsule manifest scaffold: $capsule_manifest_path"
+    fi
+
+    local quarantine_json
+    quarantine_json="$(quarantine_stale_ingress_requests)"
+    if python3 - "$quarantine_json" <<'PY'
+import json, sys
+payload = json.loads(sys.argv[1] or "{}")
+raise SystemExit(0 if int(payload.get("moved_count") or 0) > 0 else 1)
+PY
+    then
+        actions_json="$(python3 - "$actions_json" "$quarantine_json" <<'PY'
+import json, sys
+actions = json.loads(sys.argv[1] or "[]")
+payload = json.loads(sys.argv[2] or "{}")
+actions.insert(0, {"action": "ingress_quarantine", "reason": f"quarantined {int(payload.get('moved_count') or 0)} stale ingress request(s)"})
+print(json.dumps(actions))
+PY
+)"
+        action_results_json="$(python3 - "$action_results_json" "$quarantine_json" <<'PY'
+import json, sys
+results = json.loads(sys.argv[1] or "[]")
+payload = json.loads(sys.argv[2] or "{}")
+results.append({"action": "ingress_quarantine", "ok": True, "moved_count": int(payload.get("moved_count") or 0)})
+print(json.dumps(results))
+PY
+)"
+        echo "[core] quarantined stale ingress requests: $(python3 - "$quarantine_json" <<'PY'
+import json, sys
+print(int(json.loads(sys.argv[1] or "{}").get("moved_count") or 0))
+PY
+)"
+    fi
+
+    if python3 - "$actions_json" <<'PY'
+import json, sys
+actions = json.loads(sys.argv[1] or "[]")
+raise SystemExit(0 if any(item.get("action") == "service_stop_stale" for item in actions) else 1)
+PY
+    then
+        if "$LOOM_BIN" service stop --root "$LOOM_ROOT" --format human >/tmp/core-doctor-service-stop.txt 2>&1; then
+            action_results_json="$(python3 - "$action_results_json" /tmp/core-doctor-service-stop.txt <<'PY'
+import json, sys
+results = json.loads(sys.argv[1] or "[]")
+results.append({"action": "service_stop_stale", "ok": True, "output_path": sys.argv[2]})
+print(json.dumps(results))
+PY
+)"
+        else
+            action_results_json="$(python3 - "$action_results_json" /tmp/core-doctor-service-stop.txt <<'PY'
+import json, pathlib, sys
+results = json.loads(sys.argv[1] or "[]")
+detail = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace").strip()
+results.append({"action": "service_stop_stale", "ok": False, "output_path": sys.argv[2], "detail": detail})
+print(json.dumps(results))
+PY
+)"
+        fi
+        cat /tmp/core-doctor-service-stop.txt
+    fi
+
+    local stop_request_path="${LOOM_ROOT}/run/service/stop.requested"
+    if [ -f "$stop_request_path" ]; then
+        rm -f "$stop_request_path"
+        actions_json="$(python3 - "$actions_json" "$stop_request_path" <<'PY'
+import json, sys
+actions = json.loads(sys.argv[1] or "[]")
+actions.append({"action": "service_clear_stop_request", "reason": f"removed stale stop marker {sys.argv[2]}"})
+print(json.dumps(actions))
+PY
+)"
+        action_results_json="$(python3 - "$action_results_json" "$stop_request_path" <<'PY'
+import json, sys
+results = json.loads(sys.argv[1] or "[]")
+results.append({"action": "service_clear_stop_request", "ok": True, "path": sys.argv[2]})
+print(json.dumps(results))
+PY
+)"
+        echo "[core] cleared stale stop marker: $stop_request_path"
+    fi
+
+    if python3 - "$actions_json" <<'PY'
+import json, sys
+actions = json.loads(sys.argv[1] or "[]")
+raise SystemExit(0 if any(item.get("action") == "service_start" for item in actions) else 1)
+PY
+    then
+        local service_token_meta="" service_token_source="" service_token_value=""
+        service_token_meta="$(resolve_loom_service_token || true)"
+        if [ -n "$service_token_meta" ]; then
+            service_token_source="${service_token_meta%%$'\t'*}"
+            service_token_value="${service_token_meta#*$'\t'}"
+        fi
+        if [ -z "$service_token_value" ]; then
+            printf '%s\n' 'loom: LOOM_SERVICE_TOKEN is missing and no compatible fallback was found' >/tmp/core-doctor-service-start.txt
+            action_results_json="$(python3 - "$action_results_json" /tmp/core-doctor-service-start.txt <<'PY'
+import json, pathlib, sys
+results = json.loads(sys.argv[1] or "[]")
+detail = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace").strip()
+results.append({"action": "service_start", "ok": False, "output_path": sys.argv[2], "detail": detail})
+print(json.dumps(results))
+PY
+)"
+        elif LOOM_SERVICE_TOKEN="$service_token_value" "$LOOM_BIN" service start --root "$LOOM_ROOT" --format human >/tmp/core-doctor-service-start.txt 2>&1; then
+            action_results_json="$(python3 - "$action_results_json" /tmp/core-doctor-service-start.txt <<'PY'
+import json, sys
+results = json.loads(sys.argv[1] or "[]")
+results.append({"action": "service_start", "ok": True, "output_path": sys.argv[2]})
+print(json.dumps(results))
+PY
+)"
+        else
+            action_results_json="$(python3 - "$action_results_json" /tmp/core-doctor-service-start.txt "$service_token_source" <<'PY'
+import json, pathlib, sys
+results = json.loads(sys.argv[1] or "[]")
+detail = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8", errors="replace").strip()
+results.append({"action": "service_start", "ok": False, "output_path": sys.argv[2], "detail": detail, "token_source": sys.argv[3]})
+print(json.dumps(results))
+PY
+)"
+        fi
+        cat /tmp/core-doctor-service-start.txt
+        sleep 2
+    fi
+
+    after_checks_json="$("$LOOM_BIN" doctor --root "$LOOM_ROOT" --format json)"
+    service_after_json="$("$LOOM_BIN" service status --root "$LOOM_ROOT" --format json 2>/dev/null || printf '{}')"
+    _write_doctor_receipt "fix" "$before_checks_json" "$after_checks_json" "$actions_json" "$service_before_json" "$service_after_json" "$action_results_json"
+    echo "[core] doctor receipt: $CORE_LAST_DOCTOR_FILE"
+}
+
+cmd_doctor() {
+    require_loom
+    require_runtime
+
+    local subcmd="${1:-run}"
+    case "$subcmd" in
+        --fix|fix)
+            shift || true
+            cmd_doctor_fix "$@"
+            ;;
+        show)
+            [ -f "$CORE_LAST_DOCTOR_FILE" ] || die "No Core doctor receipt captured yet. Run: ./scripts/core.sh doctor"
+            cat "$CORE_LAST_DOCTOR_FILE"
+            ;;
+        path)
+            [ -f "$CORE_LAST_DOCTOR_FILE" ] || die "No Core doctor receipt captured yet. Run: ./scripts/core.sh doctor"
+            echo "$CORE_LAST_DOCTOR_FILE"
+            ;;
+        summary)
+            [ -f "$CORE_LAST_DOCTOR_FILE" ] || die "No Core doctor receipt captured yet. Run: ./scripts/core.sh doctor"
+            python3 - "$CORE_LAST_DOCTOR_FILE" <<'PY'
+import json, sys
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+print("[core] doctor summary")
+print(f"  mode:        {payload.get('mode') or 'unknown'}")
+print(f"  captured_at: {payload.get('captured_at') or ''}")
+before = dict(payload.get("summary_before") or {})
+after = dict(payload.get("summary_after") or {})
+print(f"  before:      OK={before.get('OK',0)} WARN={before.get('WARN',0)} CRITICAL={before.get('CRITICAL',0)}")
+print(f"  after:       OK={after.get('OK',0)} WARN={after.get('WARN',0)} CRITICAL={after.get('CRITICAL',0)}")
+actions = list(payload.get("actions") or [])
+print(f"  actions:     {len(actions)}")
+for item in actions:
+    print(f"    - {item.get('action')}: {item.get('reason') or ''}")
+results = list(payload.get("action_results") or [])
+if results:
+    print(f"  outcomes:    {len(results)}")
+    for item in results:
+        status = "ok" if item.get("ok") else "failed"
+        detail = str(item.get("detail") or "").strip()
+        print(f"    - {item.get('action')}: {status}")
+        if detail:
+            print(f"      detail: {detail[:160]}")
+service_after = dict(payload.get("service_after") or {})
+effective_health = str(service_after.get('health') or service_after.get('service_status') or '').strip()
+effective_reason = ""
+checks_after = list(payload.get("checks_after") or [])
+critical_after = int(before.get('CRITICAL', 0))
+critical_after = int(after.get('CRITICAL', 0))
+onboard_daemon_enabled = None
+for item in checks_after:
+    if str(item.get("label") or "").strip() == "onboard_runtime":
+        detail = str(item.get("detail") or "")
+        if "daemon=supervisor disabled" in detail:
+            onboard_daemon_enabled = False
+        elif "daemon=supervisor enabled" in detail:
+            onboard_daemon_enabled = True
+if service_after:
+    if (
+        str(service_after.get("running")).lower() == "true"
+        and effective_health == "degraded"
+        and critical_after == 0
+        and onboard_daemon_enabled is False
+    ):
+        effective_health = "healthy"
+        effective_reason = "daemon disabled by onboarding policy"
+if service_after:
+    print(f"  service:     running={service_after.get('running')} health={service_after.get('health') or service_after.get('service_status') or ''}")
+    if effective_health:
+        print(f"  effective_service: {effective_health}")
+    if effective_reason:
+        print(f"  effective_reason:  {effective_reason}")
+PY
+            ;;
+        run|show-human)
+            shift || true
+            local before_checks_json service_status_json
+            before_checks_json="$("$LOOM_BIN" doctor --root "$LOOM_ROOT" --format json)"
+            service_status_json="$("$LOOM_BIN" service status --root "$LOOM_ROOT" --format json 2>/dev/null || printf '{}')"
+            _write_doctor_receipt "inspect" "$before_checks_json" "$before_checks_json" '[]' "$service_status_json" "$service_status_json" '[]'
+            _render_doctor_overview ""
+            echo ""
+            echo "[core] doctor receipt: $CORE_LAST_DOCTOR_FILE"
+            ;;
+        *)
+            local before_checks_json service_status_json
+            before_checks_json="$("$LOOM_BIN" doctor --root "$LOOM_ROOT" --format json)"
+            service_status_json="$("$LOOM_BIN" service status --root "$LOOM_ROOT" --format json 2>/dev/null || printf '{}')"
+            _write_doctor_receipt "inspect" "$before_checks_json" "$before_checks_json" '[]' "$service_status_json" "$service_status_json" '[]'
+            _render_doctor_overview ""
+            echo ""
+            echo "[core] doctor receipt: $CORE_LAST_DOCTOR_FILE"
+            ;;
+    esac
 }
 
 cmd_provider() {
@@ -885,11 +1745,20 @@ cmd_provider() {
         list)
             cmd_provider_list "${@}"
             ;;
+        fix)
+            cmd_provider_fix "${@}"
+            ;;
+        restore)
+            cmd_provider_restore "${@}"
+            ;;
+        probe)
+            cmd_provider_probe "${@}"
+            ;;
         use)
             cmd_provider_use "${@}"
             ;;
         *)
-            die "Usage: core.sh provider <status|profiles|auth|route|login|list|use> [args]"
+            die "Usage: core.sh provider <status|profiles|auth|route|login|list|fix|restore|probe|use> [args]"
             ;;
     esac
 }
@@ -975,7 +1844,10 @@ if model_registry:
 
 # Env override check
 try:
-    meta = brain_router.manager_exec_metadata(runtime_env=os.environ, model_hint="")
+    runtime_env = dict(os.environ)
+    runtime_env.setdefault("MERIDIAN_ORG_ID", org_id)
+    runtime_env.setdefault("MERIDIAN_WORKSPACE_ORG_ID", org_id)
+    meta = brain_router.manager_exec_metadata(runtime_env=runtime_env, model_hint="")
     print("Effective Manager Execution")
     print("-" * 40)
     print(f"  profile:   {meta.get('provider_profile', '?')}")
@@ -1038,10 +1910,16 @@ if transport == "cli_session":
     if current_route:
         cli_bin = str(current_route.get("cli_bin") or "").strip()
         cli_home = str(current_route.get("cli_home") or "").strip()
-    if not cli_bin:
-        cli_bin = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_BIN") or os.environ.get("MERIDIAN_CODEX_BIN") or "").strip()
-    if not cli_home:
-        cli_home = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_HOME") or os.environ.get("MERIDIAN_CODEX_HOME") or os.environ.get("HOME") or "").strip()
+    explicit_cli_bin = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_BIN") or os.environ.get("MERIDIAN_CODEX_BIN") or "").strip()
+    explicit_cli_home = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_HOME") or os.environ.get("MERIDIAN_CODEX_HOME") or "").strip()
+    if explicit_cli_bin:
+        cli_bin = explicit_cli_bin
+    elif not cli_bin:
+        cli_bin = explicit_cli_bin
+    if explicit_cli_home:
+        cli_home = explicit_cli_home
+    elif not cli_home:
+        cli_home = str(os.environ.get("HOME") or "").strip()
 
 if not endpoint and transport == "http_json":
     if current_route:
@@ -1095,6 +1973,110 @@ PY
     echo "[core] run 'core.sh provider list' to verify"
 }
 
+cmd_provider_fix() {
+    local gateway_env="${MERIDIAN_LOCAL_ENV_DIR}/.env.gateway"
+    local main_env="${MERIDIAN_LOCAL_ENV_DIR}/.env"
+    local restore_endpoint=""
+    restore_endpoint="$(read_env_file_value "$gateway_env" "MERIDIAN_BRAIN_MANAGER_ENDPOINT" 2>/dev/null || true)"
+    [ -n "$restore_endpoint" ] || restore_endpoint="$(read_env_file_value "$main_env" "MERIDIAN_MANAGER_XAI_BASE_URL" 2>/dev/null || true)"
+    if [ -n "$restore_endpoint" ]; then
+        echo "[core] provider fix"
+        echo "  strategy:    restore Meridian-owned manager route"
+        cmd_provider_restore
+        return 0
+    fi
+    die "provider fix requires Meridian manager config. Set MERIDIAN_BRAIN_MANAGER_ENDPOINT in ${gateway_env} or MERIDIAN_MANAGER_XAI_BASE_URL in ${main_env}, then run: core.sh provider restore"
+}
+
+cmd_provider_restore() {
+    local gateway_env="${MERIDIAN_LOCAL_ENV_DIR}/.env.gateway"
+    local main_env="${MERIDIAN_LOCAL_ENV_DIR}/.env"
+    local endpoint="" model="" auth_env="" key_pool="" profile=""
+
+    endpoint="$(read_env_file_value "$gateway_env" "MERIDIAN_BRAIN_MANAGER_ENDPOINT" 2>/dev/null || true)"
+    [ -n "$endpoint" ] || endpoint="$(read_env_file_value "$main_env" "MERIDIAN_MANAGER_XAI_BASE_URL" 2>/dev/null || true)"
+
+    model="$(read_env_file_value "$gateway_env" "MERIDIAN_BRAIN_MANAGER_MODEL" 2>/dev/null || true)"
+    [ -n "$model" ] || model="$(read_env_file_value "$main_env" "MERIDIAN_MANAGER_MODEL" 2>/dev/null || true)"
+    [ -n "$model" ] || model="grok-4-1-fast-reasoning"
+
+    profile="$(read_env_file_value "$main_env" "MERIDIAN_BRAIN_MANAGER_PROFILE_NAME" 2>/dev/null || true)"
+    [ -n "$profile" ] || profile="manager_primary"
+
+    auth_env="$(read_env_file_value "$gateway_env" "MERIDIAN_BRAIN_MANAGER_AUTH_ENV" 2>/dev/null || true)"
+    [ -n "$auth_env" ] || auth_env="MERIDIAN_MANAGER_XAI_API_KEY_1"
+
+    key_pool="$(read_env_file_value "$gateway_env" "MERIDIAN_BRAIN_MANAGER_KEY_ENV_POOL" 2>/dev/null || true)"
+    [ -n "$key_pool" ] || key_pool="MERIDIAN_MANAGER_XAI_API_KEY_1,MERIDIAN_MANAGER_XAI_API_KEY_2,MERIDIAN_MANAGER_XAI_API_KEY_3"
+
+    [ -n "$endpoint" ] || die "provider restore could not resolve a Meridian manager endpoint from .env/.env.gateway"
+
+    echo "[core] provider restore"
+    echo "  target_profile: $profile"
+    echo "  transport:      http_json"
+    echo "  model:          $model"
+    echo "  endpoint:       $endpoint"
+    echo "  auth_env:       $auth_env"
+    echo "  key_pool:       $(python3 - "$key_pool" <<'PY'
+import sys
+items = [item.strip() for item in (sys.argv[1] or '').split(',') if item.strip()]
+print(",".join(items))
+PY
+)"
+
+    cmd_provider_use "$profile" --transport http_json --model "$model" --endpoint "$endpoint" --auth-env "$auth_env" --key-env "$key_pool"
+}
+
+cmd_provider_probe() {
+    local probe_text="${1:-provider-probe-ok}"
+    local timeout="${MERIDIAN_CORE_PROVIDER_PROBE_TIMEOUT:-60}"
+    local org_id
+    org_id="$(resolve_org_id)"
+    [ -n "$org_id" ] || die "Could not resolve org_id. Run onboard.sh first."
+    local gateway_env="${MERIDIAN_LOCAL_ENV_DIR}/.env.gateway"
+    local main_env="${MERIDIAN_LOCAL_ENV_DIR}/.env"
+    set -a
+    [ -f "$main_env" ] && . "$main_env"
+    [ -f "$gateway_env" ] && . "$gateway_env"
+    set +a
+    python3 - "$MERIDIAN_ROOT" "$probe_text" "$timeout" "$org_id" <<'PY'
+import json, os, sys
+
+meridian_root, probe_text, timeout_text, org_id = sys.argv[1:5]
+timeout = int(timeout_text or "60")
+sys.path.insert(0, os.path.join(meridian_root, "intelligence"))
+sys.path.insert(0, os.path.join(meridian_root, "intelligence", "company", "meridian_platform"))
+from company.meridian_platform import brain_router
+
+runtime_env = dict(os.environ)
+runtime_env.setdefault("MERIDIAN_ORG_ID", org_id)
+runtime_env.setdefault("MERIDIAN_WORKSPACE_ORG_ID", org_id)
+for name in list(runtime_env):
+    if name.startswith("MERIDIAN_BRAIN_MANAGER_"):
+        runtime_env[name] = ""
+runtime_env["MERIDIAN_BRAIN_ROUTER_CONFIG_PATH"] = ""
+result = brain_router.execute_manager(
+    runtime_env=runtime_env,
+    system_prompt="Reply with exactly the provided probe text and nothing else.",
+    user_prompt=f"Reply with exactly: {probe_text}",
+    model=str(runtime_env.get("MERIDIAN_BRAIN_MANAGER_MODEL") or "").strip(),
+    timeout=timeout,
+)
+print("[core] provider probe")
+print(f"  ok:           {bool(result.get('ok'))}")
+print(f"  provider:     {str(result.get('provider_profile') or '')}")
+print(f"  transport:    {str(result.get('transport_kind') or '')}")
+print(f"  auth:         {str(result.get('auth_mode') or '')}")
+print(f"  route_id:     {str(result.get('route_decision', {}).get('route_id') or result.get('route_id') or '')}")
+if result.get("ok"):
+    print(f"  output:       {str(result.get('output_text') or '').strip()}")
+else:
+    print(f"  error_code:   {str(result.get('error_code') or '')}")
+    print(f"  error:        {str(result.get('stderr') or '').strip()[:300]}")
+    raise SystemExit(1)
+PY
+}
+
 cmd_config() {
     local subcmd="${1:-show}"
     shift || true
@@ -1118,7 +2100,7 @@ cmd_config() {
 }
 
 # Allowed config keys for safe editing via 'core.sh config set'
-CORE_CONFIG_ALLOWED_KEYS="MERIDIAN_BRAIN_MANAGER_MODEL MERIDIAN_BRAIN_MANAGER_TRANSPORT MERIDIAN_BRAIN_MANAGER_ENDPOINT MERIDIAN_BRAIN_MANAGER_PROFILE_NAME MERIDIAN_BRAIN_MANAGER_CLI_BIN MERIDIAN_BRAIN_MANAGER_CLI_HOME MERIDIAN_BRAIN_MANAGER_MAX_TOKENS MERIDIAN_CORE_LONG_OUTPUT_CHARS MERIDIAN_CORE_LONG_OUTPUT_LINES MERIDIAN_GATEWAY_URL MERIDIAN_SESSION_ID"
+CORE_CONFIG_ALLOWED_KEYS="MERIDIAN_BRAIN_MANAGER_MODEL MERIDIAN_BRAIN_MANAGER_TRANSPORT MERIDIAN_BRAIN_MANAGER_ENDPOINT MERIDIAN_BRAIN_MANAGER_PROFILE_NAME MERIDIAN_BRAIN_MANAGER_CLI_BIN MERIDIAN_BRAIN_MANAGER_CLI_HOME MERIDIAN_BRAIN_MANAGER_MAX_TOKENS MERIDIAN_CORE_LONG_OUTPUT_CHARS MERIDIAN_CORE_LONG_OUTPUT_LINES MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS MERIDIAN_GATEWAY_URL MERIDIAN_SESSION_ID"
 
 cmd_config_set() {
     local key="${1:-}"
@@ -1219,6 +2201,49 @@ cmd_runtime() {
             ;;
         *)
             die "Usage: core.sh runtime <status|logs|health> [args]"
+            ;;
+    esac
+}
+
+# ── Command: ingress ──────────────────────────────────────────────────────
+
+cmd_ingress() {
+    local subcmd="${1:-status}"
+    shift || true
+
+    case "$subcmd" in
+        status)
+            render_ingress_snapshot "pending" "${1:-20}"
+            ;;
+        quarantine)
+            if [ "${1:-}" = "--apply" ]; then
+                shift || true
+                local older_than="${1:-${MERIDIAN_CORE_DOCTOR_INGRESS_MAX_AGE_SECONDS:-300}}"
+                local quarantine_json
+                quarantine_json="$(MERIDIAN_CORE_DOCTOR_INGRESS_MAX_AGE_SECONDS="$older_than" quarantine_stale_ingress_requests)"
+                python3 - "$quarantine_json" <<'PY'
+import json, sys
+payload = json.loads(sys.argv[1] or "{}")
+print("[core] ingress quarantine")
+print(f"  moved_count:     {int(payload.get('moved_count') or 0)}")
+for item in list(payload.get("moved_files") or [])[:20]:
+    detail = str(item.get("stale_reason") or "")
+    if not detail:
+        paths = list(item.get("stale_paths") or [])
+        detail = ", ".join(paths[:2])
+    print(f"    - {item.get('file')}: {detail}")
+PY
+            else
+                render_ingress_snapshot "quarantine" "${1:-20}"
+            fi
+            ;;
+        list)
+            local bucket="${1:-pending}"
+            shift || true
+            render_ingress_snapshot "$bucket" "${1:-50}"
+            ;;
+        *)
+            die "Usage: core.sh ingress <status|list [pending|quarantine] [LIMIT]|quarantine [LIMIT]|quarantine --apply [OLDER_THAN_SECONDS]>"
             ;;
     esac
 }
@@ -1324,6 +2349,315 @@ for path in paths:
 print(f"[core] no session history found for web_api:{session_id}")
 PY
             ;;
+        search)
+            local query="${1:-}"
+            local limit="${2:-12}"
+            [ -n "$query" ] || die "Usage: core.sh session search QUERY [LIMIT]"
+            python3 - "$LOOM_ROOT" "$query" "$limit" <<'PY'
+import glob, json, os, re, sys
+
+loom_root, query, limit_text = sys.argv[1:4]
+limit = max(1, int(limit_text or "12"))
+needle = str(query or "").strip().lower()
+if not needle:
+    print("[core] empty search query", file=sys.stderr)
+    raise SystemExit(1)
+
+paths = sorted(
+    glob.glob(os.path.join(loom_root, "state", "session-history", "events", "*.json")),
+    key=os.path.getmtime,
+    reverse=True,
+)
+hits = []
+for path in paths:
+    try:
+        payload = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        continue
+    session_key = str(payload.get("session_key") or "").strip()
+    updated_at = str(payload.get("updated_at") or "").strip()
+    for idx, event in enumerate(list(payload.get("events") or [])):
+        text = str(event.get("text") or "").strip()
+        if not text:
+            continue
+        haystack = text.lower()
+        if needle not in haystack:
+            continue
+        start = haystack.find(needle)
+        left = max(0, start - 90)
+        right = min(len(text), start + len(query) + 140)
+        snippet = text[left:right].replace("\n", " ").strip()
+        if left > 0:
+            snippet = "..." + snippet
+        if right < len(text):
+            snippet = snippet + "..."
+        hits.append({
+            "session_key": session_key,
+            "updated_at": updated_at,
+            "history_type": str(event.get("history_type") or "").strip(),
+            "status": str(event.get("status") or "").strip(),
+            "speaker": str(event.get("speaker") or "").strip() or "system",
+            "snippet": snippet,
+            "index": idx,
+        })
+
+if not hits:
+    print(f"[core] no session hits for: {query}")
+    raise SystemExit(0)
+
+print(f"[core] session search: {query}")
+print(f"  hits: {min(len(hits), limit)} / {len(hits)}")
+for item in hits[:limit]:
+    print(f"- {item['session_key']} #{item['index']} [{item['history_type']}:{item['status']}] speaker={item['speaker']} updated_at={item['updated_at']}")
+    print(f"  {item['snippet']}")
+PY
+            ;;
+        resume)
+            local session_key=""
+            local event_index=""
+            local queue_after="0"
+            local context_after="0"
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --queue)
+                        queue_after="1"
+                        shift
+                        ;;
+                    --context)
+                        context_after="1"
+                        shift
+                        ;;
+                    *)
+                        if [ -z "$session_key" ]; then
+                            session_key="$1"
+                        elif [ -z "$event_index" ]; then
+                            event_index="$1"
+                        else
+                            die "Usage: core.sh session resume SESSION_KEY EVENT_INDEX [--queue|--context]"
+                        fi
+                        shift
+                        ;;
+                esac
+            done
+            [ -n "$session_key" ] && [ -n "$event_index" ] || die "Usage: core.sh session resume SESSION_KEY EVENT_INDEX [--queue|--context]"
+            ensure_core_state_dir
+            python3 - "$LOOM_ROOT" "$session_key" "$event_index" "$CORE_LAST_RESUME_FILE" <<'PY'
+import glob, json, os, sys
+from pathlib import Path
+
+loom_root, session_key, event_index_text, out_path = sys.argv[1:5]
+event_index = int(event_index_text)
+paths = sorted(
+    glob.glob(os.path.join(loom_root, "state", "session-history", "events", "*.json")),
+    key=os.path.getmtime,
+    reverse=True,
+)
+payload = None
+for path in paths:
+    try:
+        data = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        continue
+    if str(data.get("session_key") or "").strip() == session_key:
+        payload = data
+        break
+
+if payload is None:
+    print(f"[core] no session history found for {session_key}", file=sys.stderr)
+    raise SystemExit(1)
+
+events = list(payload.get("events") or [])
+if event_index < 0 or event_index >= len(events):
+    print(f"[core] event index out of range for {session_key}: {event_index}", file=sys.stderr)
+    raise SystemExit(1)
+
+event = dict(events[event_index] or {})
+history_type = str(event.get("history_type") or "").strip()
+status = str(event.get("status") or "").strip()
+speaker = str(event.get("speaker") or "").strip() or "system"
+text = str(event.get("text") or "").strip()
+updated_at = str(payload.get("updated_at") or "").strip()
+
+root = Path(out_path).resolve().parent
+root.mkdir(parents=True, exist_ok=True)
+resume_path = Path(out_path).resolve()
+content = "\n".join([
+    "# Meridian Resumed Context",
+    "",
+    f"- session_key: `{session_key}`",
+    f"- event_index: `{event_index}`",
+    f"- updated_at: `{updated_at}`",
+    f"- history_type: `{history_type}`",
+    f"- status: `{status}`",
+    f"- speaker: `{speaker}`",
+    "",
+    "## Event Text",
+    "",
+    text or "(empty)",
+    "",
+])
+resume_path.write_text(content, encoding="utf-8")
+print(f"[core] resumed context written: {resume_path}")
+print(f"  session_key: {session_key}")
+print(f"  event_index: {event_index}")
+print(f"  history_type: {history_type}")
+print(f"  status:      {status}")
+PY
+            if [ "$queue_after" = "1" ]; then
+                local current_json merged_json
+                current_json="$(load_pending_files_json)"
+                merged_json="$(merge_pending_file_paths_json "$current_json" "$CORE_LAST_RESUME_FILE")"
+                save_pending_files_json "$merged_json"
+                python3 - "$merged_json" "$CORE_LAST_RESUME_FILE" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+resume_path = os.path.abspath(os.path.expanduser(sys.argv[2]))
+queued = any(os.path.abspath(os.path.expanduser(item)) == resume_path for item in items)
+print(f"[core] resumed context queued: {queued}")
+print(f"  total_files: {len(items)}")
+PY
+            fi
+            if [ "$context_after" = "1" ]; then
+                local current_context_json merged_context_json
+                current_context_json="$(load_context_files_json)"
+                merged_context_json="$(merge_pending_file_paths_json "$current_context_json" "$CORE_LAST_RESUME_FILE")"
+                save_context_files_json "$merged_context_json"
+                python3 - "$merged_context_json" "$CORE_LAST_RESUME_FILE" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+resume_path = os.path.abspath(os.path.expanduser(sys.argv[2]))
+attached = any(os.path.abspath(os.path.expanduser(item)) == resume_path for item in items)
+print(f"[core] resumed context added to persistent context: {attached}")
+print(f"  total_files: {len(items)}")
+PY
+            fi
+            ;;
+        reuse)
+            local query=""
+            local queue_after="0"
+            local context_after="0"
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --queue)
+                        queue_after="1"
+                        shift
+                        ;;
+                    --context)
+                        context_after="1"
+                        shift
+                        ;;
+                    *)
+                        if [ -z "$query" ]; then
+                            query="$1"
+                        else
+                            query="$query $1"
+                        fi
+                        shift
+                        ;;
+                esac
+            done
+            [ -n "$query" ] || die "Usage: core.sh session reuse QUERY [--queue|--context]"
+            ensure_core_state_dir
+            python3 - "$LOOM_ROOT" "$query" "$CORE_LAST_RESUME_FILE" <<'PY'
+import glob, json, os, sys
+from pathlib import Path
+
+loom_root, query, out_path = sys.argv[1:4]
+needle = str(query or "").strip().lower()
+if not needle:
+    print("[core] empty reuse query", file=sys.stderr)
+    raise SystemExit(1)
+
+paths = sorted(
+    glob.glob(os.path.join(loom_root, "state", "session-history", "events", "*.json")),
+    key=os.path.getmtime,
+    reverse=True,
+)
+match = None
+for path in paths:
+    try:
+        payload = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        continue
+    session_key = str(payload.get("session_key") or "").strip()
+    updated_at = str(payload.get("updated_at") or "").strip()
+    for idx, event in enumerate(list(payload.get("events") or [])):
+        text = str(event.get("text") or "").strip()
+        if not text or needle not in text.lower():
+            continue
+        match = {
+            "session_key": session_key,
+            "event_index": idx,
+            "updated_at": updated_at,
+            "history_type": str(event.get("history_type") or "").strip(),
+            "status": str(event.get("status") or "").strip(),
+            "speaker": str(event.get("speaker") or "").strip() or "system",
+            "text": text,
+        }
+        break
+    if match:
+        break
+
+if match is None:
+    print(f"[core] no session hits for reuse query: {query}", file=sys.stderr)
+    raise SystemExit(1)
+
+root = Path(out_path).resolve().parent
+root.mkdir(parents=True, exist_ok=True)
+resume_path = Path(out_path).resolve()
+content = "\n".join([
+    "# Meridian Resumed Context",
+    "",
+    f"- session_key: `{match['session_key']}`",
+    f"- event_index: `{match['event_index']}`",
+    f"- updated_at: `{match['updated_at']}`",
+    f"- history_type: `{match['history_type']}`",
+    f"- status: `{match['status']}`",
+    f"- speaker: `{match['speaker']}`",
+    f"- reuse_query: `{query}`",
+    "",
+    "## Event Text",
+    "",
+    match["text"] or "(empty)",
+    "",
+])
+resume_path.write_text(content, encoding="utf-8")
+print(f"[core] reused context written: {resume_path}")
+print(f"  query:       {query}")
+print(f"  session_key: {match['session_key']}")
+print(f"  event_index: {match['event_index']}")
+print(f"  history_type:{match['history_type']}")
+print(f"  status:      {match['status']}")
+PY
+            if [ "$queue_after" = "1" ]; then
+                local current_json merged_json
+                current_json="$(load_pending_files_json)"
+                merged_json="$(merge_pending_file_paths_json "$current_json" "$CORE_LAST_RESUME_FILE")"
+                save_pending_files_json "$merged_json"
+                python3 - "$merged_json" "$CORE_LAST_RESUME_FILE" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+resume_path = os.path.abspath(os.path.expanduser(sys.argv[2]))
+queued = any(os.path.abspath(os.path.expanduser(item)) == resume_path for item in items)
+print(f"[core] reused context queued: {queued}")
+print(f"  total_files: {len(items)}")
+PY
+            fi
+            if [ "$context_after" = "1" ]; then
+                local current_context_json merged_context_json
+                current_context_json="$(load_context_files_json)"
+                merged_context_json="$(merge_pending_file_paths_json "$current_context_json" "$CORE_LAST_RESUME_FILE")"
+                save_context_files_json "$merged_context_json"
+                python3 - "$merged_context_json" "$CORE_LAST_RESUME_FILE" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+resume_path = os.path.abspath(os.path.expanduser(sys.argv[2]))
+attached = any(os.path.abspath(os.path.expanduser(item)) == resume_path for item in items)
+print(f"[core] reused context added to persistent context: {attached}")
+print(f"  total_files: {len(items)}")
+PY
+            fi
+            ;;
         export)
             local session_arg="${1:-}"
             local out_dir="${2:-}"
@@ -1407,7 +2741,7 @@ PY
             cmd_session_archive "${@}"
             ;;
         *)
-            die "Usage: core.sh session <current|use|new|list|show|export|reset|archive> [args]"
+            die "Usage: core.sh session <current|use|new|list|show|search|resume|reuse|export|reset|archive> [args]"
             ;;
     esac
 }
@@ -1528,6 +2862,7 @@ cmd_browse() {
     local url="${1:-}"
     [ -n "$url" ] || die "Usage: core.sh browse URL"
     require_loom; require_runtime
+    validate_browse_url "$url" || die "browse blocked by Core browser policy: $url"
 
     local org_id; org_id="$(resolve_org_id)"
     local agent_id; agent_id="$(resolve_agent_id)"
@@ -1555,11 +2890,98 @@ cmd_browse() {
     fi
 }
 
+validate_browse_url() {
+    python3 - "$1" "${MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS:-}" <<'PY'
+import sys
+from urllib.parse import urlparse
+
+url = str(sys.argv[1] or "").strip()
+raw_allowlist = str(sys.argv[2] or "").strip()
+parsed = urlparse(url)
+
+scheme = str(parsed.scheme or "").strip().lower()
+if scheme not in {"http", "https"}:
+    raise SystemExit(f"scheme '{scheme or '(missing)'}' is not allowed; use http/https only")
+
+host = str(parsed.hostname or "").strip().lower()
+if not host:
+    raise SystemExit("missing hostname")
+
+if raw_allowlist:
+    allowed = [item.strip().lower() for item in raw_allowlist.split(",") if item.strip()]
+    if host not in allowed and not any(host.endswith("." + item) for item in allowed):
+        raise SystemExit(f"host '{host}' is not in MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS")
+PY
+}
+
 # ── Command: research ─────────────────────────────────────────────────────
 
-cmd_research() {
-    local query="${1:-}"
-    [ -n "$query" ] || die "Usage: core.sh research \"command [args]\""
+build_research_argv_json() {
+    python3 - "$1" <<'PY'
+import json, shlex, sys
+
+query = str(sys.argv[1] or "").strip()
+if not query:
+    raise SystemExit("empty research query")
+try:
+    argv = shlex.split(query)
+except Exception as exc:
+    raise SystemExit(f"could not parse command: {exc}")
+if not argv:
+    raise SystemExit("empty research argv")
+
+first = argv[0]
+allowed = {
+    "rg", "ls", "cat", "sed", "awk", "jq", "head", "tail", "wc", "find",
+    "sort", "uniq", "cut", "egrep", "file", "git", "ps", "ss", "curl",
+}
+if first not in allowed:
+    raise SystemExit(f"command '{first}' is not allowed in core.sh research")
+
+if first == "git":
+    if len(argv) < 2:
+        raise SystemExit("git research commands require a subcommand")
+    allowed_git = {"status", "diff", "log", "show", "rev-parse", "branch", "remote", "ls-files", "grep"}
+    if argv[1] not in allowed_git:
+        raise SystemExit(f"git subcommand '{argv[1]}' is not allowed in core.sh research")
+
+if first == "curl":
+    banned_flags = {"-X", "--request", "-d", "--data", "--data-binary", "--data-raw", "-F", "--form", "-T", "--upload-file"}
+    for token in argv[1:]:
+        if token in banned_flags:
+            raise SystemExit(f"curl flag '{token}' is not allowed in core.sh research")
+
+print(json.dumps(argv, ensure_ascii=False))
+PY
+}
+
+core_shell_preset_argv_json() {
+    python3 - "$1" "$MERIDIAN_ROOT" "$LOOM_ROOT" <<'PY'
+import json, os, sys
+
+preset = str(sys.argv[1] or "").strip().lower()
+meridian_root = sys.argv[2]
+loom_root = sys.argv[3]
+
+presets = {
+    "repo-status": ["git", "-C", meridian_root, "status", "--short"],
+    "repo-diff": ["git", "-C", meridian_root, "diff", "--stat"],
+    "repo-log": ["git", "-C", meridian_root, "log", "--oneline", "-5"],
+    "runtime-events": ["tail", "-n", "20", os.path.join(loom_root, "artifacts", "runtime", "events", "stream.jsonl")],
+    "open-ports": ["ss", "-ltnp"],
+    "schedule-list": [os.path.join(meridian_root, "loom", "target", "release", "loom"), "schedule", "list", "--root", loom_root, "--format", "human"],
+}
+
+argv = presets.get(preset)
+if not argv:
+    raise SystemExit(f"unknown shell preset: {preset}")
+print(json.dumps(argv, ensure_ascii=False))
+PY
+}
+
+run_terminal_exec_argv_json() {
+    local argv_json="$1"
+    local label="${2:-terminal task}"
     require_loom; require_runtime
 
     local org_id; org_id="$(resolve_org_id)"
@@ -1567,11 +2989,7 @@ cmd_research() {
     [ -n "$org_id" ] || die "Could not resolve org_id. Run onboard.sh first."
     [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
 
-    # Build argv from the query string (split on spaces)
-    local argv_json
-    argv_json="$(python3 -c "import sys,json; q=sys.argv[1]; parts=q.split(); print(json.dumps(parts))" "$query")"
-
-    echo "[core] research: $query"
+    echo "[core] ${label}"
     local out
     out="$("$LOOM_BIN" action execute \
         --agent-id "$agent_id" \
@@ -1590,6 +3008,45 @@ cmd_research() {
     else
         echo "$out" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('worker_status',''))" 2>/dev/null || echo "$out"
     fi
+}
+
+cmd_research() {
+    local query="${1:-}"
+    [ -n "$query" ] || die "Usage: core.sh research \"command [args]\""
+    local argv_json
+    argv_json="$(build_research_argv_json "$query")" || die "unsafe research command: $query"
+    run_terminal_exec_argv_json "$argv_json" "research: $query"
+}
+
+# ── Command: shell ────────────────────────────────────────────────────────
+
+cmd_shell() {
+    local subcmd="${1:-list}"
+    shift || true
+
+    case "$subcmd" in
+        list)
+            cat <<'EOF'
+[core] shell presets
+  repo-status    git status --short
+  repo-diff      git diff --stat
+  repo-log       git log --oneline -5
+  runtime-events tail -n 20 runtime event stream
+  open-ports     ss -ltnp
+  schedule-list  loom schedule list --format human
+EOF
+            ;;
+        run)
+            local preset="${1:-}"
+            [ -n "$preset" ] || die "Usage: core.sh shell run PRESET"
+            local argv_json
+            argv_json="$(core_shell_preset_argv_json "$preset")" || die "unknown shell preset: $preset"
+            run_terminal_exec_argv_json "$argv_json" "shell preset: $preset"
+            ;;
+        *)
+            die "Usage: core.sh shell <list|run PRESET>"
+            ;;
+    esac
 }
 
 # ── Command: remember ─────────────────────────────────────────────────────
@@ -1642,52 +3099,205 @@ for e in entries:
 
 # ── Command: schedule ─────────────────────────────────────────────────────
 
-cmd_schedule() {
-    local name="${1:-}"; local every="${2:-3600}"
-    [ -n "$name" ] || die "Usage: core.sh schedule NAME [every_seconds]"
+schedule_job_id_slug() {
+    python3 - "$1" <<'PY'
+import re, sys
+raw = str(sys.argv[1] or "").strip().lower()
+slug = re.sub(r"[^a-z0-9]+", "-", raw).strip("-")
+print(slug or "core-routine")
+PY
+}
+
+cmd_schedule_status() {
+    require_loom; require_runtime
+    local raw
+    raw="$("$LOOM_BIN" schedule status --root "$LOOM_ROOT" --format json)"
+    python3 - "$raw" <<'PY'
+import json, sys
+payload = json.loads(sys.argv[1] or "{}")
+print("[core] schedule runtime")
+print(f"  total:   {int(payload.get('total_count') or 0)}")
+print(f"  enabled: {int(payload.get('enabled_count') or 0)}")
+print(f"  due:     {int(payload.get('due_count') or 0)}")
+registry = str(payload.get("registry_path") or "").strip()
+if registry:
+    print(f"  registry: {registry}")
+job_ids = payload.get("job_ids") or []
+if job_ids:
+    print("  jobs:")
+    for job_id in job_ids:
+        print(f"    - {job_id}")
+PY
+}
+
+cmd_schedule_list() {
+    require_loom; require_runtime
+    local raw
+    raw="$("$LOOM_BIN" schedule list --root "$LOOM_ROOT" --format json)"
+    python3 - "$raw" <<'PY'
+import datetime as dt, json, sys
+records = json.loads(sys.argv[1] or "[]")
+if not records:
+    print("[core] no scheduled jobs found")
+    raise SystemExit(0)
+print(f"[core] {len(records)} scheduled job(s):")
+for record in records:
+    status = "paused" if not bool(record.get("enabled", True)) else str(record.get("status") or "scheduled")
+    next_fire = record.get("next_fire_at_unix_ms")
+    if next_fire:
+        ts = dt.datetime.fromtimestamp(int(next_fire) / 1000, dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    else:
+        ts = "(none)"
+    print(
+        f"  {record.get('job_id','?')}  "
+        f"agent={record.get('agent_id','?')}  "
+        f"kind={record.get('job_kind','?')}  "
+        f"schedule={record.get('schedule_kind','?')}  "
+        f"status={status}  "
+        f"next={ts}"
+    )
+PY
+}
+
+cmd_schedule_show() {
+    local job_id="${1:-}"
+    [ -n "$job_id" ] || die "Usage: core.sh schedule show JOB_ID"
+    require_loom; require_runtime
+    "$LOOM_BIN" schedule show --job-id "$job_id" --root "$LOOM_ROOT" --format human
+}
+
+cmd_schedule_every() {
+    local name="${1:-}"
+    local every="${2:-3600}"
+    [ -n "$name" ] || die "Usage: core.sh schedule every NAME SECONDS"
+    [ -n "$every" ] || die "Usage: core.sh schedule every NAME SECONDS"
     require_loom; require_runtime
 
     local agent_id; agent_id="$(resolve_agent_id)"
     [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
 
-    local result
-    result="$("$LOOM_BIN" heartbeat schedule \
+    local job_id
+    job_id="$(schedule_job_id_slug "$name")"
+    "$LOOM_BIN" schedule add \
         --agent-id "$agent_id" \
-        --capability "loom.system.info.v1" \
-        --heartbeat-id "core-$(echo "$name" | tr ' ' '-' | tr '[:upper:]' '[:lower:]')-$(date +%s)" \
-        --schedule "interval" \
+        --job-id "$job_id" \
+        --job-kind "$job_id" \
+        --schedule interval \
         --every-seconds "$every" \
+        --source-kind manual \
         --root "$LOOM_ROOT" \
-        --format json 2>/dev/null)"
-    local hb_id
-    hb_id="$(echo "$result" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('heartbeat_id',''))" 2>/dev/null || true)"
-    echo "[core] scheduled: $name every ${every}s (id: $hb_id)"
+        --format human
+}
+
+cmd_schedule_daily() {
+    local name="${1:-}"
+    local hhmm="${2:-}"
+    local tz="${3:-UTC}"
+    [ -n "$name" ] || die "Usage: core.sh schedule daily NAME HH:MM [TZ]"
+    [ -n "$hhmm" ] || die "Usage: core.sh schedule daily NAME HH:MM [TZ]"
+    require_loom; require_runtime
+
+    local agent_id; agent_id="$(resolve_agent_id)"
+    [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
+
+    local job_id
+    job_id="$(schedule_job_id_slug "$name")"
+    "$LOOM_BIN" schedule add \
+        --agent-id "$agent_id" \
+        --job-id "$job_id" \
+        --job-kind "$job_id" \
+        --schedule daily \
+        --expression "$hhmm" \
+        --timezone "$tz" \
+        --source-kind manual \
+        --root "$LOOM_ROOT" \
+        --format human
+}
+
+cmd_schedule_pause() {
+    local job_id="${1:-}"
+    [ -n "$job_id" ] || die "Usage: core.sh schedule pause JOB_ID"
+    require_loom; require_runtime
+    "$LOOM_BIN" schedule pause --job-id "$job_id" --root "$LOOM_ROOT" --format human
+}
+
+cmd_schedule_cancel() {
+    local job_id="${1:-}"
+    [ -n "$job_id" ] || die "Usage: core.sh schedule cancel JOB_ID"
+    require_loom; require_runtime
+    "$LOOM_BIN" schedule cancel --job-id "$job_id" --root "$LOOM_ROOT" --format human
+}
+
+cmd_schedule_run() {
+    local job_id="${1:-}"
+    [ -n "$job_id" ] || die "Usage: core.sh schedule run JOB_ID"
+    require_loom; require_runtime
+    "$LOOM_BIN" schedule run --job-id "$job_id" --root "$LOOM_ROOT" --format human
+}
+
+cmd_schedule_run_due() {
+    local limit="${1:-20}"
+    require_loom; require_runtime
+    "$LOOM_BIN" schedule run-due --limit "$limit" --root "$LOOM_ROOT" --format human
+}
+
+cmd_schedule() {
+    local subcmd="${1:-list}"
+    if [ "$subcmd" = "help" ] || [ "$subcmd" = "--help" ] || [ "$subcmd" = "-h" ]; then
+        die "Usage: core.sh schedule <status|list|show|every|daily|pause|cancel|run|run-due> [args]"
+    fi
+
+    case "$subcmd" in
+        status)
+            shift || true
+            cmd_schedule_status "$@"
+            ;;
+        list)
+            shift || true
+            cmd_schedule_list "$@"
+            ;;
+        show)
+            shift || true
+            cmd_schedule_show "$@"
+            ;;
+        every)
+            shift || true
+            cmd_schedule_every "$@"
+            ;;
+        daily)
+            shift || true
+            cmd_schedule_daily "$@"
+            ;;
+        pause)
+            shift || true
+            cmd_schedule_pause "$@"
+            ;;
+        cancel|remove|delete)
+            shift || true
+            cmd_schedule_cancel "$@"
+            ;;
+        run)
+            shift || true
+            cmd_schedule_run "$@"
+            ;;
+        run-due|due)
+            shift || true
+            cmd_schedule_run_due "$@"
+            ;;
+        *)
+            if [ $# -le 2 ]; then
+                cmd_schedule_every "$@"
+            else
+                die "Usage: core.sh schedule <status|list|show|every|daily|pause|cancel|run|run-due> [args]"
+            fi
+            ;;
+    esac
 }
 
 # ── Command: schedules ────────────────────────────────────────────────────
 
 cmd_schedules() {
-    require_loom; require_runtime
-
-    local hb_json
-    hb_json="$("$LOOM_BIN" heartbeat list --root "$LOOM_ROOT" --format json 2>/dev/null || true)"
-    echo "$hb_json" | python3 -c "
-import sys, json
-try:
-    entries = json.loads(sys.stdin.read())
-except Exception:
-    entries = []
-if not entries:
-    print('[core] no scheduled tasks found')
-    raise SystemExit(0)
-print(f'[core] {len(entries)} scheduled task(s):')
-for e in entries:
-    every = e.get('every_seconds') or '?'
-    cap = e.get('capability_name', '?')
-    hid = e.get('heartbeat_id', '?')
-    status = 'paused' if e.get('paused') else 'active'
-    print(f'  {hid}  every {every}s  [{cap}]  {status}')
-"
+    cmd_schedule list "$@"
 }
 
 # ── Command: inspect ──────────────────────────────────────────────────────
@@ -1829,8 +3439,753 @@ cmd_channel() {
         test)
             "$LOOM_BIN" channel test --agent "$personal_agent" --root "$LOOM_ROOT" --format human "${@}"
             ;;
+        diagnostics)
+            cmd_channel_diagnostics "$@"
+            ;;
+        connect)
+            cmd_channel_connect "$@"
+            ;;
         *)
-            die "Usage: core.sh channel <list|health|show|deliveries|send|test> [args]"
+            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|connect> [args]"
+            ;;
+    esac
+}
+
+cmd_channel_diagnostics() {
+    local channel_id="${1:-}"
+    local limit="${2:-20}"
+    if [ -z "$channel_id" ]; then
+        echo "[core] multi-channel health overview"
+        _render_multi_channel_health
+        return
+    fi
+    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local diag_json=""
+    diag_json="$(curl -sf "http://127.0.0.1:${gateway_port}/api/channels/${channel_id}/diagnostics?limit=${limit}" 2>/dev/null || printf '{}')"
+    if [ -z "$diag_json" ] || [ "$diag_json" = "{}" ]; then
+        echo "[core] gateway not reachable — showing file-based diagnostics for ${channel_id}"
+        _render_channel_diagnostics_from_files "$channel_id" "$limit"
+        return
+    fi
+    python3 - "$diag_json" <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.argv[1])
+    if data.get("status") == "error":
+        print(f"  error: {data.get('output', 'unknown')}")
+        sys.exit(0)
+    diag = data.get("diagnostics") or data
+    summary = diag.get("summary") or {}
+    records = diag.get("recent_deliveries") or []
+    cid = diag.get("channel_id", "?")
+    print(f"[core] channel diagnostics: {cid}")
+    print(f"  delivered: {summary.get('delivered_count', 0)}")
+    print(f"  failed:    {summary.get('failed_count', 0)}")
+    print(f"  pending:   {summary.get('pending_count', 0)}")
+    print(f"  latest:    {summary.get('latest_status', '-')}")
+    if records:
+        print(f"  recent deliveries ({len(records)}):")
+        for r in records:
+            did = r.get("delivery_id", "?")[:16]
+            st = r.get("status", "?")
+            rcpt = r.get("recipient", "?")[:20]
+            tlen = r.get("text_length", 0)
+            at = r.get("created_at", "?")
+            detail = r.get("detail", "")
+            line = f"    {did}  {st:10s}  to={rcpt}  len={tlen}  at={at}"
+            if detail:
+                line += f"  detail={detail[:60]}"
+            print(line)
+    else:
+        print("  (no recent deliveries)")
+except Exception as exc:
+    print(f"  (diagnostics parse error: {exc})")
+PY
+}
+
+_render_channel_diagnostics_from_files() {
+    local channel_id="${1:-}"
+    local limit="${2:-20}"
+    python3 - "$channel_id" "$limit" "$LOOM_ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+
+channel_id, limit_str, loom_root = sys.argv[1:4]
+limit = int(limit_str or "20")
+delivery_dir = Path(loom_root) / "state" / "channels" / "delivery"
+records = []
+try:
+    candidates = sorted(delivery_dir.glob("*.json"), reverse=True)
+except Exception:
+    candidates = []
+for path in candidates:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    if not isinstance(payload, dict):
+        continue
+    if str(payload.get("channel_id") or "").strip() != channel_id:
+        continue
+    records.append(payload)
+    if len(records) >= limit:
+        break
+delivered = sum(1 for r in records if str(r.get("status") or "").strip() == "delivered")
+failed = sum(1 for r in records if str(r.get("status") or "").strip() == "failed")
+pending = sum(1 for r in records if str(r.get("status") or "").strip() not in {"delivered", "failed"})
+print(f"[core] channel diagnostics (file-based): {channel_id}")
+print(f"  delivered: {delivered}")
+print(f"  failed:    {failed}")
+print(f"  pending:   {pending}")
+if records:
+    latest = str(records[0].get("status") or "-").strip()
+    print(f"  latest:    {latest}")
+    print(f"  recent deliveries ({len(records)}):")
+    for r in records:
+        did = str(r.get("delivery_id") or "?")[:16]
+        st = str(r.get("status") or "?")
+        rcpt = str(r.get("recipient") or "?")[:20]
+        tlen = len(str(r.get("text") or ""))
+        at = str(r.get("created_at") or "?")
+        detail = str(r.get("detail") or "")
+        line = f"    {did}  {st:10s}  to={rcpt}  len={tlen}  at={at}"
+        if detail:
+            line += f"  detail={detail[:60]}"
+        print(line)
+else:
+    print("  (no recent deliveries)")
+PY
+}
+
+cmd_channel_connect() {
+    local subcmd="${1:-list}"
+    shift || true
+    require_loom; require_runtime
+
+    case "$subcmd" in
+        list)
+            "$LOOM_BIN" connect list --root "$LOOM_ROOT" --format human "${@}"
+            ;;
+        scaffold)
+            local name="${1:-}"
+            local transport="${2:-}"
+            local schema="${3:-meridian.runtime.v1}"
+            [ -n "$name" ] || die "Usage: core.sh channel connect scaffold NAME TRANSPORT [ACTION_SCHEMA]"
+            [ -n "$transport" ] || die "Usage: core.sh channel connect scaffold NAME TRANSPORT [ACTION_SCHEMA]"
+            "$LOOM_BIN" connect scaffold \
+                --name "$name" \
+                --transport "$transport" \
+                --action-schema "$schema" \
+                --root "$LOOM_ROOT" \
+                --format human
+            ;;
+        validate)
+            local adapter_id="${1:-}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect validate ADAPTER_ID"
+            "$LOOM_BIN" connect validate --adapter-id "$adapter_id" --root "$LOOM_ROOT" --format human
+            ;;
+        enable)
+            local adapter_id="${1:-}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect enable ADAPTER_ID"
+            "$LOOM_BIN" connect enable --adapter-id "$adapter_id" --root "$LOOM_ROOT" --format human
+            ;;
+        disable)
+            local adapter_id="${1:-}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect disable ADAPTER_ID"
+            "$LOOM_BIN" connect disable --adapter-id "$adapter_id" --root "$LOOM_ROOT" --format human
+            ;;
+        test)
+            local adapter_id="${1:-}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect test ADAPTER_ID"
+            "$LOOM_BIN" connect test --adapter-id "$adapter_id" --root "$LOOM_ROOT" --format human
+            ;;
+        health)
+            local adapter_id="${1:-}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect health ADAPTER_ID"
+            "$LOOM_BIN" connect health --adapter-id "$adapter_id" --root "$LOOM_ROOT" --format human
+            ;;
+        diagnostics)
+            local adapter_id="${1:-}"
+            local limit="${2:-10}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect diagnostics ADAPTER_ID [LIMIT]"
+            "$LOOM_BIN" connect diagnostics --adapter-id "$adapter_id" --limit "$limit" --root "$LOOM_ROOT" --format human
+            ;;
+        scorecard)
+            "$LOOM_BIN" connect scorecard --root "$LOOM_ROOT" --format human "${@}"
+            ;;
+        prune)
+            local adapter_id="${1:-}"
+            local retention_days="${2:-30}"
+            [ -n "$adapter_id" ] || die "Usage: core.sh channel connect prune ADAPTER_ID [RETENTION_DAYS]"
+            "$LOOM_BIN" connect prune --adapter-id "$adapter_id" --retention-days "$retention_days" --root "$LOOM_ROOT" --format human
+            ;;
+        *)
+            die "Usage: core.sh channel connect <list|scaffold|validate|enable|disable|test|health|diagnostics|scorecard|prune> [args]"
+            ;;
+    esac
+}
+
+# ── Command: files ────────────────────────────────────────────────────────
+
+cmd_files() {
+    ensure_core_state_dir
+    local subcmd="${1:-list}"
+    shift || true
+    case "$subcmd" in
+        add)
+            [ $# -gt 0 ] || die "Usage: core.sh files add PATH [PATH ...]"
+            local current_json merged_json
+            current_json="$(load_pending_files_json)"
+            merged_json="$(merge_pending_file_paths_json "$current_json" "$@")"
+            save_pending_files_json "$merged_json"
+            python3 - "$merged_json" <<'PY'
+import json, sys
+items = json.loads(sys.argv[1] or "[]")
+print("[core] file queue")
+print(f"  total_files:     {len(items)}")
+for item in items[-20:]:
+    print(f"    - {item}")
+PY
+            ;;
+        list|status)
+            local current_json
+            current_json="$(load_pending_files_json)"
+            python3 - "$current_json" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+print("[core] file queue")
+print(f"  total_files:     {len(items)}")
+if not items:
+    print("  note:            no queued files")
+else:
+    total_bytes = 0
+    for item in items:
+        if os.path.isfile(item):
+            total_bytes += os.path.getsize(item)
+    print(f"  total_bytes:     {total_bytes}")
+    for item in items[:50]:
+        exists = os.path.isfile(item)
+        size = os.path.getsize(item) if exists else 0
+        state = "ok" if exists else "missing"
+        print(f"    - {item}  state={state} size={size}")
+PY
+            ;;
+        clear)
+            save_pending_files_json '[]'
+            echo "[core] file queue cleared"
+            ;;
+        remove)
+            [ $# -gt 0 ] || die "Usage: core.sh files remove PATH [PATH ...]"
+            local current_json next_json
+            current_json="$(load_pending_files_json)"
+            next_json="$(python3 - "$current_json" "$@" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+remove = {os.path.abspath(os.path.expanduser(p)) for p in sys.argv[2:]}
+kept = [p for p in items if os.path.abspath(os.path.expanduser(p)) not in remove]
+print(json.dumps(kept, ensure_ascii=False))
+PY
+)"
+            save_pending_files_json "$next_json"
+            cmd_files list
+            ;;
+        *)
+            die "Usage: core.sh files <add PATH...|list|status|remove PATH...|clear>"
+            ;;
+    esac
+}
+
+# ── Command: context ──────────────────────────────────────────────────────
+
+cmd_context() {
+    ensure_core_state_dir
+    local subcmd="${1:-list}"
+    shift || true
+    case "$subcmd" in
+        add)
+            [ $# -gt 0 ] || die "Usage: core.sh context add PATH [PATH ...]"
+            local current_json merged_json
+            current_json="$(load_context_files_json)"
+            merged_json="$(merge_pending_file_paths_json "$current_json" "$@")"
+            save_context_files_json "$merged_json"
+            python3 - "$merged_json" <<'PY'
+import json, sys
+items = json.loads(sys.argv[1] or "[]")
+print("[core] context files")
+print(f"  total_files:     {len(items)}")
+for item in items[-20:]:
+    print(f"    - {item}")
+PY
+            ;;
+        list|status)
+            local current_json
+            current_json="$(load_context_files_json)"
+            python3 - "$current_json" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+print("[core] context files")
+print(f"  total_files:     {len(items)}")
+if not items:
+    print("  note:            no persistent context files")
+else:
+    total_bytes = 0
+    for item in items:
+        if os.path.isfile(item):
+            total_bytes += os.path.getsize(item)
+    print(f"  total_bytes:     {total_bytes}")
+    for item in items[:50]:
+        exists = os.path.isfile(item)
+        size = os.path.getsize(item) if exists else 0
+        state = "ok" if exists else "missing"
+        print(f"    - {item}  state={state} size={size}")
+PY
+            ;;
+        clear)
+            save_context_files_json '[]'
+            echo "[core] context files cleared"
+            ;;
+        remove)
+            [ $# -gt 0 ] || die "Usage: core.sh context remove PATH [PATH ...]"
+            local current_json next_json
+            current_json="$(load_context_files_json)"
+            next_json="$(python3 - "$current_json" "$@" <<'PY'
+import json, os, sys
+items = json.loads(sys.argv[1] or "[]")
+remove = {os.path.abspath(os.path.expanduser(p)) for p in sys.argv[2:]}
+kept = [p for p in items if os.path.abspath(os.path.expanduser(p)) not in remove]
+print(json.dumps(kept, ensure_ascii=False))
+PY
+)"
+            save_context_files_json "$next_json"
+            cmd_context list
+            ;;
+        *)
+            die "Usage: core.sh context <add PATH...|list|status|remove PATH...|clear>"
+            ;;
+    esac
+}
+
+# ── Command: playbook ─────────────────────────────────────────────────────
+
+playbook_slug() {
+    python3 - "$1" <<'PY'
+import re, sys
+raw = str(sys.argv[1] or "").strip().lower()
+slug = re.sub(r"[^a-z0-9._-]+", "-", raw).strip("-.")
+print(slug or "core-playbook")
+PY
+}
+
+playbook_path() {
+    local name="${1:-}"
+    local slug
+    slug="$(playbook_slug "$name")"
+    printf '%s/%s.md\n' "$CORE_PLAYBOOKS_DIR" "$slug"
+}
+
+playbook_schedule_job_id() {
+    local name="${1:-}"
+    local slug
+    slug="$(playbook_slug "$name")"
+    printf 'playbook-%s\n' "$slug"
+}
+
+playbook_schedule_payload_json() {
+    local slug="${1:-}"
+    local path="${2:-}"
+    python3 - "$slug" "$path" <<'PY'
+import json, sys
+slug, path = sys.argv[1:3]
+print(json.dumps({"playbook": slug, "path": path}, ensure_ascii=False))
+PY
+}
+
+save_playbook_schedule_mapping() {
+    local job_id="${1:-}"
+    local slug="${2:-}"
+    local path="${3:-}"
+    local schedule_kind="${4:-}"
+    local expression="${5:-}"
+    local timezone="${6:-UTC}"
+    ensure_core_state_dir
+    python3 - "$CORE_PLAYBOOK_SCHEDULES_FILE" "$job_id" "$slug" "$path" "$schedule_kind" "$expression" "$timezone" <<'PY'
+import json, os, sys, time
+
+registry_path, job_id, slug, path, schedule_kind, expression, timezone = sys.argv[1:8]
+try:
+    with open(registry_path, encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    data = {"schedules": {}}
+
+schedules = dict(data.get("schedules") or {})
+schedules[job_id] = {
+    "job_id": job_id,
+    "job_kind": f"playbook:{slug}",
+    "playbook": slug,
+    "path": path,
+    "schedule_kind": schedule_kind,
+    "expression": expression,
+    "timezone": timezone or "UTC",
+    "updated_at_unix_ms": int(time.time() * 1000),
+}
+data["schedules"] = schedules
+os.makedirs(os.path.dirname(registry_path), exist_ok=True)
+with open(registry_path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+
+print(f"[core] playbook schedule mapped: {job_id}")
+print(f"  job_kind: playbook:{slug}")
+print(f"  playbook: {slug}")
+print(f"  registry: {registry_path}")
+PY
+}
+
+remove_playbook_schedule_mapping() {
+    local job_id="${1:-}"
+    ensure_core_state_dir
+    python3 - "$CORE_PLAYBOOK_SCHEDULES_FILE" "$job_id" <<'PY'
+import json, os, sys
+
+registry_path, job_id = sys.argv[1:3]
+try:
+    with open(registry_path, encoding="utf-8") as fh:
+        data = json.load(fh)
+except Exception:
+    data = {"schedules": {}}
+
+schedules = dict(data.get("schedules") or {})
+removed = schedules.pop(job_id, None)
+data["schedules"] = schedules
+os.makedirs(os.path.dirname(registry_path), exist_ok=True)
+with open(registry_path, "w", encoding="utf-8") as fh:
+    json.dump(data, fh, indent=2, ensure_ascii=False)
+    fh.write("\n")
+
+print(f"[core] playbook schedule unmapped: {job_id}")
+print(f"  removed: {bool(removed)}")
+print(f"  registry: {registry_path}")
+PY
+}
+
+remove_loom_playbook_schedule_record() {
+    local job_id="${1:-}"
+    local registry_path="${LOOM_ROOT}/state/schedules/registry.json"
+    python3 - "$registry_path" "$job_id" <<'PY'
+import json, os, sys
+
+registry_path, job_id = sys.argv[1:3]
+if not os.path.exists(registry_path):
+    raise SystemExit(0)
+
+with open(registry_path, encoding="utf-8") as fh:
+    data = json.load(fh)
+
+records = list(data.get("schedules") or [])
+kept = []
+removed = 0
+for record in records:
+    if str(record.get("job_id") or "") != job_id:
+        kept.append(record)
+        continue
+    job_kind = str(record.get("job_kind") or "")
+    if not (job_id.startswith("playbook-") and job_kind.startswith("playbook:")):
+        raise SystemExit(f"refusing to remove non-playbook schedule: {job_id}")
+    removed += 1
+
+if removed:
+    data["schedules"] = kept
+    with open(registry_path, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, indent=2, ensure_ascii=False)
+        fh.write("\n")
+PY
+}
+
+cmd_playbook() {
+    ensure_core_playbooks_dir
+    local subcmd="${1:-list}"
+    shift || true
+    case "$subcmd" in
+        list)
+            python3 - "$CORE_PLAYBOOKS_DIR" <<'PY'
+import pathlib, sys
+root = pathlib.Path(sys.argv[1])
+items = sorted(root.glob("*.md"))
+print("[core] playbooks")
+print(f"  total: {len(items)}")
+for item in items:
+    print(f"    - {item.stem}")
+PY
+            ;;
+        schedules|schedule-list)
+            ensure_core_state_dir
+            python3 - "$CORE_PLAYBOOK_SCHEDULES_FILE" <<'PY'
+import json, sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+try:
+    data = json.loads(path.read_text(encoding="utf-8"))
+except Exception:
+    data = {"schedules": {}}
+
+items = sorted((data.get("schedules") or {}).values(), key=lambda item: item.get("job_id", ""))
+print("[core] playbook schedules")
+print(f"  total: {len(items)}")
+if path:
+    print(f"  registry: {path}")
+for item in items:
+    print(
+        "    - "
+        f"{item.get('job_id', '?')}  "
+        f"playbook={item.get('playbook', '?')}  "
+        f"kind={item.get('job_kind', '?')}  "
+        f"schedule={item.get('schedule_kind', '?')}  "
+        f"expression={item.get('expression', '')}  "
+        f"timezone={item.get('timezone', 'UTC')}"
+    )
+PY
+            ;;
+        scaffold)
+            local name="${1:-}"
+            [ -n "$name" ] || die "Usage: core.sh playbook scaffold NAME"
+            local dest
+            dest="$(playbook_path "$name")"
+            [ ! -f "$dest" ] || die "playbook already exists: $(basename "$dest" .md)"
+            python3 - "$dest" "$name" <<'PY'
+from pathlib import Path
+import sys
+dest, name = sys.argv[1], sys.argv[2]
+content = f"""# {name}
+
+## Goal
+State the recurring task this playbook should handle.
+
+## Procedure
+1. Review the current request and local context.
+2. Execute the task carefully.
+3. Return the exact deliverable the user needs.
+
+## Output Contract
+- Keep the answer concise.
+- Include actionable results, not meta commentary.
+"""
+path = Path(dest)
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(content, encoding="utf-8")
+print(f"[core] playbook scaffolded: {path}")
+PY
+            ;;
+        add)
+            local name="${1:-}"
+            local source="${2:-}"
+            [ -n "$name" ] && [ -n "$source" ] || die "Usage: core.sh playbook add NAME SOURCE_FILE"
+            [ -f "$source" ] || die "source file not found: $source"
+            local dest
+            dest="$(playbook_path "$name")"
+            python3 - "$source" "$dest" <<'PY'
+from pathlib import Path
+import shutil, sys
+src, dest = map(Path, sys.argv[1:3])
+dest.parent.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(src, dest)
+print(f"[core] playbook saved: {dest}")
+PY
+            ;;
+        capture)
+            local name="${1:-}"
+            shift || true
+            local source_kind="last-output"
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --from)
+                        [ -n "${2:-}" ] || die "Usage: core.sh playbook capture NAME [--from last-output|last-resume]"
+                        source_kind="$2"
+                        shift 2
+                        ;;
+                    *)
+                        die "Usage: core.sh playbook capture NAME [--from last-output|last-resume]"
+                        ;;
+                esac
+            done
+            [ -n "$name" ] || die "Usage: core.sh playbook capture NAME [--from last-output|last-resume]"
+            local source_file=""
+            case "$source_kind" in
+                last-output) source_file="$CORE_LAST_OUTPUT_FILE" ;;
+                last-resume) source_file="$CORE_LAST_RESUME_FILE" ;;
+                *) die "Usage: core.sh playbook capture NAME [--from last-output|last-resume]" ;;
+            esac
+            [ -f "$source_file" ] || die "capture source not found: $source_kind"
+            local dest
+            dest="$(playbook_path "$name")"
+            python3 - "$source_file" "$dest" "$name" "$source_kind" <<'PY'
+from pathlib import Path
+import sys
+
+source_file, dest, name, source_kind = sys.argv[1:5]
+source = Path(source_file)
+body = source.read_text(encoding="utf-8", errors="replace").strip()
+content = f"""# {name}
+
+## Goal
+Reuse the captured Meridian Core result as a repeatable workflow.
+
+## Source
+- kind: `{source_kind}`
+- path: `{source}`
+
+## Procedure
+1. Review the captured result below.
+2. Adapt it to the user's current request and current context.
+3. Return the updated deliverable directly.
+
+## Captured Result
+
+{body or "(empty)"}
+"""
+path = Path(dest)
+path.parent.mkdir(parents=True, exist_ok=True)
+path.write_text(content, encoding="utf-8")
+print(f"[core] playbook captured: {path}")
+print(f"  source: {source_kind}")
+PY
+            ;;
+        show)
+            local name="${1:-}"
+            [ -n "$name" ] || die "Usage: core.sh playbook show NAME"
+            local path
+            path="$(playbook_path "$name")"
+            [ -f "$path" ] || die "playbook not found: $name"
+            cat "$path"
+            ;;
+        remove)
+            local name="${1:-}"
+            [ -n "$name" ] || die "Usage: core.sh playbook remove NAME"
+            local path
+            path="$(playbook_path "$name")"
+            [ -f "$path" ] || die "playbook not found: $name"
+            rm -f "$path"
+            echo "[core] playbook removed: $(basename "$path" .md)"
+            ;;
+        run)
+            local name="${1:-}"
+            shift || true
+            [ -n "$name" ] || die "Usage: core.sh playbook run NAME [EXTRA_INSTRUCTION...]"
+            local path
+            path="$(playbook_path "$name")"
+            [ -f "$path" ] || die "playbook not found: $name"
+            local playbook_text extra_text combined
+            playbook_text="$(cat "$path")"
+            extra_text="$*"
+            combined="Execute the following workflow instructions exactly.
+Do not return Meridian/runtime/operator status unless the playbook explicitly asks for system status.
+Return the deliverable requested by the playbook itself.
+
+$playbook_text"
+            if [ -n "$extra_text" ]; then
+                combined="${combined}
+
+Additional instruction:
+$extra_text"
+            fi
+            cmd_ask "$combined"
+            ;;
+        run-scheduled)
+            local job_id="${1:-}"
+            shift || true
+            [ -n "$job_id" ] || die "Usage: core.sh playbook run-scheduled JOB_ID [EXTRA_INSTRUCTION...]"
+            ensure_core_state_dir
+            local mapped_playbook
+            mapped_playbook="$(python3 - "$CORE_PLAYBOOK_SCHEDULES_FILE" "$job_id" <<'PY'
+import json, sys
+path, job_id = sys.argv[1:3]
+try:
+    data = json.load(open(path, encoding="utf-8"))
+except Exception:
+    data = {"schedules": {}}
+entry = (data.get("schedules") or {}).get(job_id) or {}
+print(str(entry.get("playbook") or ""))
+PY
+)"
+            [ -n "$mapped_playbook" ] || die "playbook schedule not found: $job_id"
+            cmd_playbook run "$mapped_playbook" "$@"
+            ;;
+        every)
+            local name="${1:-}"
+            local every="${2:-3600}"
+            [ -n "$name" ] || die "Usage: core.sh playbook every NAME SECONDS"
+            [ -n "$every" ] || die "Usage: core.sh playbook every NAME SECONDS"
+            require_loom; require_runtime
+            local path slug job_id payload agent_id
+            path="$(playbook_path "$name")"
+            [ -f "$path" ] || die "playbook not found: $name"
+            slug="$(playbook_slug "$name")"
+            job_id="$(playbook_schedule_job_id "$name")"
+            payload="$(playbook_schedule_payload_json "$slug" "$path")"
+            agent_id="$(resolve_agent_id)"
+            [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
+            remove_loom_playbook_schedule_record "$job_id"
+            "$LOOM_BIN" schedule add \
+                --agent-id "$agent_id" \
+                --job-id "$job_id" \
+                --job-kind "playbook:${slug}" \
+                --schedule interval \
+                --every-seconds "$every" \
+                --payload-json "$payload" \
+                --source-kind core-playbook \
+                --root "$LOOM_ROOT" \
+                --format human
+            save_playbook_schedule_mapping "$job_id" "$slug" "$path" "interval" "$every" "UTC"
+            ;;
+        daily)
+            local name="${1:-}"
+            local hhmm="${2:-}"
+            local tz="${3:-UTC}"
+            [ -n "$name" ] || die "Usage: core.sh playbook daily NAME HH:MM [TZ]"
+            [ -n "$hhmm" ] || die "Usage: core.sh playbook daily NAME HH:MM [TZ]"
+            require_loom; require_runtime
+            local path slug job_id payload agent_id
+            path="$(playbook_path "$name")"
+            [ -f "$path" ] || die "playbook not found: $name"
+            slug="$(playbook_slug "$name")"
+            job_id="$(playbook_schedule_job_id "$name")"
+            payload="$(playbook_schedule_payload_json "$slug" "$path")"
+            agent_id="$(resolve_agent_id)"
+            [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
+            remove_loom_playbook_schedule_record "$job_id"
+            "$LOOM_BIN" schedule add \
+                --agent-id "$agent_id" \
+                --job-id "$job_id" \
+                --job-kind "playbook:${slug}" \
+                --schedule daily \
+                --expression "$hhmm" \
+                --timezone "$tz" \
+                --payload-json "$payload" \
+                --source-kind core-playbook \
+                --root "$LOOM_ROOT" \
+                --format human
+            save_playbook_schedule_mapping "$job_id" "$slug" "$path" "daily" "$hhmm" "$tz"
+            ;;
+        unschedule)
+            local target="${1:-}"
+            [ -n "$target" ] || die "Usage: core.sh playbook unschedule NAME_OR_JOB_ID"
+            require_loom; require_runtime
+            local job_id
+            case "$target" in
+                playbook-*) job_id="$target" ;;
+                *) job_id="$(playbook_schedule_job_id "$target")" ;;
+            esac
+            if "$LOOM_BIN" schedule show --job-id "$job_id" --root "$LOOM_ROOT" --format json >/dev/null 2>&1; then
+                "$LOOM_BIN" schedule cancel --job-id "$job_id" --root "$LOOM_ROOT" --format human
+            else
+                echo "[core] playbook schedule not active in Loom: $job_id"
+            fi
+            remove_loom_playbook_schedule_record "$job_id"
+            remove_playbook_schedule_mapping "$job_id"
+            ;;
+        *)
+            die "Usage: core.sh playbook <list|schedules|scaffold NAME|add NAME SOURCE_FILE|capture NAME [--from last-output|last-resume]|show NAME|run NAME [EXTRA...]|run-scheduled JOB_ID [EXTRA...]|every NAME SECONDS|daily NAME HH:MM [TZ]|unschedule NAME_OR_JOB_ID|remove NAME>"
             ;;
     esac
 }
@@ -1857,6 +4212,115 @@ cmd_queue() {
             ;;
         *)
             die "Usage: core.sh queue <status|inspect|run-once|run-until-empty> [args]"
+            ;;
+    esac
+}
+
+# ── Command: web ──────────────────────────────────────────────────────────
+
+cmd_web() {
+    local subcmd="${1:-urls}"
+    shift || true
+
+    _port_listening() {
+        local port="${1:-}"
+        [ -n "$port" ] || return 1
+        python3 - "$port" <<'PY'
+import sys
+
+port = int(sys.argv[1])
+port_hex = f"{port:04X}"
+
+def listening(path: str) -> bool:
+    try:
+        with open(path, encoding="utf-8") as fh:
+            next(fh, None)
+            for line in fh:
+                cols = line.split()
+                if len(cols) < 4:
+                    continue
+                local_addr = cols[1]
+                state = cols[3]
+                if state != "0A":
+                    continue
+                if ":" not in local_addr:
+                    continue
+                _, local_port = local_addr.rsplit(":", 1)
+                if local_port.upper() == port_hex:
+                    return True
+    except Exception:
+        return False
+    return False
+
+sys.exit(0 if any(listening(path) for path in ("/proc/net/tcp", "/proc/net/tcp6")) else 1)
+PY
+    }
+
+    _pid_file_present() {
+        local pid_file="${1:-}"
+        [ -f "$pid_file" ] || return 1
+        grep -qE '^[0-9]+$' "$pid_file" 2>/dev/null
+    }
+
+    case "$subcmd" in
+        urls)
+            local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
+            local workspace_url="http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}"
+            local peer_workspace_url="http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}"
+            echo "[core] web surfaces"
+            echo "  gateway:        ${gateway_url}"
+            echo "  workspace:      ${workspace_url}"
+            echo "  peer_workspace: ${peer_workspace_url}"
+            echo "  website:        https://app.welliam.codes/"
+            echo "  pilot:          https://app.welliam.codes/pilot.html"
+            echo "  demo:           https://app.welliam.codes/demo.html"
+            ;;
+        status)
+            local gateway_status="down"
+            local workspace_status="down"
+            local peer_workspace_status="down"
+            if _port_listening "${MERIDIAN_GATEWAY_PORT}"; then
+                gateway_status="ok"
+            elif curl -fsS "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/healthz" >/dev/null 2>&1; then
+                gateway_status="ok"
+            elif _pid_file_present "${MERIDIAN_ROOT}/runtime/pids/gateway.pid"; then
+                gateway_status="pid-file"
+            fi
+            if _port_listening "${MERIDIAN_WORKSPACE_PORT}"; then
+                workspace_status="ok"
+            elif curl -fsS "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/healthz" >/dev/null 2>&1; then
+                workspace_status="ok"
+            elif _pid_file_present "${MERIDIAN_ROOT}/runtime/pids/workspace.pid"; then
+                workspace_status="pid-file"
+            elif curl -sS -I "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}" 2>/dev/null | grep -q "401 Unauthorized"; then
+                workspace_status="auth-gated"
+            fi
+            if _port_listening "${MERIDIAN_WORKSPACE_PEER_PORT}"; then
+                peer_workspace_status="ok"
+            elif curl -fsS "http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}/api/healthz" >/dev/null 2>&1; then
+                peer_workspace_status="ok"
+            elif _pid_file_present "${MERIDIAN_ROOT}/runtime/pids/workspace-peer.pid"; then
+                peer_workspace_status="pid-file"
+            elif curl -sS -I "http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}" 2>/dev/null | grep -q "401 Unauthorized"; then
+                peer_workspace_status="auth-gated"
+            fi
+            echo "[core] web status"
+            echo "  gateway:        ${gateway_status}  http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}"
+            echo "  workspace:      ${workspace_status}  http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}"
+            echo "  peer_workspace: ${peer_workspace_status}  http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}"
+            ;;
+        browse-policy)
+            echo "[core] browser policy"
+            echo "  allowed_schemes: http, https"
+            if [ -n "${MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS:-}" ]; then
+                echo "  allowed_hosts:   ${MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS}"
+            else
+                echo "  allowed_hosts:   (all hosts allowed; set MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS to restrict)"
+            fi
+            echo "  config_key:      MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS"
+            ;;
+        *)
+            die "Usage: core.sh web <urls|status|browse-policy>"
             ;;
     esac
 }
@@ -1905,6 +4369,51 @@ cmd_cap() {
       bash "$skill_script" "$subcmd" "$@"
 }
 
+# ── Command: proof ────────────────────────────────────────────────────────
+
+cmd_proof() {
+    local subcmd="${1:-local}"
+    shift || true
+
+    case "$subcmd" in
+        local)
+            local proof_script="${ROOT_DIR}/scripts/verify_core_runtime_local.sh"
+            [ -x "$proof_script" ] || die "verify_core_runtime_local.sh not found or not executable"
+            ensure_core_state_dir
+            bash "$proof_script" "$CORE_LAST_PROOF_FILE" "$@"
+            ;;
+        show)
+            [ -f "$CORE_LAST_PROOF_FILE" ] || die "No Core proof captured yet. Run: ./scripts/core.sh proof local"
+            cat "$CORE_LAST_PROOF_FILE"
+            ;;
+        summary)
+            [ -f "$CORE_LAST_PROOF_FILE" ] || die "No Core proof captured yet. Run: ./scripts/core.sh proof local"
+            python3 - "$CORE_LAST_PROOF_FILE" <<'PY'
+import json, sys
+payload = json.load(open(sys.argv[1], encoding="utf-8"))
+summary = dict(payload.get("summary") or {})
+details = dict(payload.get("details") or {})
+print("[core] proof summary")
+print(f"  status:      {payload.get('status') or 'unknown'}")
+print(f"  checked_at:  {payload.get('checked_at') or ''}")
+for key in sorted(summary):
+    print(f"  {key}: {summary[key]}")
+if details:
+    print("  details:")
+    for key in sorted(details):
+        print(f"    {key}: {details[key]}")
+PY
+            ;;
+        path)
+            [ -f "$CORE_LAST_PROOF_FILE" ] || die "No Core proof captured yet. Run: ./scripts/core.sh proof local"
+            echo "$CORE_LAST_PROOF_FILE"
+            ;;
+        *)
+            die "Usage: core.sh proof <local|show|summary|path>"
+            ;;
+    esac
+}
+
 # ── Command: help ─────────────────────────────────────────────────────────
 
 cmd_help() {
@@ -1912,12 +4421,36 @@ cmd_help() {
 Meridian Core — daily-use task runner
 
 Commands:
-  ask [--file PATH ...] [--model M] "TASK"   Run a daily prompt (with optional file attachments / model override)
+  ask [--file PATH ...] [--model M] [--no-context] "TASK"   Run a daily prompt (with optional file attachments / model override)
+  ask --queued-files "TASK"  Run a daily prompt using files from the persistent Core file queue
+  files add PATH ...       Add files to the persistent Core file queue
+  files list               Show queued Core files
+  files remove PATH ...    Remove files from the queue
+  files clear              Clear the Core file queue
+  context add PATH ...     Add files to persistent Core context (auto-attached to ask/chat)
+  context list             Show persistent Core context files
+  context remove PATH ...  Remove files from persistent Core context
+  context clear            Clear persistent Core context
+  playbook list            Show saved Core playbooks
+  playbook scaffold NAME   Create a starter playbook template
+  playbook add NAME FILE   Save a playbook from a local file
+  playbook capture NAME    Capture last output as a reusable playbook
+  playbook show NAME       Show a saved playbook
+  playbook run NAME [...]  Execute a playbook through Core ask
+  playbook every NAME S    Schedule a playbook routine every S seconds
+  playbook daily NAME T    Schedule a playbook routine daily at HH:MM
+  playbook schedules       List Core playbook routine mappings
+  playbook run-scheduled J Execute a mapped playbook schedule now through Core ask
+  playbook unschedule N    Cancel and unmap a playbook routine
+  playbook remove NAME     Delete a saved playbook
   session current        Show the current Core conversation session id
   session new [ID]       Start a fresh Core session and make it current
   session use ID         Switch the current Core session
   session list           List tracked Core sessions
   session show [ID]      Show recent history for a Core session
+  session search QUERY [LIMIT]  Search across session history text
+  session resume SESSION_KEY EVENT_INDEX [--queue|--context]  Materialize one historical event into reusable context
+  session reuse QUERY [--queue|--context]  Search latest matching event and materialize it in one step
   session export [ID] D  Export a Core session to JSON + Markdown in directory D
   session reset          Clear the current Core session pointer
   session archive        Archive old sessions (dry-run by default, --execute to apply)
@@ -1928,12 +4461,19 @@ Commands:
   response export DIR    Export the most recent Core artifact into DIR
   response export-path   Show the last Core export directory
   chat                   Start an interactive Core chat loop on the current session
-  doctor [--fix]         Run the Core operator doctor across runtime/provider/gateway/channel surfaces
+  doctor                 Run the Core operator doctor across runtime/provider/gateway/channel surfaces
+  doctor fix             Apply safe doctor remediations and capture before/after receipt
+  doctor summary         Show the most recent Core doctor receipt summary
+  doctor show            Show the most recent Core doctor receipt JSON
+  doctor path            Show the JSON path for the most recent Core doctor receipt
   provider status        Show configured provider plane status
   provider profiles      Show provider profiles
   provider auth          Show provider auth readiness
   provider route ...     Inspect provider route decisions
   provider list          Show all providers, models, routes, and health
+  provider fix           Restore a usable Meridian-owned manager route when policy is blocked
+  provider restore       Restore manager route from Meridian-owned .env/.env.gateway topology
+  provider probe [TEXT]  Run a tiny end-to-end manager probe and update route health
   provider use PROFILE   Switch active provider/model (--model M, --transport T, --endpoint URL)
   config show            Show effective runtime config
   config set KEY VALUE   Set a config override (safe allowlisted keys only)
@@ -1941,15 +4481,29 @@ Commands:
   runtime status         Show loom runtime status
   runtime health         Show loom doctor-derived health summary
   runtime logs           Show recent loom runtime logs
+  ingress status         Show live ingress backlog summary
+  ingress list [B] [N]   List pending/quarantine ingress files (bucket B, limit N)
+  ingress quarantine     Show quarantined ingress snapshot
+  ingress quarantine --apply [S]   Move stale ingress files older than S seconds
   browse URL               Navigate to URL, extract and show text
-  research "cmd [args]"   Run a bounded terminal command
+  research "cmd [args]"   Run a bounded read-only terminal command
+  shell list              List safe daily shell presets
+  shell run PRESET        Run one bounded shell preset
   remember KEY "VALUE"    Store a memory entry (persistent across sessions)
   recall [KEY_PREFIX]     Search stored memory
   memory receipts         Show recent memory receipts
   memory graph SOURCE_REF Inspect memory graph lineage/forks
   memory overview         Show memory overview
-  schedule NAME [SEC]     Add a recurring task (default: every 3600s)
-  schedules               List all scheduled tasks
+  schedule status         Show schedule runtime overview
+  schedule list           List scheduled jobs
+  schedule show JOB_ID    Show full schedule details
+  schedule every N S      Create an interval routine every S seconds
+  schedule daily N T [Z]  Create a daily routine at HH:MM in timezone Z
+  schedule pause JOB_ID   Pause a schedule
+  schedule cancel JOB_ID  Cancel a schedule
+  schedule run JOB_ID     Execute a schedule now
+  schedule run-due [N]    Execute due schedules now (default limit: 20)
+  schedules               Alias for: schedule list
   agent inspect           Show live agent/operator state
   agent diagnose          Show remediation plan from live state
   agent status            Show loop status
@@ -1958,10 +4512,27 @@ Commands:
   channel health          Show channel health for the current agent
   channel deliveries      Show recent outbound delivery ledger
   channel send CH R TXT   Send text to a named channel/recipient
+  channel diagnostics [CH] [N]  Multi-channel health overview or per-channel delivery diagnostics
+  channel connect list    List connect adapters
+  channel connect scaffold N T [S]   Scaffold adapter NAME/TRANSPORT/ACTION_SCHEMA
+  channel connect validate ADAPTER   Validate one adapter
+  channel connect enable ADAPTER     Enable one adapter
+  channel connect disable ADAPTER    Disable one adapter
+  channel connect test ADAPTER       Run adapter test
+  channel connect health ADAPTER     Show adapter health
+  channel connect diagnostics ADAPTER [N]  Show recent adapter diagnostics
+  channel connect scorecard          Show connect scorecard
+  web urls                Show local/public web operator surfaces
+  web status              Probe gateway/workspace web surfaces
+  web browse-policy       Show Core browse restrictions and host allowlist
   queue status            Show queue depth/state
   queue inspect           Inspect queued records
   inspect                 Show last execution receipts and agent state
   status                  Show full runtime status
+  proof local             Run the local Core live-proof suite
+  proof show              Show the most recent Core proof receipt
+  proof summary           Show a compact summary of the most recent Core proof
+  proof path              Show the JSON path for the most recent Core proof
   cap list                List available capabilities
   cap inspect NAME        Show capability metadata
   cap run NAME [PAYLOAD]  Run a capability by name
@@ -1969,8 +4540,32 @@ Commands:
 
 File attachments:
   core.sh ask --file src/main.py "review this code"
+  core.sh files add src/main.py docs/spec.md
+  core.sh files list
+  core.sh ask --queued-files "compare queued files"
   core.sh ask -f a.py -f b.py "compare these two files"
   In chat mode: /file PATH to queue, then type your message
+
+Persistent context files:
+  core.sh context add AGENTS.md docs/plan.md
+  core.sh context list
+  core.sh ask "continue working with the default project context"
+  core.sh ask --no-context "ignore the default project context for this turn"
+  In chat mode: /context, /context add PATH, /context clear
+
+Playbooks:
+  core.sh playbook scaffold morning-brief
+  core.sh playbook add release-qa docs/release_qa.md
+  core.sh playbook capture latest-fix
+  core.sh playbook capture recovered-context --from last-resume
+  core.sh playbook list
+  core.sh playbook show release-qa
+  core.sh playbook run release-qa "Focus on regressions only"
+  core.sh playbook every release-qa 3600
+  core.sh playbook daily release-qa 08:30 UTC
+  core.sh playbook schedules
+  core.sh playbook run-scheduled playbook-release-qa
+  core.sh playbook unschedule release-qa
 
 Model override (per-request):
   core.sh ask --model gpt-4o "summarize this"
@@ -1978,16 +4573,77 @@ Model override (per-request):
 
 Provider switching (persistent):
   core.sh provider list                          show all providers/models/routes
+  core.sh provider fix                           restore a Meridian-owned manager route from env topology
+  core.sh provider restore                       restore manager route from Meridian env topology
+  core.sh provider probe                         run an end-to-end manager route probe
   core.sh provider use my_profile --model gpt-4o switch active provider+model
   In chat mode: /provider use my_profile --model gpt-4o
 
 Session lifecycle:
   core.sh session archive                           dry-run: list old sessions
   core.sh session archive --older-than 7 --execute   archive sessions older than 7 days
+  core.sh session search "provider-probe-ok" 5
+  core.sh session resume web_api:exportproof 281
+  core.sh session resume web_api:exportproof 281 --queue
+  core.sh session resume web_api:exportproof 281 --context
+  core.sh session reuse "core-proof-ok" --queue
 
 Config editing:
   core.sh config set MERIDIAN_BRAIN_MANAGER_MODEL gpt-4o
   core.sh config get MERIDIAN_BRAIN_MANAGER_MODEL
+
+Scheduling and routines:
+  core.sh schedule status
+  core.sh schedule list
+  core.sh schedule show morning_brief
+  core.sh schedule every inbox-check 900
+  core.sh schedule daily morning-brief 08:30 UTC
+  core.sh schedule pause morning_brief
+  core.sh schedule run morning_brief
+
+Channel diagnostics and multi-channel health:
+  core.sh channel diagnostics                 # overview of all channels
+  core.sh channel diagnostics telegram        # per-channel delivery diagnostics
+  core.sh channel diagnostics zalo 10         # per-channel with custom limit
+
+Channel pairing and adapter admin:
+  core.sh channel connect list
+  core.sh channel connect scaffold telegram-admin telegram meridian.runtime.v1
+  core.sh channel connect validate telegram-admin
+  core.sh channel connect enable telegram-admin
+  core.sh channel connect scorecard
+
+Web/operator bridge:
+  core.sh web urls
+  core.sh web status
+  core.sh web browse-policy
+
+Terminal presets and guardrails:
+  core.sh shell list
+  core.sh shell run repo-status
+  core.sh shell run open-ports
+  core.sh research "git status"
+  core.sh research "rg MERIDIAN_GATEWAY_URL scripts/core.sh"
+  core.sh config set MERIDIAN_CORE_BROWSE_ALLOWED_HOSTS app.welliam.codes,docs.example.com
+
+Live proof:
+  core.sh proof local
+  core.sh proof show
+  core.sh proof summary
+  core.sh proof path
+
+Ingress operator surface:
+  core.sh ingress status
+  core.sh ingress list pending 10
+  core.sh ingress quarantine
+  core.sh ingress quarantine --apply 300
+
+Doctor receipts:
+  core.sh doctor
+  core.sh doctor fix
+  core.sh doctor summary
+  core.sh doctor show
+  core.sh doctor path
 
 Long output handling:
   Long responses are auto-truncated with a preview.
@@ -2018,36 +4674,45 @@ EOF
 
 # ── Main dispatch ─────────────────────────────────────────────────────────
 
-COMMAND="${1:-help}"
-shift || true
+if [ "${MERIDIAN_CORE_SH_SOURCE_ONLY:-0}" != "1" ]; then
+    COMMAND="${1:-help}"
+    shift || true
 
-case "$COMMAND" in
-    ask)         cmd_ask "$@" ;;
-    session)     cmd_session "$@" ;;
-    response)    cmd_response "$@" ;;
-    chat)        cmd_chat "$@" ;;
-    doctor)      cmd_doctor "$@" ;;
-    provider)    cmd_provider "$@" ;;
-    config)      cmd_config "$@" ;;
-    runtime)     cmd_runtime "$@" ;;
-    browse)      cmd_browse "$@" ;;
-    research)    cmd_research "$@" ;;
-    remember)    cmd_remember "$@" ;;
-    recall)      cmd_recall "$@" ;;
-    schedule)    cmd_schedule "$@" ;;
-    schedules)   cmd_schedules "$@" ;;
-    memory)      cmd_memory "$@" ;;
-    agent)       cmd_agent "$@" ;;
-    job)         cmd_job "$@" ;;
-    channel)     cmd_channel "$@" ;;
-    queue)       cmd_queue "$@" ;;
-    inspect)     cmd_inspect "$@" ;;
-    status)      cmd_status "$@" ;;
-    cap)         cmd_cap "$@" ;;
-    help|--help) cmd_help ;;
-    *)
-        echo "[core] Unknown command: $COMMAND" >&2
-        cmd_help
-        exit 1
-        ;;
-esac
+    case "$COMMAND" in
+        ask)         cmd_ask "$@" ;;
+        files)       cmd_files "$@" ;;
+        context)     cmd_context "$@" ;;
+        playbook)    cmd_playbook "$@" ;;
+        session)     cmd_session "$@" ;;
+        response)    cmd_response "$@" ;;
+        chat)        cmd_chat "$@" ;;
+        doctor)      cmd_doctor "$@" ;;
+        provider)    cmd_provider "$@" ;;
+        config)      cmd_config "$@" ;;
+        runtime)     cmd_runtime "$@" ;;
+        ingress)     cmd_ingress "$@" ;;
+        browse)      cmd_browse "$@" ;;
+        research)    cmd_research "$@" ;;
+        shell)       cmd_shell "$@" ;;
+        remember)    cmd_remember "$@" ;;
+        recall)      cmd_recall "$@" ;;
+        schedule)    cmd_schedule "$@" ;;
+        schedules)   cmd_schedules "$@" ;;
+        memory)      cmd_memory "$@" ;;
+        agent)       cmd_agent "$@" ;;
+        job)         cmd_job "$@" ;;
+        channel)     cmd_channel "$@" ;;
+        web)         cmd_web "$@" ;;
+        queue)       cmd_queue "$@" ;;
+        inspect)     cmd_inspect "$@" ;;
+        status)      cmd_status "$@" ;;
+        proof)       cmd_proof "$@" ;;
+        cap)         cmd_cap "$@" ;;
+        help|--help) cmd_help ;;
+        *)
+            echo "[core] Unknown command: $COMMAND" >&2
+            cmd_help
+            exit 1
+            ;;
+    esac
+fi
