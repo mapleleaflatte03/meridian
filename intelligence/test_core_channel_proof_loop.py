@@ -134,7 +134,7 @@ class GatewaySourceSurfaceTests(unittest.TestCase):
     def test_multi_channel_health_includes_lifecycle(self):
         idx = self.source.find("def _build_multi_channel_health(")
         self.assertGreater(idx, 0)
-        snippet = self.source[idx:idx + 3000]
+        snippet = self.source[idx:idx + 4000]
         self.assertIn('"lifecycle"', snippet)
         self.assertIn('"poll_state"', snippet)
         self.assertIn('"meridian.channels.health.v2"', snippet)

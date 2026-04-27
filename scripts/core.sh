@@ -20,6 +20,7 @@
 #   ./scripts/core.sh channel health           — inspect channel health/deliveries
 #   ./scripts/core.sh channel diagnostics      — multi-channel health or per-channel diagnostics
 #   ./scripts/core.sh channel proof CH [N]     — sha256-chained delivery receipt proof
+#   ./scripts/core.sh channel verify CH R [TXT] — real send-and-prove round trip
 #   ./scripts/core.sh queue status             — inspect local queue depth
 #   ./scripts/core.sh inspect                  — show last execution + agent state
 #   ./scripts/core.sh status                   — show runtime status
@@ -1302,9 +1303,9 @@ _render_doctor_overview() {
 }
 
 _render_multi_channel_health() {
-    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
     local health_json=""
-    health_json="$(curl -sf "http://127.0.0.1:${gateway_port}/api/channels/health" 2>/dev/null || printf '{}')"
+    health_json="$(curl -sf "${gateway_url}/api/channels/health" 2>/dev/null || printf '{}')"
     if [ -z "$health_json" ] || [ "$health_json" = "{}" ]; then
         echo "  (gateway not reachable — channel health unavailable)"
         return
@@ -1318,6 +1319,7 @@ try:
     active = int(health.get("active_adapter_count") or 0)
     delivered = int(health.get("total_recent_delivered") or 0)
     failed = int(health.get("total_recent_failed") or 0)
+    print("  source: gateway_http")
     print(f"  adapters: {active} active, {len(channels)} tracked")
     print(f"  recent deliveries: {delivered} delivered, {failed} failed")
     for ch in channels:
@@ -3446,11 +3448,14 @@ cmd_channel() {
         proof)
             cmd_channel_proof "$@"
             ;;
+        verify)
+            cmd_channel_verify "$@"
+            ;;
         connect)
             cmd_channel_connect "$@"
             ;;
         *)
-            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|proof|connect> [args]"
+            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|proof|verify|connect> [args]"
             ;;
     esac
 }
@@ -3463,9 +3468,9 @@ cmd_channel_diagnostics() {
         _render_multi_channel_health
         return
     fi
-    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
     local diag_json=""
-    diag_json="$(curl -sf "http://127.0.0.1:${gateway_port}/api/channels/${channel_id}/diagnostics?limit=${limit}" 2>/dev/null || printf '{}')"
+    diag_json="$(curl -sf "${gateway_url}/api/channels/${channel_id}/diagnostics?limit=${limit}" 2>/dev/null || printf '{}')"
     if [ -z "$diag_json" ] || [ "$diag_json" = "{}" ]; then
         echo "[core] gateway not reachable — showing file-based diagnostics for ${channel_id}"
         _render_channel_diagnostics_from_files "$channel_id" "$limit"
@@ -3483,6 +3488,7 @@ try:
     records = diag.get("recent_deliveries") or []
     cid = diag.get("channel_id", "?")
     print(f"[core] channel diagnostics: {cid}")
+    print("  source: gateway_http")
     print(f"  delivered: {summary.get('delivered_count', 0)}")
     print(f"  failed:    {summary.get('failed_count', 0)}")
     print(f"  pending:   {summary.get('pending_count', 0)}")
@@ -3538,6 +3544,7 @@ delivered = sum(1 for r in records if str(r.get("status") or "").strip() == "del
 failed = sum(1 for r in records if str(r.get("status") or "").strip() == "failed")
 pending = sum(1 for r in records if str(r.get("status") or "").strip() not in {"delivered", "failed"})
 print(f"[core] channel diagnostics (file-based): {channel_id}")
+print("  source: local_delivery_ledger_fallback")
 print(f"  delivered: {delivered}")
 print(f"  failed:    {failed}")
 print(f"  pending:   {pending}")
@@ -3567,9 +3574,9 @@ cmd_channel_proof() {
     if [ -z "$channel_id" ]; then
         die "Usage: core.sh channel proof CHANNEL_ID [LIMIT]"
     fi
-    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
     local proof_json=""
-    proof_json="$(curl -sf "http://127.0.0.1:${gateway_port}/api/channels/${channel_id}/proof?limit=${limit}" 2>/dev/null || printf '{}')"
+    proof_json="$(curl -sf "${gateway_url}/api/channels/${channel_id}/proof?limit=${limit}" 2>/dev/null || printf '{}')"
     if [ -z "$proof_json" ] || [ "$proof_json" = "{}" ]; then
         echo "[core] gateway not reachable — building proof from local delivery ledger"
         _render_channel_proof_from_files "$channel_id" "$limit"
@@ -3587,6 +3594,7 @@ try:
     head = proof.get("head_chain_hash", "")
     receipts = proof.get("receipts") or []
     print(f"[core] channel delivery proof: {cid}")
+    print("  source: gateway_http")
     print(f"  receipts:        {proof.get('receipt_count', 0)}")
     print(f"  total records:   {proof.get('total_records', 0)}")
     print(f"  head chain hash: {head[:32]}{'...' if len(head) > 32 else ''}")
@@ -3642,6 +3650,7 @@ for rec in window_chrono:
     chain.append((str(rec.get("delivery_id") or "?"), str(rec.get("status") or "?"), rh, ch))
     prev = ch
 print(f"[core] channel delivery proof (file-based): {channel_id}")
+print("  source: local_delivery_ledger_fallback")
 print(f"  receipts:        {len(chain)}")
 print(f"  total records:   {len(records)}")
 print(f"  head chain hash: {(chain[-1][3] if chain else '')[:32]}{'...' if chain and len(chain[-1][3]) > 32 else ''}")
@@ -3651,6 +3660,165 @@ if chain:
         print(f"    {did[:16]}  {st:10s}  receipt={rh[:16]}  chain={ch[:16]}")
 else:
     print("  (no receipts in window)")
+PY
+}
+
+cmd_channel_verify() {
+    local channel_id="${1:-}"
+    local recipient="${2:-}"
+    shift 2 2>/dev/null || true
+    local text="${*:-}"
+    [ -n "$channel_id" ] || die "Usage: core.sh channel verify CHANNEL RECIPIENT [TEXT]"
+    [ -n "$recipient" ] || die "Usage: core.sh channel verify CHANNEL RECIPIENT [TEXT]"
+    if [ -z "$text" ]; then
+        text="meridian-verify-$(date +%s%N | head -c 19)"
+    fi
+    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local payload
+    payload="$(python3 -c '
+import json, sys
+print(json.dumps({"recipient": sys.argv[1], "text": sys.argv[2]}))
+' "$recipient" "$text")"
+    local verify_json=""
+    verify_json="$(curl -sf -X POST -H 'Content-Type: application/json' -d "$payload" \
+        "http://127.0.0.1:${gateway_port}/api/channels/${channel_id}/verify" 2>/dev/null || printf '')"
+    if [ -z "$verify_json" ]; then
+        echo "[core] gateway not reachable — running local verify via loom binary"
+        _run_local_channel_verify "$channel_id" "$recipient" "$text"
+        return
+    fi
+    python3 - "$verify_json" <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.argv[1])
+    if data.get("status") == "error":
+        print(f"  error: {data.get('output', 'unknown')}")
+        sys.exit(0)
+    v = data.get("verify") or data
+    print(f"[core] channel verify: {v.get('channel_id', '?')} -> {v.get('recipient', '?')}")
+    print(f"  result:           {v.get('status', '?')}")
+    print(f"  delivery_id:      {v.get('delivery_id', '-') or '-'}")
+    print(f"  elapsed_ms:       {v.get('elapsed_ms', 0)}")
+    pre = v.get('pre_head_chain_hash', '') or '-'
+    post = v.get('post_head_chain_hash', '') or '-'
+    print(f"  pre  chain head:  {pre[:32]}{'...' if len(pre) > 32 else ''}")
+    print(f"  post chain head:  {post[:32]}{'...' if len(post) > 32 else ''}")
+    if pre and post and pre != post:
+        print(f"  chain extended:   yes")
+    else:
+        print(f"  chain extended:   no")
+    ext = v.get('extension_receipt') or {}
+    if ext:
+        rh = str(ext.get('receipt_hash', ''))[:16]
+        ch = str(ext.get('chain_hash', ''))[:16]
+        print(f"  receipt:          {rh}  chain={ch}")
+    if v.get('external_ref'):
+        print(f"  external_ref:     {v.get('external_ref')}")
+    if v.get('reason'):
+        print(f"  reason:           {v.get('reason')}")
+    if v.get('submit_error'):
+        print(f"  submit_error:     {v.get('submit_error')}")
+except Exception as exc:
+    print(f"  (verify parse error: {exc})")
+PY
+}
+
+_run_local_channel_verify() {
+    local channel_id="${1:-}"
+    local recipient="${2:-}"
+    local text="${3:-meridian-verify-$(date +%s)}"
+    require_loom; require_runtime
+    local pre_head
+    pre_head="$(_compute_chain_head_for_channel "$channel_id")"
+    local send_out
+    send_out="$("$LOOM_BIN" channel send --root "$LOOM_ROOT" --channel "$channel_id" --recipient "$recipient" --text "$text" --format json 2>&1 || true)"
+    local delivery_id
+    delivery_id="$(printf '%s' "$send_out" | python3 -c '
+import json, sys
+try:
+    data = json.loads(sys.stdin.read())
+    print(str(data.get("delivery_id") or "").strip())
+except Exception:
+    pass
+' 2>/dev/null || printf '')"
+    if [ -z "$delivery_id" ]; then
+        echo "[core] channel verify: submission failed"
+        echo "  output: $send_out"
+        return 1
+    fi
+    local deadline=$((SECONDS + 12))
+    local terminal=""
+    while [ $SECONDS -lt $deadline ]; do
+        terminal="$(python3 - "$LOOM_ROOT" "$delivery_id" <<'PY'
+import json, sys
+from pathlib import Path
+loom_root, did = sys.argv[1:3]
+delivery_dir = Path(loom_root) / "state" / "channels" / "delivery"
+try:
+    for path in delivery_dir.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if str(data.get("delivery_id") or "").strip() != did:
+            continue
+        st = str(data.get("status") or "").strip()
+        if st in {"delivered", "failed", "blocked"}:
+            print(st)
+            sys.exit(0)
+except Exception:
+    pass
+PY
+)"
+        if [ -n "$terminal" ]; then
+            break
+        fi
+        sleep 0.25
+    done
+    local post_head
+    post_head="$(_compute_chain_head_for_channel "$channel_id")"
+    echo "[core] channel verify: ${channel_id} -> ${recipient}"
+    echo "  result:           ${terminal:-timeout}"
+    echo "  delivery_id:      ${delivery_id}"
+    if [ ${#pre_head} -gt 32 ]; then pre_head_disp="${pre_head:0:32}..."; else pre_head_disp="$pre_head"; fi
+    if [ ${#post_head} -gt 32 ]; then post_head_disp="${post_head:0:32}..."; else post_head_disp="$post_head"; fi
+    echo "  pre  chain head:  ${pre_head_disp}"
+    echo "  post chain head:  ${post_head_disp}"
+    if [ -n "$pre_head" ] && [ -n "$post_head" ] && [ "$pre_head" != "$post_head" ]; then
+        echo "  chain extended:   yes"
+    else
+        echo "  chain extended:   no"
+    fi
+}
+
+_compute_chain_head_for_channel() {
+    local channel_id="${1:-}"
+    python3 - "$channel_id" "$LOOM_ROOT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+channel_id, loom_root = sys.argv[1:3]
+delivery_dir = Path(loom_root) / "state" / "channels" / "delivery"
+records = []
+try:
+    for path in delivery_dir.glob("*.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("channel_id") or "").strip() != channel_id:
+            continue
+        records.append(payload)
+except Exception:
+    pass
+records.sort(key=lambda r: int(r.get("submitted_at_unix_ms") or 0))
+prev = ""
+for rec in records:
+    canonical = json.dumps(rec, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    rh = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    prev = hashlib.sha256(f"{prev}:{rh}".encode("utf-8")).hexdigest()
+print(prev)
 PY
 }
 
@@ -4611,6 +4779,7 @@ Commands:
   channel send CH R TXT   Send text to a named channel/recipient
   channel diagnostics [CH] [N]  Multi-channel health overview or per-channel delivery diagnostics
   channel proof CH [N]    Sha256-chained delivery receipt proof for a channel (default N=50)
+  channel verify CH R [T] Real send-and-prove round trip; reports chain extension
   channel connect list    List connect adapters
   channel connect scaffold N T [S]   Scaffold adapter NAME/TRANSPORT/ACTION_SCHEMA
   channel connect validate ADAPTER   Validate one adapter

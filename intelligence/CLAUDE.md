@@ -27,6 +27,7 @@ bash scripts/acceptance_competitor_snapshot_lane.sh
 - `https://app.welliam.codes/api/channels/health` — multi-channel adapter health dashboard (public, includes per-adapter lifecycle + Zalo poll state)
 - `https://app.welliam.codes/api/channels/{id}/diagnostics` — per-channel delivery diagnostics (public)
 - `https://app.welliam.codes/api/channels/{id}/proof` — sha256-chained delivery receipt proof for a channel (public)
+- `https://app.welliam.codes/api/channels/{id}/verify` — real send-and-prove round trip; reports chain extension (POST, origin-protected)
 
 ## Key Constraints
 

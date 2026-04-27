@@ -1973,6 +1973,14 @@ def _build_multi_channel_health(adapters: list | None = None) -> dict[str, Any]:
                         "last_message_id": str(getattr(a, "poll_last_message_id", "") or ""),
                         "enabled": bool(getattr(a, "poll_enabled", False)),
                     }
+                elif hasattr(a, "polling_state"):
+                    # TelegramAdapter exposes polling_state/polling_conflict_detail.
+                    poll_state = {
+                        "state": str(getattr(a, "polling_state", "") or ""),
+                        "detail": str(getattr(a, "polling_conflict_detail", "") or ""),
+                        "last_message_id": "",
+                        "enabled": bool(getattr(a, "_active", False)),
+                    }
                 break
         health_status = "active" if adapter_active else ("registered" if cid in registered_ids else "inactive")
         channel_summaries.append({
@@ -2055,6 +2063,125 @@ def _build_channel_delivery_proof(channel_id: str, limit: int = 50) -> dict[str,
         "total_records": len(records),
         "head_chain_hash": head_hash,
         "receipts": chain,
+    }
+
+
+def _verify_channel_round_trip(
+    channel_id: str,
+    recipient: str,
+    text: str,
+    *,
+    timeout_seconds: float = 12.0,
+    poll_interval_seconds: float = 0.25,
+) -> dict[str, Any]:
+    """Perform a real send-and-prove round trip for a channel.
+
+    Steps:
+      1. Capture the current delivery proof head_chain_hash.
+      2. Enqueue a delivery via `loom channel send`.
+      3. Poll the on-disk delivery ledger until the new delivery_id appears
+         and reaches a terminal status (delivered / failed / blocked) or the
+         timeout elapses.
+      4. Recompute the delivery proof and return the chain extension as a
+         truthful round-trip receipt.
+    """
+    channel_id = str(channel_id or "").strip().lower()
+    recipient = str(recipient or "").strip()
+    text = str(text or "").strip()
+    started_at = time.time()
+    if not channel_id or channel_id not in ALL_CHANNEL_IDS:
+        return {
+            "schema_version": "meridian.channels.verify.v1",
+            "status": "rejected",
+            "reason": f"unknown channel: {channel_id}",
+            "channel_id": channel_id,
+            "recipient": recipient,
+        }
+    if not recipient or not text:
+        return {
+            "schema_version": "meridian.channels.verify.v1",
+            "status": "rejected",
+            "reason": "recipient and text are required",
+            "channel_id": channel_id,
+            "recipient": recipient,
+        }
+    pre_proof = _build_channel_delivery_proof(channel_id, limit=10)
+    pre_head = str(pre_proof.get("head_chain_hash") or "")
+    submit_result = _loom_channel_send(channel_id, recipient, text)
+    submit_payload = submit_result.get("payload") if isinstance(submit_result, dict) else {}
+    delivery_id = str((submit_payload or {}).get("delivery_id") or "").strip()
+    submit_ok = bool(submit_result.get("ok"))
+    if not submit_ok or not delivery_id:
+        return {
+            "schema_version": "meridian.channels.verify.v1",
+            "status": "submission_failed",
+            "channel_id": channel_id,
+            "recipient": recipient,
+            "delivery_id": delivery_id,
+            "submit_error": str(submit_result.get("error") or submit_result.get("stderr") or "").strip()[:500],
+            "pre_head_chain_hash": pre_head,
+        }
+
+    delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
+    terminal_status = ""
+    final_record: dict[str, Any] = {}
+    deadline = started_at + max(1.0, float(timeout_seconds))
+    while time.time() < deadline:
+        try:
+            for path in delivery_dir.glob("*.json"):
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if not isinstance(payload, dict):
+                    continue
+                if str(payload.get("delivery_id") or "").strip() != delivery_id:
+                    continue
+                status = str(payload.get("status") or "").strip()
+                if status in {"delivered", "failed", "blocked"}:
+                    terminal_status = status
+                    final_record = payload
+                    break
+        except Exception:
+            pass
+        if terminal_status:
+            break
+        time.sleep(max(0.05, float(poll_interval_seconds)))
+
+    elapsed_ms = int((time.time() - started_at) * 1000)
+    post_proof = _build_channel_delivery_proof(channel_id, limit=10)
+    post_head = str(post_proof.get("head_chain_hash") or "")
+    extension_receipt: dict[str, Any] = {}
+    for receipt in post_proof.get("receipts") or []:
+        if str(receipt.get("delivery_id") or "").strip() == delivery_id:
+            extension_receipt = receipt
+            break
+
+    if not terminal_status:
+        return {
+            "schema_version": "meridian.channels.verify.v1",
+            "status": "timeout",
+            "channel_id": channel_id,
+            "recipient": recipient,
+            "delivery_id": delivery_id,
+            "elapsed_ms": elapsed_ms,
+            "pre_head_chain_hash": pre_head,
+            "post_head_chain_hash": post_head,
+            "extension_receipt": extension_receipt,
+        }
+
+    return {
+        "schema_version": "meridian.channels.verify.v1",
+        "status": "delivered" if terminal_status == "delivered" else terminal_status,
+        "channel_id": channel_id,
+        "recipient": recipient,
+        "delivery_id": delivery_id,
+        "elapsed_ms": elapsed_ms,
+        "pre_head_chain_hash": pre_head,
+        "post_head_chain_hash": post_head,
+        "extension_receipt": extension_receipt,
+        "external_ref": str(final_record.get("external_ref") or "").strip(),
+        "status_detail": str(final_record.get("status_detail") or "").strip(),
     }
 
 
@@ -14975,6 +15102,27 @@ class WebAPIAdapter(ChannelAdapter):
                         self._send_json(400, {"status": "error", "output": "invalid_bulk_queue_review"})
                         return
                     self._send_json(200, {"status": "success", "bulk_review": reviewed})
+                    return
+                if request_path.startswith("/api/channels/") and request_path.endswith("/verify"):
+                    channel_id = request_path.removeprefix("/api/channels/").removesuffix("/verify").strip().lower()
+                    if not channel_id or channel_id not in ALL_CHANNEL_IDS:
+                        self._send_json(404, {"status": "error", "output": f"unknown channel: {channel_id}"})
+                        return
+                    recipient = str(payload.get("recipient") or "").strip()
+                    text = str(payload.get("text") or "").strip()
+                    try:
+                        timeout_seconds = float(payload.get("timeout_seconds") or 12.0)
+                    except (TypeError, ValueError):
+                        timeout_seconds = 12.0
+                    try:
+                        verify_result = _verify_channel_round_trip(
+                            channel_id, recipient, text,
+                            timeout_seconds=min(60.0, max(1.0, timeout_seconds)),
+                        )
+                    except Exception as exc:
+                        self._send_json(500, {"status": "error", "output": f"{exc.__class__.__name__}: {exc}"})
+                        return
+                    self._send_json(200, {"status": "success", "verify": verify_result})
                     return
                 if request_path == "/api/trust-ops/evidence/review":
                     evidence_key = str(payload.get("evidence_key") or "").strip()

@@ -82,7 +82,7 @@ class TestBuildMultiChannelHealthFunction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.source = GATEWAY_PY.read_text(encoding="utf-8")
-        cls.body = _extract_function_body(cls.source, "_build_multi_channel_health", 3000)
+        cls.body = _extract_function_body(cls.source, "_build_multi_channel_health", 4000)
 
     def test_function_exists(self):
         self.assertIn("def _build_multi_channel_health(", self.source)
@@ -250,8 +250,8 @@ class TestCoreShUsageStringUpdated(unittest.TestCase):
         cls.source = CORE_SH.read_text(encoding="utf-8")
 
     def test_usage_includes_diagnostics_in_channel_dispatch(self):
-        # Tranche 6 adds the `proof` subcommand to the dispatch surface.
-        self.assertIn("list|health|show|deliveries|send|test|diagnostics|proof|connect", self.source)
+        # Tranche 7 adds the `verify` subcommand to the dispatch surface.
+        self.assertIn("list|health|show|deliveries|send|test|diagnostics|proof|verify|connect", self.source)
 
 
 # ── Connect adapter template tests ───────────────────────────────────────
