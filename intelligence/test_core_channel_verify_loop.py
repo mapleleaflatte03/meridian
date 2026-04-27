@@ -72,7 +72,8 @@ class CoreShellSurfaceTests(unittest.TestCase):
         self.assertIn("_compute_chain_head_for_channel()", self.source)
 
     def test_verify_documented_in_usage(self):
-        self.assertIn("channel verify CH R [T]", self.source)
+        # Tranche 8 makes recipient optional / "auto" by default.
+        self.assertIn("channel verify CH [R|auto] [T]", self.source)
 
     def test_verify_in_dispatch_usage_string(self):
         self.assertIn("|verify|", self.source)

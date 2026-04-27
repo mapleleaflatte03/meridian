@@ -20,7 +20,8 @@
 #   ./scripts/core.sh channel health           — inspect channel health/deliveries
 #   ./scripts/core.sh channel diagnostics      — multi-channel health or per-channel diagnostics
 #   ./scripts/core.sh channel proof CH [N]     — sha256-chained delivery receipt proof
-#   ./scripts/core.sh channel verify CH R [TXT] — real send-and-prove round trip
+#   ./scripts/core.sh channel verify CH [R|auto] [TXT] — real send-and-prove round trip
+#   ./scripts/core.sh channel watch CH         — tail live delivery + inbound for a channel
 #   ./scripts/core.sh queue status             — inspect local queue depth
 #   ./scripts/core.sh inspect                  — show last execution + agent state
 #   ./scripts/core.sh status                   — show runtime status
@@ -3451,11 +3452,14 @@ cmd_channel() {
         verify)
             cmd_channel_verify "$@"
             ;;
+        watch)
+            cmd_channel_watch "$@"
+            ;;
         connect)
             cmd_channel_connect "$@"
             ;;
         *)
-            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|proof|verify|connect> [args]"
+            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|proof|verify|watch|connect> [args]"
             ;;
     esac
 }
@@ -3666,10 +3670,17 @@ PY
 cmd_channel_verify() {
     local channel_id="${1:-}"
     local recipient="${2:-}"
-    shift 2 2>/dev/null || true
+    if [ "${1:-}" != "" ] && [ "${2:-}" != "" ]; then
+        shift 2
+    elif [ "${1:-}" != "" ]; then
+        shift 1
+        recipient="auto"
+    fi
     local text="${*:-}"
-    [ -n "$channel_id" ] || die "Usage: core.sh channel verify CHANNEL RECIPIENT [TEXT]"
-    [ -n "$recipient" ] || die "Usage: core.sh channel verify CHANNEL RECIPIENT [TEXT]"
+    [ -n "$channel_id" ] || die "Usage: core.sh channel verify CHANNEL [RECIPIENT|auto] [TEXT]"
+    if [ -z "$recipient" ]; then
+        recipient="auto"
+    fi
     if [ -z "$text" ]; then
         text="meridian-verify-$(date +%s%N | head -c 19)"
     fi
@@ -3728,6 +3739,14 @@ _run_local_channel_verify() {
     local recipient="${2:-}"
     local text="${3:-meridian-verify-$(date +%s)}"
     require_loom; require_runtime
+    if [ "$recipient" = "auto" ] || [ "$recipient" = "*" ] || [ -z "$recipient" ]; then
+        recipient="$(_resolve_recent_active_peer "$channel_id")"
+        if [ -z "$recipient" ]; then
+            echo "[core] channel verify: no recent active peer on ${channel_id}; pass an explicit recipient"
+            return 1
+        fi
+        echo "[core] channel verify: auto-resolved recipient -> ${recipient}"
+    fi
     local pre_head
     pre_head="$(_compute_chain_head_for_channel "$channel_id")"
     local send_out
@@ -3819,6 +3838,111 @@ for rec in records:
     rh = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     prev = hashlib.sha256(f"{prev}:{rh}".encode("utf-8")).hexdigest()
 print(prev)
+PY
+}
+
+_resolve_recent_active_peer() {
+    local channel_id="${1:-}"
+    python3 - "$channel_id" "$LOOM_ROOT" <<'PY'
+import json, sys
+from pathlib import Path
+channel_id, loom_root = sys.argv[1:3]
+inbox_dir = Path(loom_root) / "state" / "channels" / "inbox"
+best = (0, "")
+try:
+    candidates = sorted(inbox_dir.glob("*.json"), reverse=True)
+except Exception:
+    candidates = []
+for path in candidates[:1000]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    if not isinstance(payload, dict):
+        continue
+    if str(payload.get("channel_id") or "").strip() != channel_id:
+        continue
+    peer = str(payload.get("peer_id") or "").strip()
+    if not peer:
+        continue
+    ts = int(payload.get("received_at_unix_ms") or 0)
+    if ts > best[0]:
+        best = (ts, peer)
+print(best[1])
+PY
+}
+
+cmd_channel_watch() {
+    local channel_id="${1:-}"
+    local interval="${2:-1}"
+    [ -n "$channel_id" ] || die "Usage: core.sh channel watch CHANNEL [INTERVAL_SECONDS]"
+    require_runtime
+    echo "[core] watching channel '${channel_id}' delivery ledger (Ctrl-C to stop)"
+    python3 - "$channel_id" "$LOOM_ROOT" "$interval" <<'PY'
+import json, sys, time
+from pathlib import Path
+channel_id, loom_root, interval_str = sys.argv[1:4]
+interval = max(0.5, float(interval_str or "1"))
+delivery_dir = Path(loom_root) / "state" / "channels" / "delivery"
+inbox_dir = Path(loom_root) / "state" / "channels" / "inbox"
+seen_deliveries = set()
+seen_inbox = set()
+# Seed with what is already on disk so we only show new records
+try:
+    for p in delivery_dir.glob("*.json"):
+        seen_deliveries.add(p.name)
+except Exception:
+    pass
+try:
+    for p in inbox_dir.glob("*.json"):
+        seen_inbox.add(p.name)
+except Exception:
+    pass
+print(f"  ready: {len(seen_deliveries)} existing deliveries, {len(seen_inbox)} existing inbound")
+sys.stdout.flush()
+try:
+    while True:
+        try:
+            for p in sorted(delivery_dir.glob("*.json")):
+                if p.name in seen_deliveries:
+                    continue
+                seen_deliveries.add(p.name)
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if str(data.get("channel_id") or "").strip() != channel_id:
+                    continue
+                did = str(data.get("delivery_id") or "?")[:24]
+                st = str(data.get("status") or "?")
+                rcpt = str(data.get("recipient") or "?")[:24]
+                ext = str(data.get("external_ref") or "")[:24]
+                tlen = len(str(data.get("display_text") or data.get("text") or ""))
+                ts = data.get("submitted_at_unix_ms") or 0
+                print(f"  [delivery] {did}  {st:10s}  to={rcpt}  ext={ext}  len={tlen}  ts={ts}")
+                sys.stdout.flush()
+            for p in sorted(inbox_dir.glob("*.json")):
+                if p.name in seen_inbox:
+                    continue
+                seen_inbox.add(p.name)
+                try:
+                    data = json.loads(p.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                if str(data.get("channel_id") or "").strip() != channel_id:
+                    continue
+                ing = str(data.get("ingress_id") or "?")[:24]
+                peer = str(data.get("peer_id") or "?")[:24]
+                txt = str(data.get("text") or "")[:60].replace("\n", " ")
+                ts = data.get("received_at_unix_ms") or 0
+                print(f"  [inbound]  {ing}  from={peer}  ts={ts}  text={txt!r}")
+                sys.stdout.flush()
+        except Exception as exc:
+            print(f"  watch warning: {exc}")
+            sys.stdout.flush()
+        time.sleep(interval)
+except KeyboardInterrupt:
+    print("[core] channel watch stopped")
 PY
 }
 
@@ -4779,7 +4903,8 @@ Commands:
   channel send CH R TXT   Send text to a named channel/recipient
   channel diagnostics [CH] [N]  Multi-channel health overview or per-channel delivery diagnostics
   channel proof CH [N]    Sha256-chained delivery receipt proof for a channel (default N=50)
-  channel verify CH R [T] Real send-and-prove round trip; reports chain extension
+  channel verify CH [R|auto] [T]  Real send-and-prove round trip; auto-resolves recipient from inbox
+  channel watch CH [SECS] Tail delivery + inbound ledger for a channel
   channel connect list    List connect adapters
   channel connect scaffold N T [S]   Scaffold adapter NAME/TRANSPORT/ACTION_SCHEMA
   channel connect validate ADAPTER   Validate one adapter

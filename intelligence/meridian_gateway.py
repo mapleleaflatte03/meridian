@@ -2066,6 +2066,43 @@ def _build_channel_delivery_proof(channel_id: str, limit: int = 50) -> dict[str,
     }
 
 
+def _recent_active_peer(channel_id: str, *, max_age_seconds: int = 86400) -> str:
+    """Return the most-recent peer id seen on the given channel inbox, or "".
+
+    Scans on-disk channel inbox records, optionally filtered to the last
+    `max_age_seconds`. Used by `core.sh channel verify` and the verify API
+    when recipient='auto' so an operator does not have to remember a peer id.
+    """
+    channel_id = str(channel_id or "").strip().lower()
+    if not channel_id:
+        return ""
+    inbox_dir = Path(LOOM_ROOT) / "state" / "channels" / "inbox"
+    cutoff_ms = int((time.time() - max(60, int(max_age_seconds))) * 1000) if max_age_seconds else 0
+    best: tuple[int, str] = (0, "")
+    try:
+        candidates = sorted(inbox_dir.glob("*.json"), reverse=True)
+    except Exception:
+        candidates = []
+    for path in candidates[:1000]:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("channel_id") or "").strip() != channel_id:
+            continue
+        peer = str(payload.get("peer_id") or "").strip()
+        if not peer:
+            continue
+        ts = int(payload.get("received_at_unix_ms") or 0)
+        if cutoff_ms and ts and ts < cutoff_ms:
+            continue
+        if ts > best[0]:
+            best = (ts, peer)
+    return best[1]
+
+
 def _verify_channel_round_trip(
     channel_id: str,
     recipient: str,
@@ -2097,6 +2134,18 @@ def _verify_channel_round_trip(
             "channel_id": channel_id,
             "recipient": recipient,
         }
+    auto_resolved = ""
+    if recipient.lower() in {"auto", "*"}:
+        auto_resolved = _recent_active_peer(channel_id)
+        if not auto_resolved:
+            return {
+                "schema_version": "meridian.channels.verify.v1",
+                "status": "rejected",
+                "reason": "no recent active peer on this channel; pass an explicit recipient",
+                "channel_id": channel_id,
+                "recipient": recipient,
+            }
+        recipient = auto_resolved
     if not recipient or not text:
         return {
             "schema_version": "meridian.channels.verify.v1",
@@ -2175,6 +2224,7 @@ def _verify_channel_round_trip(
         "status": "delivered" if terminal_status == "delivered" else terminal_status,
         "channel_id": channel_id,
         "recipient": recipient,
+        "auto_resolved_recipient": auto_resolved,
         "delivery_id": delivery_id,
         "elapsed_ms": elapsed_ms,
         "pre_head_chain_hash": pre_head,
@@ -13958,6 +14008,7 @@ class TelegramAdapter(ChannelAdapter):
             try:
                 self._drain_pending_deliveries()
             except Exception as exc:
+                self._record_lifecycle_failure(f"drain: {exc.__class__.__name__}: {exc}")
                 _log(f"telegram drain warning: {exc}", color=ANSI_YELLOW)
 
     def _drain_pending_deliveries(self) -> None:
@@ -14036,6 +14087,7 @@ class TelegramAdapter(ChannelAdapter):
                 if exc.code == 409:
                     self.polling_state = "conflict"
                     self.polling_conflict_detail = "another poller already owns this Telegram bot token"
+                    self._record_lifecycle_failure("poll conflict: another poller owns the bot token (HTTP 409)")
                     _record_gateway_audit(
                         "telegram_poll_conflict",
                         session_key="telegram:poller",
@@ -14050,10 +14102,14 @@ class TelegramAdapter(ChannelAdapter):
                     self.stop_event.wait(30)
                     continue
                 self.polling_state = "error"
+                self.polling_conflict_detail = f"HTTP {exc.code}: {exc.reason}"
+                self._record_lifecycle_failure(f"poll http {exc.code}: {exc.reason}")
                 _log(f"telegram adapter warning: HTTP Error {exc.code}: {exc.reason}", color=ANSI_YELLOW)
                 self.stop_event.wait(2)
             except Exception as exc:
                 self.polling_state = "error"
+                self.polling_conflict_detail = f"{exc.__class__.__name__}: {exc}"
+                self._record_lifecycle_failure(f"poll: {exc.__class__.__name__}: {exc}")
                 _log(f"telegram adapter warning: {exc}", color=ANSI_YELLOW)
                 self.stop_event.wait(2)
 

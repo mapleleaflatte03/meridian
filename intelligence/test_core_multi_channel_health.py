@@ -250,8 +250,8 @@ class TestCoreShUsageStringUpdated(unittest.TestCase):
         cls.source = CORE_SH.read_text(encoding="utf-8")
 
     def test_usage_includes_diagnostics_in_channel_dispatch(self):
-        # Tranche 7 adds the `verify` subcommand to the dispatch surface.
-        self.assertIn("list|health|show|deliveries|send|test|diagnostics|proof|verify|connect", self.source)
+        # Tranche 8 adds the `watch` subcommand to the dispatch surface.
+        self.assertIn("list|health|show|deliveries|send|test|diagnostics|proof|verify|watch|connect", self.source)
 
 
 # ── Connect adapter template tests ───────────────────────────────────────

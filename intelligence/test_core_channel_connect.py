@@ -34,8 +34,8 @@ class TestChannelConnectSourceWiring(unittest.TestCase):
 
     def test_channel_dispatch_includes_connect(self):
         self.assertIn("cmd_channel_connect", self.source)
-        # Tranche 7 adds the `verify` subcommand to the dispatch usage string.
-        self.assertIn("channel <list|health|show|deliveries|send|test|diagnostics|proof|verify|connect>", self.source)
+        # Tranche 8 adds the `watch` subcommand to the dispatch usage string.
+        self.assertIn("channel <list|health|show|deliveries|send|test|diagnostics|proof|verify|watch|connect>", self.source)
 
     def test_channel_connect_uses_loom_connect_plane(self):
         self.assertIn('"$LOOM_BIN" connect list', self.source)
