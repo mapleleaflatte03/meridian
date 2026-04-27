@@ -88,7 +88,8 @@ class TestBuildMultiChannelHealthFunction(unittest.TestCase):
         self.assertIn("def _build_multi_channel_health(", self.source)
 
     def test_returns_schema_version(self):
-        self.assertIn('"meridian.channels.health.v1"', self.body)
+        # Tranche 6 bumps schema to v2 to add lifecycle + poll_state fields.
+        self.assertIn('"meridian.channels.health.v2"', self.body)
 
     def test_returns_channel_count(self):
         self.assertIn('"channel_count"', self.body)
@@ -249,7 +250,8 @@ class TestCoreShUsageStringUpdated(unittest.TestCase):
         cls.source = CORE_SH.read_text(encoding="utf-8")
 
     def test_usage_includes_diagnostics_in_channel_dispatch(self):
-        self.assertIn("list|health|show|deliveries|send|test|diagnostics|connect", self.source)
+        # Tranche 6 adds the `proof` subcommand to the dispatch surface.
+        self.assertIn("list|health|show|deliveries|send|test|diagnostics|proof|connect", self.source)
 
 
 # ── Connect adapter template tests ───────────────────────────────────────

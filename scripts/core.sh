@@ -19,6 +19,7 @@
 #   ./scripts/core.sh job list                 — inspect recent runtime jobs
 #   ./scripts/core.sh channel health           — inspect channel health/deliveries
 #   ./scripts/core.sh channel diagnostics      — multi-channel health or per-channel diagnostics
+#   ./scripts/core.sh channel proof CH [N]     — sha256-chained delivery receipt proof
 #   ./scripts/core.sh queue status             — inspect local queue depth
 #   ./scripts/core.sh inspect                  — show last execution + agent state
 #   ./scripts/core.sh status                   — show runtime status
@@ -3442,11 +3443,14 @@ cmd_channel() {
         diagnostics)
             cmd_channel_diagnostics "$@"
             ;;
+        proof)
+            cmd_channel_proof "$@"
+            ;;
         connect)
             cmd_channel_connect "$@"
             ;;
         *)
-            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|connect> [args]"
+            die "Usage: core.sh channel <list|health|show|deliveries|send|test|diagnostics|proof|connect> [args]"
             ;;
     esac
 }
@@ -3554,6 +3558,99 @@ if records:
         print(line)
 else:
     print("  (no recent deliveries)")
+PY
+}
+
+cmd_channel_proof() {
+    local channel_id="${1:-}"
+    local limit="${2:-50}"
+    if [ -z "$channel_id" ]; then
+        die "Usage: core.sh channel proof CHANNEL_ID [LIMIT]"
+    fi
+    local gateway_port="${MERIDIAN_GATEWAY_PORT:-18910}"
+    local proof_json=""
+    proof_json="$(curl -sf "http://127.0.0.1:${gateway_port}/api/channels/${channel_id}/proof?limit=${limit}" 2>/dev/null || printf '{}')"
+    if [ -z "$proof_json" ] || [ "$proof_json" = "{}" ]; then
+        echo "[core] gateway not reachable — building proof from local delivery ledger"
+        _render_channel_proof_from_files "$channel_id" "$limit"
+        return
+    fi
+    python3 - "$proof_json" <<'PY'
+import json, sys
+try:
+    data = json.loads(sys.argv[1])
+    if data.get("status") == "error":
+        print(f"  error: {data.get('output', 'unknown')}")
+        sys.exit(0)
+    proof = data.get("delivery_proof") or data
+    cid = proof.get("channel_id", "?")
+    head = proof.get("head_chain_hash", "")
+    receipts = proof.get("receipts") or []
+    print(f"[core] channel delivery proof: {cid}")
+    print(f"  receipts:        {proof.get('receipt_count', 0)}")
+    print(f"  total records:   {proof.get('total_records', 0)}")
+    print(f"  head chain hash: {head[:32]}{'...' if len(head) > 32 else ''}")
+    if receipts:
+        print(f"  latest 5 receipts:")
+        for r in receipts[-5:]:
+            did = str(r.get("delivery_id", "?"))[:16]
+            st = str(r.get("status", "?"))
+            rh = str(r.get("receipt_hash", ""))[:16]
+            ch = str(r.get("chain_hash", ""))[:16]
+            print(f"    {did}  {st:10s}  receipt={rh}  chain={ch}")
+    else:
+        print("  (no receipts in window)")
+except Exception as exc:
+    print(f"  (proof parse error: {exc})")
+PY
+}
+
+_render_channel_proof_from_files() {
+    local channel_id="${1:-}"
+    local limit="${2:-50}"
+    python3 - "$channel_id" "$limit" "$LOOM_ROOT" <<'PY'
+import hashlib, json, sys
+from pathlib import Path
+
+channel_id, limit_str, loom_root = sys.argv[1:4]
+limit = int(limit_str or "50")
+delivery_dir = Path(loom_root) / "state" / "channels" / "delivery"
+records = []
+try:
+    candidates = sorted(delivery_dir.glob("*.json"))
+except Exception:
+    candidates = []
+for path in candidates:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        continue
+    if not isinstance(payload, dict):
+        continue
+    if str(payload.get("channel_id") or "").strip() != channel_id:
+        continue
+    records.append(payload)
+records.sort(key=lambda r: int(r.get("submitted_at_unix_ms") or 0), reverse=True)
+window = records[:limit]
+window_chrono = list(reversed(window))
+chain = []
+prev = ""
+for rec in window_chrono:
+    canonical = json.dumps(rec, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    rh = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    ch = hashlib.sha256(f"{prev}:{rh}".encode("utf-8")).hexdigest()
+    chain.append((str(rec.get("delivery_id") or "?"), str(rec.get("status") or "?"), rh, ch))
+    prev = ch
+print(f"[core] channel delivery proof (file-based): {channel_id}")
+print(f"  receipts:        {len(chain)}")
+print(f"  total records:   {len(records)}")
+print(f"  head chain hash: {(chain[-1][3] if chain else '')[:32]}{'...' if chain and len(chain[-1][3]) > 32 else ''}")
+if chain:
+    print(f"  latest 5 receipts:")
+    for did, st, rh, ch in chain[-5:]:
+        print(f"    {did[:16]}  {st:10s}  receipt={rh[:16]}  chain={ch[:16]}")
+else:
+    print("  (no receipts in window)")
 PY
 }
 
@@ -4513,6 +4610,7 @@ Commands:
   channel deliveries      Show recent outbound delivery ledger
   channel send CH R TXT   Send text to a named channel/recipient
   channel diagnostics [CH] [N]  Multi-channel health overview or per-channel delivery diagnostics
+  channel proof CH [N]    Sha256-chained delivery receipt proof for a channel (default N=50)
   channel connect list    List connect adapters
   channel connect scaffold N T [S]   Scaffold adapter NAME/TRANSPORT/ACTION_SCHEMA
   channel connect validate ADAPTER   Validate one adapter

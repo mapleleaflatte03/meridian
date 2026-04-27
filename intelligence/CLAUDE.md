@@ -24,8 +24,9 @@ bash scripts/acceptance_competitor_snapshot_lane.sh
 - `https://app.welliam.codes/workflows` — operator workflow showcase
 - `https://app.welliam.codes/community` — community ops guide
 - `https://app.welliam.codes/api/workflows/showcase` — JSON API (requires Origin header)
-- `https://app.welliam.codes/api/channels/health` — multi-channel adapter health dashboard (public)
+- `https://app.welliam.codes/api/channels/health` — multi-channel adapter health dashboard (public, includes per-adapter lifecycle + Zalo poll state)
 - `https://app.welliam.codes/api/channels/{id}/diagnostics` — per-channel delivery diagnostics (public)
+- `https://app.welliam.codes/api/channels/{id}/proof` — sha256-chained delivery receipt proof for a channel (public)
 
 ## Key Constraints
 

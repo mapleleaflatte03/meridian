@@ -35,7 +35,10 @@ Core should not require users to memorize low-level Loom subcommands for common 
 | Effective config inspect | `core.sh config show` | shipped | Uses Loom config surface |
 | Runtime status/logs | `core.sh runtime *` | shipped | status/health/logs |
 | Channel cockpit | `core.sh channel *` | shipped | list/health/show/deliveries/send/test/diagnostics |
-| Multi-channel health | `core.sh channel diagnostics` | shipped | Overview of all channels; per-channel diagnostics with `channel diagnostics CHANNEL [LIMIT]`; wired into doctor overview; API at `/api/channels/health` and `/api/channels/{id}/diagnostics` |
+| Multi-channel health | `core.sh channel diagnostics` | shipped | Overview of all channels; per-channel diagnostics with `channel diagnostics CHANNEL [LIMIT]`; wired into doctor overview; API at `/api/channels/health` (v2 schema includes lifecycle + poll state) and `/api/channels/{id}/diagnostics` |
+| Channel adapter lifecycle | (in-process) | shipped | Every adapter tracks `started_at`, `last_success_at`, `last_error_at`, `last_error_detail`, `consecutive_failures`, `success_count`, `failure_count`, `last_inbound_at` — exposed via `/api/channels/health` channel summary `lifecycle` field |
+| Channel delivery proof | `core.sh channel proof CH [N]` | shipped | Sha256-chained delivery receipt proof per channel; deterministic chain hash links each receipt to the prior one; API at `/api/channels/{id}/proof?limit=N` |
+| Zalo poll bridge | `MERIDIAN_ZALO_POLL_ENABLED=1` + `MERIDIAN_ZALO_BOT_TOKEN` | shipped | Internal poll thread on Zalo adapter; calls `bot-api.zaloplatforms.com/bot{token}/getUpdates`, normalizes updates, dispatches into `handle_inbound`; exponential backoff on errors; lifecycle and `poll_state` reflected in `/api/channels/health` |
 | Memory cockpit | `core.sh memory *` | shipped | overview/receipts/graph/status |
 | Job cockpit | `core.sh job *` | shipped | list/inspect/approve |
 | Queue cockpit | `core.sh queue *` | shipped | status/inspect/run-once/run-until-empty |

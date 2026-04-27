@@ -1950,14 +1950,30 @@ def _build_multi_channel_health(adapters: list | None = None) -> dict[str, Any]:
     for cid in ALL_CHANNEL_IDS:
         delivery = _recent_channel_delivery_summary(cid, limit=10)
         adapter_active = False
+        lifecycle: dict[str, Any] = {}
+        poll_state: dict[str, Any] = {}
         if adapters:
             for a in adapters:
-                if getattr(a, "name", "") == cid and getattr(a, "_active", False):
+                a_name = getattr(a, "name", "")
+                matches = a_name == cid or (cid == "web_api" and a_name == "web")
+                if not matches:
+                    continue
+                if getattr(a, "_active", False):
                     adapter_active = True
-                    break
-                if cid == "web_api" and getattr(a, "name", "") == "web" and getattr(a, "_active", False):
-                    adapter_active = True
-                    break
+                snapshot_fn = getattr(a, "lifecycle_snapshot", None)
+                if callable(snapshot_fn):
+                    try:
+                        lifecycle = snapshot_fn()
+                    except Exception:
+                        lifecycle = {}
+                if hasattr(a, "poll_state"):
+                    poll_state = {
+                        "state": str(getattr(a, "poll_state", "") or ""),
+                        "detail": str(getattr(a, "poll_state_detail", "") or ""),
+                        "last_message_id": str(getattr(a, "poll_last_message_id", "") or ""),
+                        "enabled": bool(getattr(a, "poll_enabled", False)),
+                    }
+                break
         health_status = "active" if adapter_active else ("registered" if cid in registered_ids else "inactive")
         channel_summaries.append({
             "channel_id": cid,
@@ -1965,13 +1981,15 @@ def _build_multi_channel_health(adapters: list | None = None) -> dict[str, Any]:
             "registered": cid in registered_ids,
             "adapter_active": adapter_active,
             "delivery_summary": delivery,
+            "lifecycle": lifecycle,
+            "poll_state": poll_state,
         })
     total_delivered = sum(s["delivery_summary"]["delivered_count"] for s in channel_summaries)
     total_failed = sum(s["delivery_summary"]["failed_count"] for s in channel_summaries)
     total_pending = sum(s["delivery_summary"]["pending_count"] for s in channel_summaries)
     active_count = sum(1 for s in channel_summaries if s["adapter_active"])
     return {
-        "schema_version": "meridian.channels.health.v1",
+        "schema_version": "meridian.channels.health.v2",
         "channel_count": len(channel_summaries),
         "active_adapter_count": active_count,
         "registered_count": len(registered_ids),
@@ -1979,6 +1997,64 @@ def _build_multi_channel_health(adapters: list | None = None) -> dict[str, Any]:
         "total_recent_failed": total_failed,
         "total_recent_pending": total_pending,
         "channels": channel_summaries,
+    }
+
+
+def _build_channel_delivery_proof(channel_id: str, limit: int = 50) -> dict[str, Any]:
+    """Build a tamper-evident delivery receipt chain for a single channel.
+
+    Each receipt is the sha256 of the canonical delivery record JSON.
+    The chain hash links each receipt to the prior receipt, giving a
+    Merkle-compatible append-only proof of delivery history.
+    """
+    delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
+    records: list[dict[str, Any]] = []
+    try:
+        candidates = sorted(delivery_dir.glob("*.json"))
+    except Exception:
+        candidates = []
+    for path in candidates:
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        if str(payload.get("channel_id") or "").strip() != channel_id:
+            continue
+        records.append(payload)
+    # Most-recent-first window after sorting by submitted_at_unix_ms
+    records.sort(key=lambda r: int(r.get("submitted_at_unix_ms") or 0), reverse=True)
+    window = records[:limit]
+    # Build chain in chronological order so receipts append forward
+    window_chrono = list(reversed(window))
+    chain: list[dict[str, Any]] = []
+    prev_chain_hash = ""
+    for rec in window_chrono:
+        canonical = json.dumps(rec, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        receipt_hash = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        link_input = f"{prev_chain_hash}:{receipt_hash}".encode("utf-8")
+        chain_hash = hashlib.sha256(link_input).hexdigest()
+        chain.append({
+            "delivery_id": str(rec.get("delivery_id") or "").strip(),
+            "status": str(rec.get("status") or "").strip(),
+            "recipient": str(rec.get("recipient") or "").strip(),
+            "submitted_at_unix_ms": int(rec.get("submitted_at_unix_ms") or 0),
+            "completed_at_unix_ms": int(rec.get("completed_at_unix_ms") or 0),
+            "external_ref": str(rec.get("external_ref") or "").strip(),
+            "receipt_hash": receipt_hash,
+            "prev_chain_hash": prev_chain_hash,
+            "chain_hash": chain_hash,
+        })
+        prev_chain_hash = chain_hash
+    head_hash = chain[-1]["chain_hash"] if chain else ""
+    return {
+        "schema_version": "meridian.channels.proof.v1",
+        "channel_id": channel_id,
+        "receipt_count": len(chain),
+        "total_records": len(records),
+        "head_chain_hash": head_hash,
+        "receipts": chain,
     }
 
 
@@ -12648,6 +12724,10 @@ def _load_runtime_config_or_exit() -> dict[str, Any]:
         config["zalo_outbound_url"] = (
             f"https://bot-api.zaloplatforms.com/bot{config['zalo_bot_token']}/sendMessage"
         )
+    config["zalo_poll_enabled"] = (
+        os.environ.get("MERIDIAN_ZALO_POLL_ENABLED")
+        or str(config.get("zalo_poll_enabled") or "")
+    ).strip().lower() in {"1", "true", "yes", "on"}
 
     LLM_BASE_URL = str(config.get("llm_base_url") or "").strip()
     LLM_MODEL = str(config.get("llm_model") or "").strip()
@@ -13585,6 +13665,15 @@ class ChannelAdapter(ABC):
         self.runtime = runtime
         self.name = name
         self._active = False
+        self._lifecycle_lock = threading.Lock()
+        self._started_at_unix: float = 0.0
+        self._last_success_at_unix: float = 0.0
+        self._last_error_at_unix: float = 0.0
+        self._last_error_detail: str = ""
+        self._consecutive_failures: int = 0
+        self._success_count: int = 0
+        self._failure_count: int = 0
+        self._last_inbound_at_unix: float = 0.0
 
     @abstractmethod
     def start(self) -> None:
@@ -13600,6 +13689,43 @@ class ChannelAdapter(ABC):
 
     def is_active(self) -> bool:
         return self._active
+
+    def _record_lifecycle_started(self) -> None:
+        with self._lifecycle_lock:
+            self._started_at_unix = time.time()
+
+    def _record_lifecycle_success(self) -> None:
+        with self._lifecycle_lock:
+            self._last_success_at_unix = time.time()
+            self._consecutive_failures = 0
+            self._success_count += 1
+
+    def _record_lifecycle_failure(self, detail: str) -> None:
+        with self._lifecycle_lock:
+            self._last_error_at_unix = time.time()
+            self._last_error_detail = str(detail or "")[:500]
+            self._consecutive_failures += 1
+            self._failure_count += 1
+
+    def _record_lifecycle_inbound(self) -> None:
+        with self._lifecycle_lock:
+            self._last_inbound_at_unix = time.time()
+
+    def lifecycle_snapshot(self) -> dict[str, Any]:
+        with self._lifecycle_lock:
+            return {
+                "name": self.name,
+                "active": self._active,
+                "started_at_unix": self._started_at_unix,
+                "uptime_seconds": (time.time() - self._started_at_unix) if self._started_at_unix else 0.0,
+                "last_success_at_unix": self._last_success_at_unix,
+                "last_error_at_unix": self._last_error_at_unix,
+                "last_error_detail": self._last_error_detail,
+                "last_inbound_at_unix": self._last_inbound_at_unix,
+                "consecutive_failures": self._consecutive_failures,
+                "success_count": self._success_count,
+                "failure_count": self._failure_count,
+            }
 
 
 class TelegramAdapter(ChannelAdapter):
@@ -13620,6 +13746,7 @@ class TelegramAdapter(ChannelAdapter):
             _log("telegram adapter disabled: no bot token configured", color=ANSI_YELLOW)
             return
         self._active = True
+        self._record_lifecycle_started()
         self.thread = threading.Thread(target=self._poll_loop, name="telegram-adapter", daemon=True)
         self.thread.start()
         self.drain_thread = threading.Thread(target=self._drain_loop, name="telegram-drain", daemon=True)
@@ -13693,8 +13820,10 @@ class TelegramAdapter(ChannelAdapter):
                     org_id=LOOM_ORG_ID,
                     delivery_id=delivery_id,
                 )
+                self._record_lifecycle_success()
             except Exception as exc:
                 _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                self._record_lifecycle_failure(f"{exc.__class__.__name__}: {exc}")
                 _log(f"telegram proactive delivery failed for {chat_id}: {exc}", color=ANSI_YELLOW)
 
     def _drain_loop(self) -> None:
@@ -13752,8 +13881,10 @@ class TelegramAdapter(ChannelAdapter):
                     org_id=LOOM_ORG_ID,
                     delivery_id=delivery_id,
                 )
+                self._record_lifecycle_success()
             except Exception as exc:
                 _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                self._record_lifecycle_failure(f"{exc.__class__.__name__}: {exc}")
                 _log(f"telegram queued delivery failed for {recipient}: {exc}", color=ANSI_YELLOW)
 
     def _poll_loop(self) -> None:
@@ -13817,6 +13948,7 @@ class TelegramAdapter(ChannelAdapter):
             return
         with self.active_lock:
             self.active_chats.add(chat_id)
+        self._record_lifecycle_inbound()
         ingress = _loom_channel_ingest("telegram", str(chat_id), text.strip(), thread_id=str(message_id or ""))
         ingress_payload = ingress.get("payload") if isinstance(ingress, dict) else {}
         session_key = str((ingress_payload or {}).get("session_key") or f"telegram:{chat_id}").strip()
@@ -13867,8 +13999,10 @@ class TelegramAdapter(ChannelAdapter):
                     external_ref=str((result or {}).get("message_id") or str(chat_id)).strip(),
                     detail="",
                 )
+                self._record_lifecycle_success()
             except Exception as exc:
                 _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                self._record_lifecycle_failure(f"{exc.__class__.__name__}: {exc}")
                 _record_gateway_audit(
                     "manager_response_delivery_failed",
                     session_key=session_key,
@@ -13910,23 +14044,47 @@ class ExternalWebhookAdapter(ChannelAdapter):
         inbound_secret: str = "",
         verify_token: str = "",
         auth_token: str = "",
+        bot_token: str = "",
+        poll_enabled: bool = False,
+        poll_interval_seconds: float = 0.5,
+        poll_timeout_seconds: int = 5,
     ) -> None:
         super().__init__(runtime, name)
         self.outbound_url = str(outbound_url or "").strip()
         self.inbound_secret = str(inbound_secret or "").strip()
         self.verify_token = str(verify_token or "").strip()
         self.auth_token = str(auth_token or "").strip()
+        self.bot_token = str(bot_token or "").strip()
+        self.poll_enabled = bool(poll_enabled)
+        self.poll_interval_seconds = max(0.1, float(poll_interval_seconds))
+        self.poll_timeout_seconds = max(1, int(poll_timeout_seconds))
         self.active_peers: set[str] = set()
         self.active_lock = threading.Lock()
+        self.poll_thread: threading.Thread | None = None
+        self.poll_stop_event = threading.Event()
+        self.poll_state: str = "idle"
+        self.poll_state_detail: str = ""
+        self.poll_last_message_id: str = ""
+        self.poll_last_seen_ids: dict[str, float] = {}
 
     def start(self) -> None:
-        if not self.outbound_url and not self.inbound_secret and not self.verify_token:
+        if not self.outbound_url and not self.inbound_secret and not self.verify_token and not (self.poll_enabled and self.bot_token):
             return
         self._active = True
+        self._record_lifecycle_started()
         _log(f"{self.name} adapter enabled via webhook bridge", color=ANSI_GREEN)
+        if self.poll_enabled and self.bot_token and self.name == "zalo":
+            self.poll_thread = threading.Thread(
+                target=self._zalo_poll_loop,
+                name=f"{self.name}-poll-bridge",
+                daemon=True,
+            )
+            self.poll_thread.start()
+            self.poll_state = "polling"
+            _log(f"{self.name} poll bridge started", color=ANSI_GREEN)
 
     def stop(self) -> None:
-        return
+        self.poll_stop_event.set()
 
     def authorize(self, headers: HTTPMessage, query: dict[str, list[str]] | None = None) -> bool:
         if not self.inbound_secret:
@@ -14002,15 +14160,18 @@ class ExternalWebhookAdapter(ChannelAdapter):
                         external_ref=str(result.get("id") or result.get("message_id") or recipient).strip(),
                         detail="",
                     )
+                self._record_lifecycle_success()
             except Exception as exc:
                 if delivery_id:
                     _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                self._record_lifecycle_failure(f"{exc.__class__.__name__}: {exc}")
                 _log(f"{self.name} delivery failed for {recipient}: {exc}", color=ANSI_YELLOW)
 
     def handle_inbound(self, payload: dict[str, Any]) -> dict[str, Any]:
         messages = _flatten_external_channel_messages(self.name, payload)
         if not messages:
             return {"status": "ignored", "processed": 0, "reason": "no_text_messages"}
+        self._record_lifecycle_inbound()
         results: list[dict[str, Any]] = []
         channel_registered = _loom_channel_registered(self.name)
         for item in messages:
@@ -14067,8 +14228,10 @@ class ExternalWebhookAdapter(ChannelAdapter):
                         external_ref=str(result.get("id") or result.get("message_id") or sender_id).strip(),
                         detail="",
                     )
+                    self._record_lifecycle_success()
                 except Exception as exc:
                     _loom_channel_update(delivery_id, "failed", detail=f"{exc.__class__.__name__}: {exc}")
+                    self._record_lifecycle_failure(f"{exc.__class__.__name__}: {exc}")
                     _record_gateway_audit(
                         "manager_response_delivery_failed",
                         session_key=session_key,
@@ -14081,7 +14244,12 @@ class ExternalWebhookAdapter(ChannelAdapter):
                     )
                     raise
             elif visible_answer and not duplicate:
-                self._send_direct(sender_id, visible_answer)
+                try:
+                    self._send_direct(sender_id, visible_answer)
+                    self._record_lifecycle_success()
+                except Exception as exc:
+                    self._record_lifecycle_failure(f"{exc.__class__.__name__}: {exc}")
+                    raise
             results.append(
                 {
                     "sender_id": sender_id,
@@ -14092,6 +14260,134 @@ class ExternalWebhookAdapter(ChannelAdapter):
                 }
             )
         return {"status": "success", "processed": len(results), "results": results}
+
+    def _zalo_poll_loop(self) -> None:
+        if not self.bot_token:
+            self.poll_state = "disabled"
+            self.poll_state_detail = "no bot token configured"
+            return
+        updates_url = f"https://bot-api.zaloplatforms.com/bot{self.bot_token}/getUpdates"
+        backoff_seconds = self.poll_interval_seconds
+        while not self.poll_stop_event.wait(0):
+            try:
+                request = urllib.request.Request(
+                    updates_url,
+                    data=json.dumps({"timeout": str(self.poll_timeout_seconds)}).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                with urllib.request.urlopen(request, timeout=max(5.0, float(self.poll_timeout_seconds) + 5.0)) as response:
+                    raw = response.read().decode("utf-8", "replace")
+                self.poll_state = "polling"
+                self.poll_state_detail = ""
+                backoff_seconds = self.poll_interval_seconds
+            except urllib.error.HTTPError as exc:
+                self.poll_state = "error"
+                self.poll_state_detail = f"http {exc.code}: {exc.reason}"
+                self._record_lifecycle_failure(f"zalo getUpdates http {exc.code}: {exc.reason}")
+                backoff_seconds = min(30.0, backoff_seconds * 2)
+                if self.poll_stop_event.wait(backoff_seconds):
+                    return
+                continue
+            except Exception as exc:
+                self.poll_state = "error"
+                self.poll_state_detail = f"{exc.__class__.__name__}: {exc}"
+                self._record_lifecycle_failure(f"zalo getUpdates: {exc.__class__.__name__}: {exc}")
+                backoff_seconds = min(30.0, backoff_seconds * 2)
+                if self.poll_stop_event.wait(backoff_seconds):
+                    return
+                continue
+
+            try:
+                parsed = json.loads(raw)
+            except Exception:
+                parsed = {}
+            items = parsed.get("result") if isinstance(parsed, dict) else None
+            if not isinstance(items, list) or not items:
+                if self.poll_stop_event.wait(self.poll_interval_seconds):
+                    return
+                continue
+
+            normalized_messages: list[dict[str, Any]] = []
+            for item in items:
+                normalized = _zalo_normalize_update(item) if isinstance(item, dict) else None
+                if not normalized:
+                    continue
+                msg_id = str(normalized.get("message_id") or "").strip()
+                if msg_id and self.poll_last_message_id and msg_id <= self.poll_last_message_id:
+                    continue
+                if msg_id and msg_id in self.poll_last_seen_ids:
+                    continue
+                normalized_messages.append(normalized)
+                if msg_id:
+                    self.poll_last_seen_ids[msg_id] = time.time()
+                    self.poll_last_message_id = msg_id
+
+            # GC dedup map: keep at most last 256 ids by recency
+            if len(self.poll_last_seen_ids) > 256:
+                cutoff = sorted(self.poll_last_seen_ids.values(), reverse=True)[255]
+                self.poll_last_seen_ids = {
+                    k: v for k, v in self.poll_last_seen_ids.items() if v >= cutoff
+                }
+
+            for msg in normalized_messages:
+                payload_for_inbound = {
+                    "fromuid": msg.get("sender_id") or "",
+                    "text": msg.get("text") or "",
+                    "message_id": msg.get("message_id") or "",
+                }
+                try:
+                    self.handle_inbound(payload_for_inbound)
+                except Exception as exc:
+                    self.poll_state = "error"
+                    self.poll_state_detail = f"inbound: {exc.__class__.__name__}: {exc}"
+                    self._record_lifecycle_failure(f"zalo poll inbound: {exc.__class__.__name__}: {exc}")
+                    _log(f"zalo poll bridge inbound failed: {exc}", color=ANSI_YELLOW)
+
+            if self.poll_stop_event.wait(self.poll_interval_seconds):
+                return
+
+
+def _zalo_extract_text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("text", "content", "message", "body"):
+            candidate = value.get(key)
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+            if isinstance(candidate, dict):
+                nested = _zalo_extract_text(candidate)
+                if nested:
+                    return nested
+    return ""
+
+
+def _zalo_normalize_update(item: dict[str, Any]) -> dict[str, Any] | None:
+    """Normalize a raw Zalo getUpdates entry into the inbound payload shape used by the gateway."""
+    message_id = str(item.get("message_id") or item.get("update_id") or item.get("id") or "").strip()
+    sender = ""
+    for key in ("fromuid", "from_id", "sender_id", "chat_id"):
+        candidate = str(item.get(key) or "").strip()
+        if candidate:
+            sender = candidate
+            break
+    if not sender:
+        sender = str(dict(item.get("sender") or {}).get("id") or "").strip()
+    if not sender:
+        sender = str(dict(item.get("from") or {}).get("id") or "").strip()
+    text = _zalo_extract_text(item.get("text"))
+    if not text:
+        text = _zalo_extract_text(item.get("message"))
+    if not text:
+        text = _zalo_extract_text(item)
+    if not sender or not text:
+        return None
+    return {
+        "message_id": message_id or f"zalo-{int(time.time() * 1000)}",
+        "sender_id": sender,
+        "text": text,
+    }
 
 
 @contextlib.contextmanager
@@ -14236,6 +14532,8 @@ class WebAPIAdapter(ChannelAdapter):
                 }:
                     return True
                 if normalized.startswith("/api/channels/") and normalized.endswith("/diagnostics"):
+                    return True
+                if normalized.startswith("/api/channels/") and normalized.endswith("/proof"):
                     return True
                 return False
 
@@ -14400,6 +14698,16 @@ class WebAPIAdapter(ChannelAdapter):
                         diag_limit = min(int((query.get("limit") or ["20"])[0] or "20"), 100)
                         diagnostics = _build_channel_diagnostics(channel_id, limit=diag_limit)
                         self._send_json(200, {"status": "success", "diagnostics": diagnostics})
+                        return
+                    self._send_json(404, {"status": "error", "output": f"unknown channel: {channel_id}"})
+                    return
+                if request_path.startswith("/api/channels/") and request_path.endswith("/proof"):
+                    channel_id = request_path.removeprefix("/api/channels/").removesuffix("/proof").strip().lower()
+                    if channel_id and channel_id in ALL_CHANNEL_IDS:
+                        query = parse_qs(parsed.query or "")
+                        proof_limit = min(int((query.get("limit") or ["50"])[0] or "50"), 500)
+                        proof = _build_channel_delivery_proof(channel_id, limit=proof_limit)
+                        self._send_json(200, {"status": "success", "delivery_proof": proof})
                         return
                     self._send_json(404, {"status": "error", "output": f"unknown channel: {channel_id}"})
                     return
@@ -15035,6 +15343,8 @@ def main() -> int:
             "zalo",
             outbound_url=str(config.get("zalo_outbound_url") or ""),
             inbound_secret=str(config.get("zalo_inbound_secret") or ""),
+            bot_token=str(config.get("zalo_bot_token") or ""),
+            poll_enabled=bool(config.get("zalo_poll_enabled") or False),
         ),
     }
     web_adapter = WebAPIAdapter(runtime, str(config.get("allowed_origin") or ""), external_adapters)
