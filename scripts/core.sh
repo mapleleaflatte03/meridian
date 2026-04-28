@@ -3135,23 +3135,57 @@ for e in entries:
 # Full-content search across all categories for the active agent.
 
 cmd_memory_search() {
-    local query="${1:-}"
-    local limit="${2:-}"
-    [ -n "$query" ] || die "Usage: core.sh memory search QUERY [LIMIT]"
+    local query=""
+    local limit=""
+    local all_agents=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --all-agents)
+                all_agents=1; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory search QUERY [LIMIT] [--all-agents]
+
+Full-content search across stored memory (case-insensitive substring
+against entry key or content). Default scope is the active agent.
+Use --all-agents to fan out across every agent in the runtime root;
+results are merged and ordered by most-recent updated_at first.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$query" ]; then query="$1"
+                elif [ -z "$limit" ]; then limit="$1"
+                else die "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$query" ] || die "Usage: core.sh memory search QUERY [LIMIT] [--all-agents]"
     require_loom; require_runtime
 
-    local agent_id; agent_id="$(resolve_agent_id)"
-    [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
-
-    local args=("--agent-id" "$agent_id" "--root" "$LOOM_ROOT" "--format" "json" "--text" "$query")
+    local args=("--root" "$LOOM_ROOT" "--format" "json" "--text" "$query")
     [ -n "$limit" ] && args+=("--limit" "$limit")
+    if [ "$all_agents" -eq 1 ]; then
+        args+=("--all-agents")
+    else
+        local agent_id; agent_id="$(resolve_agent_id)"
+        [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
+        args+=("--agent-id" "$agent_id")
+    fi
 
     local mem_json
     mem_json="$("$LOOM_BIN" memory search "${args[@]}" 2>/dev/null || true)"
-    QUERY="$query" MEM_JSON="$mem_json" python3 - <<'PY'
+    QUERY="$query" MEM_JSON="$mem_json" SHOW_AGENT="$all_agents" python3 - <<'PY'
 import json, os
 query = os.environ.get("QUERY", "")
 raw = os.environ.get("MEM_JSON", "") or "[]"
+show_agent = os.environ.get("SHOW_AGENT", "0") == "1"
 try:
     entries = json.loads(raw)
 except Exception:
@@ -3161,12 +3195,16 @@ if not entries:
     raise SystemExit(0)
 print(f"[core] {len(entries)} match(es) for: {query}")
 for e in entries:
+    agent = e.get("agent_id", "?")
     cat = e.get("category", "?")
     key = e.get("key", "?")
     content = (e.get("content") or "").replace("\n", " ")
     if len(content) > 100:
         content = content[:100] + "…"
-    print(f"  [{cat}] {key}: {content}")
+    if show_agent:
+        print(f"  [{agent}/{cat}] {key}: {content}")
+    else:
+        print(f"  [{cat}] {key}: {content}")
 PY
 }
 
@@ -4955,7 +4993,7 @@ Commands:
   memory receipts         Show recent memory receipts
   memory graph SOURCE_REF Inspect memory graph lineage/forks
   memory overview         Show memory overview
-  memory search QUERY [N] Full-content search across stored memory (case-insensitive)
+  memory search QUERY [N] [--all-agents]   Full-content search across stored memory (case-insensitive). With --all-agents, fan out across every agent and order by recency.
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details

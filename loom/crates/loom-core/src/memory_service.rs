@@ -536,6 +536,77 @@ impl MemoryService {
         Ok(filtered)
     }
 
+    /// Search memory entries across every known agent in the runtime root.
+    ///
+    /// Iterates [`MemoryRepo::list_agents`] and applies the same category /
+    /// key prefix / text-query / limit filters as [`Self::search_filtered`].
+    /// Results are merged across agents and ordered by `updated_at` (most
+    /// recent first), then capped by `limit` if provided. Each returned
+    /// entry retains its own `agent_id` so callers can attribute the match.
+    ///
+    /// Useful for Team-mode recall where a memory may live on any agent.
+    pub fn search_all_agents(
+        &self,
+        category: Option<&str>,
+        key_prefix: Option<&str>,
+        text_query: Option<&str>,
+        limit: Option<usize>,
+    ) -> LoomResult<Vec<MemoryEntry>> {
+        let agents = self.repo.list_agents()?;
+        let needle = text_query
+            .map(|q| q.trim().to_lowercase())
+            .filter(|q| !q.is_empty());
+        let mut all: Vec<MemoryEntry> = Vec::new();
+        for agent_id in &agents {
+            let entries = self.repo.read_entries(agent_id)?;
+            for e in entries {
+                if let Some(cat) = category {
+                    if e.category != cat {
+                        continue;
+                    }
+                }
+                if let Some(prefix) = key_prefix {
+                    if !e.key.starts_with(prefix) {
+                        continue;
+                    }
+                }
+                if let Some(ref q) = needle {
+                    if !e.key.to_lowercase().contains(q)
+                        && !e.content.to_lowercase().contains(q)
+                    {
+                        continue;
+                    }
+                }
+                all.push(e);
+            }
+        }
+        all.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+        if let Some(cap) = limit {
+            if all.len() > cap {
+                all.truncate(cap);
+            }
+        }
+        // Receipt is recorded against an aggregate agent label so the read
+        // ledger still shows cross-agent recall happened.
+        self.append_receipt(
+            "read",
+            "_all_agents",
+            &format!(
+                "category={} key_prefix={} text={} limit={} agents={}",
+                category.unwrap_or("*"),
+                key_prefix.unwrap_or("*"),
+                needle.as_deref().unwrap_or("*"),
+                limit
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "*".to_string()),
+                agents.len(),
+            ),
+            &format!("result_count={}", all.len()),
+            false,
+        )?;
+        Ok(all)
+    }
+
     /// Remove a specific entry by key.
     pub fn remove(&self, agent_id: &str, category: &str, key: &str) -> LoomResult<bool> {
         let mut entries = self.repo.read_entries(agent_id)?;
@@ -1450,6 +1521,81 @@ mod tests {
             .search_filtered("atlas", None, None, Some("zzz_no_match"), None)
             .unwrap();
         assert!(nope.is_empty());
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn test_service_search_all_agents_merges_and_orders_by_recency() {
+        let root = temp_root();
+        let svc = MemoryService::with_defaults(&root);
+        // Three agents with entries mentioning the team release.
+        svc.write("atlas", "core", "release_status", "shipping the team release", "atlas")
+            .unwrap();
+        svc.write("sentinel", "core", "release_status", "auditing the team release", "sentinel")
+            .unwrap();
+        svc.write("quill", "core", "release_status", "writing the team release notes", "quill")
+            .unwrap();
+        // Unrelated entries that must be filtered out.
+        svc.write("atlas", "preferences", "lang", "vi", "atlas")
+            .unwrap();
+        svc.write("forge", "core", "build_status", "compile ok", "forge")
+            .unwrap();
+
+        // No filters: every agent that has any persisted memory shows up.
+        let all = svc.search_all_agents(None, None, None, None).unwrap();
+        let agents_seen: std::collections::HashSet<_> =
+            all.iter().map(|e| e.agent_id.clone()).collect();
+        for expected in ["atlas", "sentinel", "quill", "forge"] {
+            assert!(
+                agents_seen.contains(expected),
+                "missing {} in {:?}",
+                expected,
+                agents_seen
+            );
+        }
+
+        // Text search across agents.
+        let release = svc
+            .search_all_agents(None, None, Some("team release"), None)
+            .unwrap();
+        assert_eq!(release.len(), 3);
+        let release_agents: std::collections::HashSet<_> =
+            release.iter().map(|e| e.agent_id.clone()).collect();
+        for expected in ["atlas", "sentinel", "quill"] {
+            assert!(release_agents.contains(expected));
+        }
+
+        // Recency ordering: bump quill's updated_at via a second upsert,
+        // which calls write() again and therefore advances updated_at.
+        // Use a tiny sleep so the second-resolution clock advances.
+        std::thread::sleep(std::time::Duration::from_millis(1100));
+        svc.write(
+            "quill",
+            "core",
+            "release_status",
+            "writing the team release notes v2",
+            "quill",
+        )
+        .unwrap();
+        let release_after = svc
+            .search_all_agents(None, None, Some("team release"), None)
+            .unwrap();
+        assert_eq!(release_after[0].agent_id, "quill");
+
+        // Limit caps after the cross-agent merge.
+        let top1 = svc
+            .search_all_agents(None, None, Some("team release"), Some(1))
+            .unwrap();
+        assert_eq!(top1.len(), 1);
+        assert_eq!(top1[0].agent_id, "quill");
+
+        // Category + text + limit interplay.
+        let cat = svc
+            .search_all_agents(Some("core"), None, Some("release"), Some(2))
+            .unwrap();
+        assert_eq!(cat.len(), 2);
+        assert!(cat.iter().all(|e| e.category == "core"));
 
         cleanup(&root);
     }

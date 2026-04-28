@@ -457,18 +457,29 @@ print(json.dumps({
 fn handle_memory_search(args: &[String]) -> LoomResult<()> {
     let root = root_from(take_value(args, "--root").as_deref())?;
     let format = output_format(args);
-    let agent_id = required_flag(args, "--agent-id")?;
+    let all_agents = args.iter().any(|a| a == "--all-agents");
     let category = take_value(args, "--category");
     let key_prefix = take_value(args, "--key-prefix");
     let text = take_value(args, "--text");
     let limit = take_value(args, "--limit").and_then(|value| value.parse::<usize>().ok());
-    let entries = MemoryService::with_defaults(&root).search_filtered(
-        &agent_id,
-        category.as_deref(),
-        key_prefix.as_deref(),
-        text.as_deref(),
-        limit,
-    )?;
+    let svc = MemoryService::with_defaults(&root);
+    let entries = if all_agents {
+        svc.search_all_agents(
+            category.as_deref(),
+            key_prefix.as_deref(),
+            text.as_deref(),
+            limit,
+        )?
+    } else {
+        let agent_id = required_flag(args, "--agent-id")?;
+        svc.search_filtered(
+            &agent_id,
+            category.as_deref(),
+            key_prefix.as_deref(),
+            text.as_deref(),
+            limit,
+        )?
+    };
     match format.as_str() {
         "human" => {
             print_startup_banner();
