@@ -6149,6 +6149,53 @@ def _build_memory_search_response(
     }
 
 
+def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str, Any]:
+    """Run `loom memory overview` and shape the response for operators.
+
+    Memory overview never carries entry content — only aggregates — so it
+    is safer to expose than /api/memory/search. Even so we keep the route
+    Origin-protected for consistency with the rest of the memory surface.
+    """
+    result = _run_loom_memory_command(["overview"])
+    if not result.get("ok"):
+        return {
+            "status": "error",
+            "output": str(result.get("error") or "memory_overview_failed"),
+        }
+    payload = result.get("payload") or {}
+    if not isinstance(payload, dict):
+        return {
+            "status": "error",
+            "output": "memory_overview_unexpected_payload_shape",
+        }
+    agents = payload.get("agents") or []
+    agent_summaries = []
+    if include_agents and isinstance(agents, list):
+        for a in agents:
+            if not isinstance(a, dict):
+                continue
+            cats = a.get("categories") or []
+            if not isinstance(cats, list):
+                cats = []
+            agent_summaries.append(
+                {
+                    "agent_id": str(a.get("agent_id") or ""),
+                    "entry_count": int(a.get("entry_count") or 0),
+                    "total_bytes": int(a.get("total_bytes") or 0),
+                    "category_count": len(cats),
+                    "categories": [str(c) for c in cats],
+                }
+            )
+    return {
+        "status": "success",
+        "agent_count": int(payload.get("agent_count") or 0),
+        "total_entries": int(payload.get("total_entries") or 0),
+        "total_bytes": int(payload.get("total_bytes") or 0),
+        "policy": payload.get("policy") or {},
+        "agents": agent_summaries if include_agents else [],
+    }
+
+
 def _memory_entry_skills(entry: dict[str, Any]) -> list[str]:
     return [
         str(item or "").strip().lower()
@@ -15010,6 +15057,17 @@ class WebAPIAdapter(ChannelAdapter):
                             "showcase": _normalize_status_wording(_workflow_showcase_snapshot_cached()),
                         },
                     )
+                    return
+                if request_path == "/api/memory/overview":
+                    query_params = parse_qs(parsed.query or "")
+                    include_agents = str(
+                        (query_params.get("include_agents") or ["1"])[0] or "1"
+                    ).strip().lower() in {"1", "true", "yes", "on"}
+                    payload = _build_memory_overview_response(
+                        include_agents=include_agents
+                    )
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
                     return
                 if request_path == "/api/memory/search":
                     query_params = parse_qs(parsed.query or "")

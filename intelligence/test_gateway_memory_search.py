@@ -172,6 +172,80 @@ class TestBuildMemorySearchResponse(unittest.TestCase):
         self.assertEqual(result["matches"], [])
 
 
+class TestBuildMemoryOverviewResponse(unittest.TestCase):
+    def test_overview_propagates_loom_failure(self):
+        def fake_run(args):
+            self.assertEqual(args, ["overview"])
+            return {"ok": False, "error": "synthetic_overview_failure"}
+
+        with patch.object(gateway, "_run_loom_memory_command", side_effect=fake_run):
+            result = gateway._build_memory_overview_response()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["output"], "synthetic_overview_failure")
+
+    def test_overview_shapes_aggregates(self):
+        sample = {
+            "agent_count": 2,
+            "total_entries": 5,
+            "total_bytes": 1024,
+            "policy": {"max_entry_bytes": 4096, "retention_days": 30},
+            "agents": [
+                {
+                    "agent_id": "atlas",
+                    "entry_count": 3,
+                    "total_bytes": 600,
+                    "categories": ["core", "notes"],
+                },
+                {
+                    "agent_id": "quill",
+                    "entry_count": 2,
+                    "total_bytes": 424,
+                    "categories": ["drafts"],
+                },
+            ],
+        }
+
+        def fake_run(args):
+            return {"ok": True, "payload": sample}
+
+        with patch.object(gateway, "_run_loom_memory_command", side_effect=fake_run):
+            result = gateway._build_memory_overview_response()
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["agent_count"], 2)
+        self.assertEqual(result["total_entries"], 5)
+        self.assertEqual(result["total_bytes"], 1024)
+        self.assertEqual(result["policy"]["retention_days"], 30)
+        self.assertEqual(len(result["agents"]), 2)
+        atlas = next(a for a in result["agents"] if a["agent_id"] == "atlas")
+        self.assertEqual(atlas["entry_count"], 3)
+        self.assertEqual(atlas["category_count"], 2)
+        self.assertEqual(atlas["categories"], ["core", "notes"])
+
+    def test_overview_can_omit_per_agent_breakdown(self):
+        sample = {"agent_count": 1, "total_entries": 1, "agents": [
+            {"agent_id": "x", "entry_count": 1, "total_bytes": 10, "categories": []}
+        ]}
+
+        def fake_run(args):
+            return {"ok": True, "payload": sample}
+
+        with patch.object(gateway, "_run_loom_memory_command", side_effect=fake_run):
+            result = gateway._build_memory_overview_response(include_agents=False)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["agents"], [])
+
+    def test_overview_handles_unexpected_payload(self):
+        def fake_run(args):
+            return {"ok": True, "payload": ["not", "a", "dict"]}
+
+        with patch.object(gateway, "_run_loom_memory_command", side_effect=fake_run):
+            result = gateway._build_memory_overview_response()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(
+            result["output"], "memory_overview_unexpected_payload_shape"
+        )
+
+
 class TestMemorySearchRouteWiring(unittest.TestCase):
     """Source-string assertions matching the existing intelligence test style."""
 
@@ -195,6 +269,15 @@ class TestMemorySearchRouteWiring(unittest.TestCase):
             "min(limit_val, MEMORY_SEARCH_API_MAX_LIMIT)",
             self.source,
         )
+
+    def test_overview_route_is_wired(self):
+        self.assertIn('"/api/memory/overview"', self.source)
+        self.assertIn("_build_memory_overview_response(", self.source)
+
+    def test_overview_route_is_origin_protected_not_public(self):
+        public_block_start = self.source.index("def _public_read_allowed")
+        public_block = self.source[public_block_start : public_block_start + 4000]
+        self.assertNotIn("/api/memory/overview", public_block)
 
 
 if __name__ == "__main__":
