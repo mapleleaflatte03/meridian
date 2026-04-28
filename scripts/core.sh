@@ -4856,8 +4856,11 @@ cmd_memory() {
         restore)
             cmd_memory_restore "$@"
             ;;
+        prune)
+            cmd_memory_prune "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune> [args]"
             ;;
     esac
 }
@@ -5119,6 +5122,140 @@ PY
     [ "$total_failed" -eq 0 ] || return 2
 }
 
+# ── Command: memory prune ─────────────────────────────────────────────────
+# Time-based prune of stale memory entries across all agents. Defaults to
+# dry-run so operators preview what would be removed before executing —
+# safety-first per owner policy.
+
+cmd_memory_prune() {
+    local older_than_days=""
+    local mode="dry-run"
+    local agent_filter=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --older-than)
+                older_than_days="${2:-}"; shift 2 || true
+                ;;
+            --execute)
+                mode="execute"; shift
+                ;;
+            --agent)
+                agent_filter="${2:-}"; shift 2 || true
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory prune --older-than DAYS [--execute] [--agent ID]
+
+Prune memory entries whose updated_at is older than DAYS days ago.
+Default mode is dry-run: lists every (agent, category, key, age_days)
+that would be removed without modifying state. Pass --execute to
+actually remove. Pass --agent ID to scope to a single agent.
+
+Owner safety: this is the only Core command that deletes memory.
+Always run dry-run first.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                die "Unexpected argument: $1"
+                ;;
+        esac
+    done
+    [ -n "$older_than_days" ] || die "Usage: core.sh memory prune --older-than DAYS [--execute] [--agent ID]"
+    case "$older_than_days" in
+        ''|*[!0-9]*) die "--older-than must be a positive integer (days), got: $older_than_days" ;;
+    esac
+    [ "$older_than_days" -gt 0 ] || die "--older-than must be > 0"
+    require_loom; require_runtime
+
+    local now_unix; now_unix="$(date -u +%s)"
+    local cutoff=$((now_unix - older_than_days * 86400))
+
+    # Collect all entries via cross-agent search (text=*), or single agent.
+    local search_args=("--root" "$LOOM_ROOT" "--format" "json")
+    if [ -n "$agent_filter" ]; then
+        search_args+=("--agent-id" "$agent_filter")
+    else
+        search_args+=("--all-agents")
+    fi
+    local raw
+    raw="$("$LOOM_BIN" memory search "${search_args[@]}" 2>/dev/null || echo "[]")"
+
+    local plan_blob
+    plan_blob="$(MEM_RAW="$raw" CUTOFF="$cutoff" python3 - <<'PY'
+import json, os
+raw = os.environ.get("MEM_RAW") or "[]"
+cutoff = int(os.environ.get("CUTOFF") or "0")
+try:
+    entries = json.loads(raw)
+except Exception:
+    entries = []
+stale = []
+for e in entries:
+    if not isinstance(e, dict):
+        continue
+    updated = int(e.get("updated_at") or 0)
+    if updated and updated < cutoff:
+        stale.append(e)
+# Emit one TSV row per stale entry: agent\tcategory\tkey\tage_days
+import time
+now = int(time.time())
+for e in stale:
+    age_days = max(0, (now - int(e.get("updated_at") or 0)) // 86400)
+    print(
+        f"{e.get('agent_id','')}\t{e.get('category','')}\t{e.get('key','')}\t{age_days}"
+    )
+PY
+)"
+
+    if [ -z "$plan_blob" ]; then
+        echo "[core] memory prune: nothing older than $older_than_days days"
+        echo "  cutoff_unix: $cutoff"
+        echo "  scope:       $([ -n "$agent_filter" ] && echo "agent=$agent_filter" || echo all_agents)"
+        return 0
+    fi
+
+    local stale_count
+    stale_count=$(printf '%s\n' "$plan_blob" | grep -c '	' || true)
+
+    echo "[core] memory prune $mode: $stale_count entries older than $older_than_days days"
+    echo "  cutoff_unix: $cutoff"
+    echo "  scope:       $([ -n "$agent_filter" ] && echo "agent=$agent_filter" || echo all_agents)"
+
+    if [ "$mode" = "dry-run" ]; then
+        printf '%s\n' "$plan_blob" | head -50 | while IFS=$'\t' read -r aid cat key age; do
+            [ -n "$aid" ] || continue
+            printf '  [dry-run] %s/%s/%s (age=%sd)\n' "$aid" "$cat" "$key" "$age"
+        done
+        if [ "$stale_count" -gt 50 ]; then
+            echo "  ... and $((stale_count - 50)) more (showing first 50)"
+        fi
+        echo "  Run with --execute to actually remove these entries."
+        return 0
+    fi
+
+    # Execute mode: remove each stale entry via loom memory remove.
+    local removed=0
+    local failed=0
+    while IFS=$'\t' read -r aid cat key age; do
+        [ -n "$aid" ] || continue
+        if "$LOOM_BIN" memory remove --agent-id "$aid" --category "$cat" --key "$key" --root "$LOOM_ROOT" --format json > /dev/null 2>&1; then
+            removed=$((removed + 1))
+        else
+            failed=$((failed + 1))
+            echo "  [fail] $aid/$cat/$key"
+        fi
+    done <<< "$plan_blob"
+
+    echo "[core] memory prune execute complete"
+    echo "  removed:    $removed"
+    echo "  failed:     $failed"
+    [ "$failed" -eq 0 ] || return 2
+}
+
 # ── Command: cap ──────────────────────────────────────────────────────────
 # Delegates to skill.sh for capability discovery and execution
 
@@ -5259,6 +5396,7 @@ Commands:
   memory search QUERY [N] [--all-agents]   Full-content search across stored memory (case-insensitive). With --all-agents, fan out across every agent and order by recency.
   memory snapshot DIR [--all-agents]   Export memory entries to DIR (one JSON per agent + _manifest.json)
   memory restore DIR [--agent ID]      Restore memory entries from a snapshot DIR (upserts; non-destructive)
+  memory prune --older-than DAYS [--execute] [--agent ID]   Time-based prune (dry-run by default; --execute to actually remove)
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details

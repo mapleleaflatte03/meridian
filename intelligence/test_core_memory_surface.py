@@ -165,5 +165,56 @@ class TestMemoryRestoreSurface(unittest.TestCase):
         )
 
 
+class TestMemoryPruneSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_prune(self):
+        self.assertIn("memory prune --older-than", _help_block(self.source))
+
+    def test_memory_prune_dispatched_from_cmd_memory(self):
+        self.assertIn("prune)\n            cmd_memory_prune", self.source)
+
+    def test_memory_prune_function_exists(self):
+        self.assertIn("cmd_memory_prune()", self.source)
+
+    def test_memory_prune_default_mode_is_dry_run(self):
+        # Default mode must be dry-run; --execute opts in to deletion.
+        self.assertIn('mode="dry-run"', self.source)
+
+    def test_memory_prune_requires_older_than_flag(self):
+        self.assertIn(
+            'die "Usage: core.sh memory prune --older-than DAYS',
+            self.source,
+        )
+
+    def test_memory_prune_validates_positive_integer(self):
+        # Reject non-integer or zero values for --older-than.
+        self.assertIn("--older-than must be a positive integer", self.source)
+        self.assertIn("--older-than must be > 0", self.source)
+
+    def test_memory_prune_uses_loom_remove_only_in_execute_mode(self):
+        # The function body must guard loom memory remove behind execute mode.
+        marker = "cmd_memory_prune()"
+        start = self.source.find(marker)
+        self.assertGreater(start, 0)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        # The dry-run branch must return before the remove loop runs.
+        dry_run_branch = body.find('if [ "$mode" = "dry-run" ]; then')
+        remove_call = body.find('"$LOOM_BIN" memory remove')
+        self.assertGreater(dry_run_branch, 0, "dry-run branch missing")
+        self.assertGreater(remove_call, 0, "memory remove call missing")
+        self.assertLess(
+            dry_run_branch,
+            remove_call,
+            "dry-run branch must guard the remove call",
+        )
+
+    def test_memory_prune_supports_agent_filter(self):
+        self.assertIn('agent_filter="${2:-}"', self.source)
+
+
 if __name__ == "__main__":
     unittest.main()
