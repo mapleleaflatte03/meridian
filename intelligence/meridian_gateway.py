@@ -6069,6 +6069,86 @@ def _run_loom_memory_command(args: list[str]) -> dict[str, Any]:
     return {"ok": True, "payload": parsed}
 
 
+# ── Memory search (Origin-protected) ──────────────────────────────────────
+# Bridges core.sh memory recall depth into the operator web surface.
+
+MEMORY_SEARCH_API_DEFAULT_LIMIT = 20
+MEMORY_SEARCH_API_MAX_LIMIT = 100
+MEMORY_SEARCH_API_CONTENT_PREVIEW_CHARS = 240
+
+
+def _build_memory_search_response(
+    *,
+    query: str,
+    agent_id: str | None,
+    all_agents: bool,
+    category: str | None,
+    key_prefix: str | None,
+    limit: int,
+    include_content: bool,
+) -> dict[str, Any]:
+    args: list[str] = ["search"]
+    if all_agents:
+        args.append("--all-agents")
+    elif agent_id:
+        args.extend(["--agent-id", agent_id])
+    else:
+        return {
+            "status": "error",
+            "output": "memory_search_requires_agent_id_or_all_agents",
+            "matches": [],
+        }
+    if category:
+        args.extend(["--category", category])
+    if key_prefix:
+        args.extend(["--key-prefix", key_prefix])
+    if query:
+        args.extend(["--text", query])
+    args.extend(["--limit", str(int(limit))])
+
+    result = _run_loom_memory_command(args)
+    if not result.get("ok"):
+        return {
+            "status": "error",
+            "output": str(result.get("error") or "memory_search_failed"),
+            "matches": [],
+        }
+    raw = result.get("payload")
+    entries = raw if isinstance(raw, list) else []
+    matches: list[dict[str, Any]] = []
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        item: dict[str, Any] = {
+            "agent_id": str(e.get("agent_id") or ""),
+            "category": str(e.get("category") or ""),
+            "key": str(e.get("key") or ""),
+            "updated_at": int(e.get("updated_at") or 0),
+            "created_at": int(e.get("created_at") or 0),
+        }
+        if include_content:
+            content = str(e.get("content") or "")
+            if len(content) > MEMORY_SEARCH_API_CONTENT_PREVIEW_CHARS:
+                item["content"] = content[:MEMORY_SEARCH_API_CONTENT_PREVIEW_CHARS] + "…"
+                item["content_truncated"] = True
+            else:
+                item["content"] = content
+                item["content_truncated"] = False
+        matches.append(item)
+    return {
+        "status": "success",
+        "query": query,
+        "scope": "all_agents" if all_agents else "single_agent",
+        "agent_id": None if all_agents else agent_id,
+        "category": category or None,
+        "key_prefix": key_prefix or None,
+        "limit": int(limit),
+        "include_content": bool(include_content),
+        "match_count": len(matches),
+        "matches": matches,
+    }
+
+
 def _memory_entry_skills(entry: dict[str, Any]) -> list[str]:
     return [
         str(item or "").strip().lower()
@@ -14930,6 +15010,35 @@ class WebAPIAdapter(ChannelAdapter):
                             "showcase": _normalize_status_wording(_workflow_showcase_snapshot_cached()),
                         },
                     )
+                    return
+                if request_path == "/api/memory/search":
+                    query_params = parse_qs(parsed.query or "")
+
+                    def _qp(name: str, default: str = "") -> str:
+                        values = query_params.get(name) or []
+                        return str(values[0] if values else default).strip()
+
+                    def _qp_bool(name: str) -> bool:
+                        return _qp(name).lower() in {"1", "true", "yes", "on"}
+
+                    text_query = _qp("q") or _qp("text")
+                    raw_limit = _qp("limit") or str(MEMORY_SEARCH_API_DEFAULT_LIMIT)
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = MEMORY_SEARCH_API_DEFAULT_LIMIT
+                    limit_val = max(1, min(limit_val, MEMORY_SEARCH_API_MAX_LIMIT))
+                    payload = _build_memory_search_response(
+                        query=text_query,
+                        agent_id=_qp("agent_id") or None,
+                        all_agents=_qp_bool("all_agents"),
+                        category=_qp("category") or None,
+                        key_prefix=_qp("key_prefix") or None,
+                        limit=limit_val,
+                        include_content=_qp_bool("include_content"),
+                    )
+                    status_code = 200 if payload.get("status") == "success" else 400
+                    self._send_json(status_code, payload)
                     return
                 if request_path == "/api/status":
                     proxied = _workspace_status_snapshot_cached()
