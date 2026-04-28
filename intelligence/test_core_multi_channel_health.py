@@ -138,9 +138,15 @@ class TestChannelHealthAPIEndpoint(unittest.TestCase):
         self.assertIn('"channels_health"', self.source)
 
     def test_channels_health_is_public_read(self):
-        idx = self.source.index("def _public_read_allowed")
-        section = self.source[idx:idx + 1200]
-        self.assertIn('"/api/channels/health"', section)
+        # _public_read_allowed now delegates to the module-level
+        # is_public_read_route function; assert the contract directly so
+        # this test is robust to internal refactors.
+        import meridian_gateway as gateway
+
+        self.assertTrue(gateway.is_public_read_route("/api/channels/health"))
+        self.assertIn(
+            "/api/channels/health", gateway.PUBLIC_READ_ROUTES_EXACT
+        )
 
 
 class TestChannelDiagnosticsAPIEndpoint(unittest.TestCase):
@@ -162,9 +168,18 @@ class TestChannelDiagnosticsAPIEndpoint(unittest.TestCase):
         self.assertIn("unknown channel", self.source)
 
     def test_diagnostics_is_public_read_for_pattern(self):
-        idx = self.source.index("def _public_read_allowed")
-        section = self.source[idx:idx + 1200]
-        self.assertIn("/diagnostics", section)
+        # Use the module-level pure function rather than scraping source
+        # so this stays robust under future refactors of the Handler.
+        import meridian_gateway as gateway
+
+        self.assertTrue(
+            gateway.is_public_read_route(
+                "/api/channels/telegram/diagnostics"
+            )
+        )
+        self.assertTrue(
+            gateway.is_public_read_route("/api/channels/zalo/diagnostics")
+        )
 
 
 # ── WebAPIAdapter all_adapters wiring ────────────────────────────────────

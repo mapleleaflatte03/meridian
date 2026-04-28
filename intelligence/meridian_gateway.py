@@ -6149,6 +6149,54 @@ def _build_memory_search_response(
     }
 
 
+# ── Public-read allowlist (Origin gate fallback) ──────────────────────────
+# Routes here are reachable from external clients without an Origin header.
+# Anything NOT in this set requires either Origin == allowed_origin, a
+# loopback client IP, or a matching external-channel webhook adapter.
+# Memory routes are deliberately ABSENT — they stay Origin-protected.
+
+PUBLIC_READ_ROUTES_EXACT = frozenset(
+    {
+        "/api/events",
+        "/api/events/stream",
+        "/api/healthz",
+        "/api/channels/health",
+        "/api/workflows/showcase",
+        "/api/status",
+        "/api/runtime-proof",
+        "/api/runtime-proof-contract",
+        "/api/kernel-proof-bundle",
+        "/api/institution/template",
+        "/api/treasury",
+        "/api/payouts",
+        "/api/court/rules",
+        "/api/court/proposals",
+        "/api/marketplace",
+        "/api/marketplace/bids",
+        "/api/marketplace/settlements",
+        "/api/marketplace/disputes",
+        "/api/execution-traces",
+    }
+)
+
+
+def is_public_read_route(request_path: str) -> bool:
+    """Pure function form of the public-read allowlist used by the gateway.
+
+    Centralized here so tests can verify which routes are publicly readable
+    vs Origin-protected, including the explicit invariant that memory
+    routes (/api/memory/*) are never public.
+    """
+    normalized = str(request_path or "").strip()
+    if normalized in PUBLIC_READ_ROUTES_EXACT:
+        return True
+    if normalized.startswith("/api/channels/") and normalized.endswith("/diagnostics"):
+        return True
+    if normalized.startswith("/api/channels/") and normalized.endswith("/proof"):
+        return True
+    return False
+
+
 def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str, Any]:
     """Run `loom memory overview` and shape the response for operators.
 
@@ -14818,34 +14866,10 @@ class WebAPIAdapter(ChannelAdapter):
                 return _operator_token_valid(self.headers)
 
             def _public_read_allowed(self, request_path: str) -> bool:
-                normalized = str(request_path or "").strip()
-                if normalized in {
-                    "/api/events",
-                    "/api/events/stream",
-                    "/api/healthz",
-                    "/api/channels/health",
-                    "/api/workflows/showcase",
-                    "/api/status",
-                    "/api/runtime-proof",
-                    "/api/runtime-proof-contract",
-                    "/api/kernel-proof-bundle",
-                    "/api/institution/template",
-                    "/api/treasury",
-                    "/api/payouts",
-                    "/api/court/rules",
-                    "/api/court/proposals",
-                    "/api/marketplace",
-                    "/api/marketplace/bids",
-                    "/api/marketplace/settlements",
-                    "/api/marketplace/disputes",
-                    "/api/execution-traces",
-                }:
-                    return True
-                if normalized.startswith("/api/channels/") and normalized.endswith("/diagnostics"):
-                    return True
-                if normalized.startswith("/api/channels/") and normalized.endswith("/proof"):
-                    return True
-                return False
+                # Delegates to the module-level pure function so tests can
+                # assert the invariants (e.g. /api/memory/* must NOT be
+                # publicly readable) without spinning up the gateway.
+                return is_public_read_route(request_path)
 
             def _send_cors_headers(self) -> None:
                 self.send_header("Access-Control-Allow-Origin", adapter.allowed_origin)

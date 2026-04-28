@@ -280,5 +280,66 @@ class TestMemorySearchRouteWiring(unittest.TestCase):
         self.assertNotIn("/api/memory/overview", public_block)
 
 
+class TestPublicReadAllowlistRuntime(unittest.TestCase):
+    """Runtime tests of is_public_read_route against the actual exported
+    function — not a source-string check. These assert the security
+    contract for every memory route plus a few sanity routes that MUST
+    remain publicly readable."""
+
+    def test_memory_search_is_not_public(self):
+        self.assertFalse(gateway.is_public_read_route("/api/memory/search"))
+
+    def test_memory_overview_is_not_public(self):
+        self.assertFalse(gateway.is_public_read_route("/api/memory/overview"))
+
+    def test_memory_search_with_query_string_is_not_public(self):
+        # Defense in depth: even if a malformed call sneaks a query into
+        # the path, the canonical normalization is just the path. The
+        # gateway parses the query separately, so the path stays clean.
+        self.assertFalse(gateway.is_public_read_route("/api/memory/search "))
+        self.assertFalse(gateway.is_public_read_route(""))
+        self.assertFalse(gateway.is_public_read_route("/api/memory"))
+
+    def test_arbitrary_unmounted_routes_are_not_public(self):
+        # Guard against accidental wildcard.
+        self.assertFalse(gateway.is_public_read_route("/api/admin"))
+        self.assertFalse(gateway.is_public_read_route("/api/secrets"))
+        self.assertFalse(gateway.is_public_read_route("/api/run"))
+
+    def test_known_public_routes_remain_public(self):
+        # Sanity: refactor must not have demoted any previously-public
+        # route. If this breaks, the gateway will start refusing public
+        # traffic that operators rely on.
+        for path in (
+            "/api/healthz",
+            "/api/channels/health",
+            "/api/workflows/showcase",
+            "/api/status",
+            "/api/treasury",
+            "/api/payouts",
+            "/api/marketplace",
+        ):
+            with self.subTest(path=path):
+                self.assertTrue(gateway.is_public_read_route(path))
+
+    def test_channel_diagnostics_and_proof_paths_are_public(self):
+        self.assertTrue(
+            gateway.is_public_read_route("/api/channels/telegram/diagnostics")
+        )
+        self.assertTrue(
+            gateway.is_public_read_route("/api/channels/zalo/proof")
+        )
+
+    def test_memory_routes_are_excluded_from_constant_set(self):
+        for path in (
+            "/api/memory/search",
+            "/api/memory/overview",
+            "/api/memory/diff",
+            "/api/memory/snapshot",
+        ):
+            with self.subTest(path=path):
+                self.assertNotIn(path, gateway.PUBLIC_READ_ROUTES_EXACT)
+
+
 if __name__ == "__main__":
     unittest.main()
