@@ -4859,8 +4859,11 @@ cmd_memory() {
         prune)
             cmd_memory_prune "$@"
             ;;
+        diff)
+            cmd_memory_diff "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune|diff> [args]"
             ;;
     esac
 }
@@ -5256,6 +5259,167 @@ PY
     [ "$failed" -eq 0 ] || return 2
 }
 
+# ── Command: memory diff ──────────────────────────────────────────────────
+# Compare two snapshot directories produced by `core.sh memory snapshot` and
+# report added / removed / modified entries by (agent, category, key).
+# Pure-shell, read-only — useful for audit, regression review, and
+# debugging "what changed in memory between time A and time B".
+
+cmd_memory_diff() {
+    local left=""
+    local right=""
+    local output_mode="human"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json)
+                output_mode="json"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory diff SNAPSHOT_A SNAPSHOT_B [--json]
+
+Compare two snapshot directories produced by core.sh memory snapshot.
+Reports the set of (agent, category, key) entries that were added,
+removed, or modified (content changed) between A and B. Read-only;
+neither snapshot is mutated.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$left" ]; then left="$1"
+                elif [ -z "$right" ]; then right="$1"
+                else die "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$left" ] && [ -n "$right" ] || die "Usage: core.sh memory diff SNAPSHOT_A SNAPSHOT_B [--json]"
+    [ -d "$left" ] || die "snapshot dir not found: $left"
+    [ -d "$right" ] || die "snapshot dir not found: $right"
+    [ -f "$left/_manifest.json" ] || die "snapshot manifest missing: $left/_manifest.json"
+    [ -f "$right/_manifest.json" ] || die "snapshot manifest missing: $right/_manifest.json"
+
+    LEFT_DIR="$left" RIGHT_DIR="$right" OUTPUT_MODE="$output_mode" python3 - <<'PY'
+import json, os, sys
+from pathlib import Path
+
+
+def load_snapshot(root):
+    manifest = json.load(open(Path(root) / "_manifest.json", encoding="utf-8"))
+    by_key = {}
+    for agent_entry in manifest.get("agents") or []:
+        agent_id = str(agent_entry.get("agent_id") or "")
+        rel = str(agent_entry.get("path") or "")
+        if not agent_id or not rel:
+            continue
+        agent_path = Path(root) / rel
+        if not agent_path.is_file():
+            continue
+        try:
+            entries = json.load(open(agent_path, encoding="utf-8"))
+        except Exception:
+            entries = []
+        if not isinstance(entries, list):
+            continue
+        for e in entries:
+            cat = str(e.get("category") or "")
+            key = str(e.get("key") or "")
+            if not cat or not key:
+                continue
+            by_key[(agent_id, cat, key)] = e
+    return manifest, by_key
+
+
+left_root = os.environ["LEFT_DIR"]
+right_root = os.environ["RIGHT_DIR"]
+output_mode = os.environ.get("OUTPUT_MODE", "human")
+
+left_manifest, left_entries = load_snapshot(left_root)
+right_manifest, right_entries = load_snapshot(right_root)
+
+added = []
+removed = []
+modified = []
+for k, right_e in right_entries.items():
+    left_e = left_entries.get(k)
+    if left_e is None:
+        added.append((k, right_e))
+    else:
+        if (left_e.get("content") or "") != (right_e.get("content") or ""):
+            modified.append((k, left_e, right_e))
+for k, left_e in left_entries.items():
+    if k not in right_entries:
+        removed.append((k, left_e))
+
+added.sort(key=lambda x: x[0])
+removed.sort(key=lambda x: x[0])
+modified.sort(key=lambda x: x[0])
+
+if output_mode == "json":
+    payload = {
+        "left": {
+            "path": left_root,
+            "snapshot_at_unix": left_manifest.get("snapshot_at_unix"),
+            "entry_count": len(left_entries),
+        },
+        "right": {
+            "path": right_root,
+            "snapshot_at_unix": right_manifest.get("snapshot_at_unix"),
+            "entry_count": len(right_entries),
+        },
+        "added_count": len(added),
+        "removed_count": len(removed),
+        "modified_count": len(modified),
+        "added": [
+            {"agent_id": k[0], "category": k[1], "key": k[2]}
+            for k, _ in added
+        ],
+        "removed": [
+            {"agent_id": k[0], "category": k[1], "key": k[2]}
+            for k, _ in removed
+        ],
+        "modified": [
+            {"agent_id": k[0], "category": k[1], "key": k[2]}
+            for k, _, _ in modified
+        ],
+    }
+    print(json.dumps(payload, indent=2))
+else:
+    print(f"[core] memory diff: {left_root} -> {right_root}")
+    print(f"  left entries:  {len(left_entries)}")
+    print(f"  right entries: {len(right_entries)}")
+    print(f"  added:         {len(added)}")
+    print(f"  removed:       {len(removed)}")
+    print(f"  modified:      {len(modified)}")
+    if added:
+        print("  + added:")
+        for (a, c, k), _ in added[:50]:
+            print(f"      {a}/{c}/{k}")
+        if len(added) > 50:
+            print(f"      ... and {len(added)-50} more")
+    if removed:
+        print("  - removed:")
+        for (a, c, k), _ in removed[:50]:
+            print(f"      {a}/{c}/{k}")
+        if len(removed) > 50:
+            print(f"      ... and {len(removed)-50} more")
+    if modified:
+        print("  ~ modified:")
+        for (a, c, k), _, _ in modified[:50]:
+            print(f"      {a}/{c}/{k}")
+        if len(modified) > 50:
+            print(f"      ... and {len(modified)-50} more")
+
+# Exit non-zero if anything differs so scripts can branch on it.
+if added or removed or modified:
+    sys.exit(1)
+PY
+}
+
 # ── Command: cap ──────────────────────────────────────────────────────────
 # Delegates to skill.sh for capability discovery and execution
 
@@ -5397,6 +5561,7 @@ Commands:
   memory snapshot DIR [--all-agents]   Export memory entries to DIR (one JSON per agent + _manifest.json)
   memory restore DIR [--agent ID]      Restore memory entries from a snapshot DIR (upserts; non-destructive)
   memory prune --older-than DAYS [--execute] [--agent ID]   Time-based prune (dry-run by default; --execute to actually remove)
+  memory diff SNAPSHOT_A SNAPSHOT_B [--json]   Compare two snapshot directories; report added/removed/modified entries
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details

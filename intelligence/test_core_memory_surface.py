@@ -216,5 +216,66 @@ class TestMemoryPruneSurface(unittest.TestCase):
         self.assertIn('agent_filter="${2:-}"', self.source)
 
 
+class TestMemoryDiffSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_diff(self):
+        self.assertIn(
+            "memory diff SNAPSHOT_A SNAPSHOT_B",
+            _help_block(self.source),
+        )
+
+    def test_memory_diff_dispatched_from_cmd_memory(self):
+        self.assertIn("diff)\n            cmd_memory_diff", self.source)
+
+    def test_memory_diff_function_exists(self):
+        self.assertIn("cmd_memory_diff()", self.source)
+
+    def test_memory_diff_supports_json_output(self):
+        # --json is required so dashboards and CI jobs can consume it.
+        self.assertIn('output_mode="json"', self.source)
+        self.assertIn('"added_count"', self.source)
+        self.assertIn('"removed_count"', self.source)
+        self.assertIn('"modified_count"', self.source)
+
+    def test_memory_diff_requires_both_snapshots(self):
+        # Both positional snapshot dirs are mandatory.
+        self.assertIn(
+            "Usage: core.sh memory diff SNAPSHOT_A SNAPSHOT_B",
+            self.source,
+        )
+
+    def test_memory_diff_validates_manifest_presence(self):
+        # Each snapshot must carry a valid _manifest.json or fail loud.
+        self.assertIn(
+            'die "snapshot manifest missing: $left/_manifest.json"',
+            self.source,
+        )
+        self.assertIn(
+            'die "snapshot manifest missing: $right/_manifest.json"',
+            self.source,
+        )
+
+    def test_memory_diff_is_read_only(self):
+        # The function must not call any mutating loom subcommand inside
+        # its body. Audit/diff is read-only by contract.
+        marker = "cmd_memory_diff()"
+        start = self.source.find(marker)
+        self.assertGreater(start, 0)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        self.assertNotIn('"memory", "write"', body)
+        self.assertNotIn("memory remove", body)
+        self.assertNotIn("memory write", body)
+        self.assertNotIn("rm -rf", body)
+
+    def test_memory_diff_exits_nonzero_on_difference(self):
+        # Allow operators to branch in CI based on whether anything
+        # changed between two snapshots.
+        self.assertIn("sys.exit(1)", self.source)
+
+
 if __name__ == "__main__":
     unittest.main()
