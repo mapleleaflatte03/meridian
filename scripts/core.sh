@@ -4850,10 +4850,127 @@ cmd_memory() {
         search)
             cmd_memory_search "$@"
             ;;
+        snapshot)
+            cmd_memory_snapshot "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot> [args]"
             ;;
     esac
+}
+
+# ── Command: memory snapshot ──────────────────────────────────────────────
+# Backup/export memory entries to a directory: one JSON file per agent
+# plus a _manifest.json with counts and timestamp. Useful before risky
+# operations, for audit, or for migrating between runtime roots.
+
+cmd_memory_snapshot() {
+    local target_dir=""
+    local all_agents=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --all-agents)
+                all_agents=1; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory snapshot DIR [--all-agents]
+
+Export memory entries to DIR as JSON files, one per agent, plus
+DIR/_manifest.json with agent count, total entry count, runtime
+root, and snapshot timestamp.
+
+Default scope is the active agent. Use --all-agents to snapshot
+every agent in the runtime root.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$target_dir" ]; then target_dir="$1"
+                else die "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$target_dir" ] || die "Usage: core.sh memory snapshot DIR [--all-agents]"
+    require_loom; require_runtime
+    mkdir -p "$target_dir" || die "cannot create snapshot dir: $target_dir"
+
+    local agents=()
+    if [ "$all_agents" -eq 1 ]; then
+        local memory_root="$LOOM_ROOT/state/memory"
+        [ -d "$memory_root" ] || die "memory root not found: $memory_root"
+        local d
+        for d in "$memory_root"/*/; do
+            [ -d "$d" ] || continue
+            local name; name="$(basename "$d")"
+            [ -f "$d/index.json" ] || continue
+            agents+=("$name")
+        done
+    else
+        local agent_id; agent_id="$(resolve_agent_id)"
+        [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
+        agents+=("$agent_id")
+    fi
+
+    if [ ${#agents[@]} -eq 0 ]; then
+        echo "[core] no agents found to snapshot"
+        return 0
+    fi
+
+    local total_entries=0
+    local manifest_agents_json="["
+    local first=1
+    local agent
+    for agent in "${agents[@]}"; do
+        local out_file="$target_dir/${agent}.json"
+        local raw
+        raw="$("$LOOM_BIN" memory search --agent-id "$agent" --root "$LOOM_ROOT" --format json 2>/dev/null || echo "[]")"
+        printf '%s' "$raw" > "$out_file"
+        local count
+        count="$(printf '%s' "$raw" | python3 -c "import sys,json
+try:
+    d=json.load(sys.stdin)
+    print(len(d) if isinstance(d,list) else 0)
+except Exception:
+    print(0)
+")"
+        total_entries=$((total_entries + count))
+        if [ "$first" -eq 1 ]; then
+            first=0
+        else
+            manifest_agents_json+=","
+        fi
+        manifest_agents_json+="{\"agent_id\":\"$agent\",\"entry_count\":$count,\"path\":\"${agent}.json\"}"
+    done
+    manifest_agents_json+="]"
+
+    local now_unix; now_unix="$(date -u +%s)"
+    local now_iso; now_iso="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+    local scope="single_agent"
+    [ "$all_agents" -eq 1 ] && scope="all_agents"
+    cat > "$target_dir/_manifest.json" <<EOF
+{
+  "version": 1,
+  "snapshot_at_unix": $now_unix,
+  "snapshot_at_iso": "$now_iso",
+  "scope": "$scope",
+  "loom_root": "$LOOM_ROOT",
+  "agent_count": ${#agents[@]},
+  "total_entry_count": $total_entries,
+  "agents": $manifest_agents_json
+}
+EOF
+
+    echo "[core] memory snapshot written to: $target_dir"
+    echo "  scope:       $scope"
+    echo "  agents:      ${#agents[@]}"
+    echo "  entries:     $total_entries"
+    echo "  manifest:    $target_dir/_manifest.json"
 }
 
 # ── Command: cap ──────────────────────────────────────────────────────────
@@ -4994,6 +5111,7 @@ Commands:
   memory graph SOURCE_REF Inspect memory graph lineage/forks
   memory overview         Show memory overview
   memory search QUERY [N] [--all-agents]   Full-content search across stored memory (case-insensitive). With --all-agents, fan out across every agent and order by recency.
+  memory snapshot DIR [--all-agents]   Export memory entries to DIR (one JSON per agent + _manifest.json)
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details

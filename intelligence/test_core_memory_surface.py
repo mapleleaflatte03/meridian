@@ -78,5 +78,49 @@ class TestMemorySurfaceSourceWiring(unittest.TestCase):
         )
 
 
+def _help_block(source: str) -> str:
+    """Return the cmd_help() heredoc block so individual help lines can be
+    asserted without false positives matching the rest of the script.
+
+    The same banner appears twice (file header comment and the heredoc
+    body), so we skip the first hit and slice from the second one.
+    """
+    marker = "Meridian Core — daily-use task runner"
+    first = source.find(marker)
+    if first < 0:
+        return source
+    second = source.find(marker, first + len(marker))
+    start = second if second >= 0 else first
+    return source[start : start + 8000]
+
+
+class TestMemorySnapshotSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_snapshot(self):
+        self.assertIn("memory snapshot DIR", _help_block(self.source))
+
+    def test_memory_snapshot_dispatched_from_cmd_memory(self):
+        self.assertIn("snapshot)\n            cmd_memory_snapshot", self.source)
+
+    def test_memory_snapshot_function_exists(self):
+        self.assertIn("cmd_memory_snapshot()", self.source)
+
+    def test_memory_snapshot_supports_all_agents_flag(self):
+        # Function must parse --all-agents and switch scope.
+        self.assertIn('scope="all_agents"', self.source)
+        self.assertIn('memory_root="$LOOM_ROOT/state/memory"', self.source)
+
+    def test_memory_snapshot_writes_manifest(self):
+        # Manifest path is named exactly _manifest.json so operators can
+        # reliably enumerate snapshots.
+        self.assertIn("_manifest.json", self.source)
+        self.assertIn('"version": 1', self.source)
+        self.assertIn('"snapshot_at_unix"', self.source)
+        self.assertIn('"total_entry_count"', self.source)
+
+
 if __name__ == "__main__":
     unittest.main()
