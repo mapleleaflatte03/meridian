@@ -146,5 +146,42 @@ class TestVerifyCanonicalRepo(unittest.TestCase):
         self.assertIn("unknown arg", result.stderr)
 
 
+class TestCoreWhichRepoWrapper(unittest.TestCase):
+    """core.sh which-repo must surface the verifier so operators don't need
+    to know about scripts/verify_canonical_repo.sh directly."""
+
+    @classmethod
+    def setUpClass(cls):
+        core_sh = MERIDIAN_ROOT / "scripts" / "core.sh"
+        cls.source = core_sh.read_text(encoding="utf-8")
+
+    def test_which_repo_dispatched_in_main_switch(self):
+        self.assertIn(
+            'which-repo)  cmd_which_repo "$@" ;;',
+            self.source,
+        )
+
+    def test_cmd_which_repo_function_exists(self):
+        self.assertIn("cmd_which_repo()", self.source)
+
+    def test_cmd_which_repo_delegates_to_verifier(self):
+        # Delegates to scripts/verify_canonical_repo.sh; do not
+        # reimplement the probe logic in core.sh.
+        self.assertIn("verify_canonical_repo.sh", self.source)
+        self.assertIn(
+            'bash "$verifier" "$@"',
+            self.source,
+        )
+
+    def test_help_lists_which_repo(self):
+        # The cmd_help() heredoc spans more than 8000 chars; assert the
+        # which-repo entry directly with its argument signature so we
+        # cannot match an incidental prose mention elsewhere.
+        self.assertIn(
+            "which-repo [--json] [--strict]",
+            self.source,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

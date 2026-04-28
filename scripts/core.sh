@@ -5701,6 +5701,17 @@ if mode == "alert" and alerts:
 PY
 }
 
+# ── Command: which-repo ───────────────────────────────────────────────────
+# Workspace clarity preflight from inside the Core cockpit. Surfaces the
+# canonical repo + archived mirrors so any agent landing in this workspace
+# can immediately tell what's authoritative without reading old docs.
+
+cmd_which_repo() {
+    local verifier="${ROOT_DIR}/scripts/verify_canonical_repo.sh"
+    [ -x "$verifier" ] || die "verify_canonical_repo.sh not found or not executable at $verifier"
+    bash "$verifier" "$@"
+}
+
 # ── Command: cap ──────────────────────────────────────────────────────────
 # Delegates to skill.sh for capability discovery and execution
 
@@ -5890,6 +5901,7 @@ Commands:
   cap list                List available capabilities
   cap inspect NAME        Show capability metadata
   cap run NAME [PAYLOAD]  Run a capability by name
+  which-repo [--json] [--strict]   Workspace clarity: canonical repo vs archived mirrors
   help                    Show this help
 
 File attachments:
@@ -6062,6 +6074,7 @@ if [ "${MERIDIAN_CORE_SH_SOURCE_ONLY:-0}" != "1" ]; then
         status)      cmd_status "$@" ;;
         proof)       cmd_proof "$@" ;;
         cap)         cmd_cap "$@" ;;
+        which-repo)  cmd_which_repo "$@" ;;
         help|--help) cmd_help ;;
         *)
             echo "[core] Unknown command: $COMMAND" >&2
