@@ -277,5 +277,53 @@ class TestMemoryDiffSurface(unittest.TestCase):
         self.assertIn("sys.exit(1)", self.source)
 
 
+class TestMemoryRotateSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_rotate(self):
+        self.assertIn("memory rotate DIR --keep", _help_block(self.source))
+
+    def test_memory_rotate_dispatched_from_cmd_memory(self):
+        self.assertIn("rotate)\n            cmd_memory_rotate", self.source)
+
+    def test_memory_rotate_function_exists(self):
+        self.assertIn("cmd_memory_rotate()", self.source)
+
+    def test_memory_rotate_default_mode_is_dry_run(self):
+        marker = "cmd_memory_rotate()"
+        start = self.source.find(marker)
+        self.assertGreater(start, 0)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        self.assertIn('mode="dry-run"', body)
+
+    def test_memory_rotate_validates_keep_integer(self):
+        self.assertIn("--keep must be a non-negative integer", self.source)
+
+    def test_memory_rotate_requires_keep_flag(self):
+        self.assertIn(
+            "Usage: core.sh memory rotate DIR --keep N",
+            self.source,
+        )
+
+    def test_memory_rotate_guards_against_directory_traversal(self):
+        # Defensive deletion: only rm dirs that contain _manifest.json AND
+        # live under the parent_dir we were asked to rotate.
+        marker = "cmd_memory_rotate()"
+        start = self.source.find(marker)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        self.assertIn('[ -f "$path/_manifest.json" ]', body)
+        self.assertIn('[[ "$path" == "$parent_dir"/* ]]', body)
+        self.assertIn("[fail-guard]", body)
+
+    def test_memory_rotate_uses_recency_ordering(self):
+        # snapshot_at_unix descending — most recent first.
+        self.assertIn("snapshot_at_unix", self.source)
+        self.assertIn("reverse=True", self.source)
+
+
 if __name__ == "__main__":
     unittest.main()

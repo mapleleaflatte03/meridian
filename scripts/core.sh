@@ -4862,8 +4862,11 @@ cmd_memory() {
         diff)
             cmd_memory_diff "$@"
             ;;
+        rotate)
+            cmd_memory_rotate "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune|diff> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune|diff|rotate> [args]"
             ;;
     esac
 }
@@ -5420,6 +5423,138 @@ if added or removed or modified:
 PY
 }
 
+# ── Command: memory rotate ────────────────────────────────────────────────
+# Retain only the most recent N snapshots in a parent directory. Detects
+# snapshot subdirectories by presence of _manifest.json and orders them by
+# snapshot_at_unix descending. Dry-run by default (safety-first per the
+# same policy as prune).
+
+cmd_memory_rotate() {
+    local parent_dir=""
+    local keep=""
+    local mode="dry-run"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --keep)
+                keep="${2:-}"; shift 2 || true
+                ;;
+            --execute)
+                mode="execute"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory rotate DIR --keep N [--execute]
+
+Retain only the most recent N snapshots in DIR. A snapshot is any
+subdirectory of DIR that carries a _manifest.json; ordering is by
+the manifest's snapshot_at_unix field, most-recent first. By
+default lists what would be removed (dry-run); pass --execute to
+actually delete.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$parent_dir" ]; then parent_dir="$1"
+                else die "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$parent_dir" ] && [ -n "$keep" ] || die "Usage: core.sh memory rotate DIR --keep N [--execute]"
+    [ -d "$parent_dir" ] || die "rotate dir not found: $parent_dir"
+    case "$keep" in
+        ''|*[!0-9]*) die "--keep must be a non-negative integer, got: $keep" ;;
+    esac
+
+    local plan_blob
+    plan_blob="$(PARENT_DIR="$parent_dir" KEEP="$keep" python3 - <<'PY'
+import json, os, sys
+from pathlib import Path
+
+parent = Path(os.environ["PARENT_DIR"])
+keep = int(os.environ.get("KEEP") or "0")
+
+snapshots = []
+for child in sorted(parent.iterdir()):
+    if not child.is_dir():
+        continue
+    manifest = child / "_manifest.json"
+    if not manifest.is_file():
+        continue
+    try:
+        m = json.load(open(manifest, encoding="utf-8"))
+    except Exception:
+        continue
+    ts = int(m.get("snapshot_at_unix") or 0)
+    snapshots.append((ts, str(child)))
+
+# Most recent first.
+snapshots.sort(key=lambda x: x[0], reverse=True)
+keep_set = {p for _, p in snapshots[:keep]}
+remove_list = [p for _, p in snapshots[keep:]]
+
+# Emit "KEEP\tpath\tts" or "REMOVE\tpath\tts" per line.
+for ts, p in snapshots:
+    tag = "KEEP" if p in keep_set else "REMOVE"
+    print(f"{tag}\t{p}\t{ts}")
+PY
+)"
+
+    if [ -z "$plan_blob" ]; then
+        echo "[core] memory rotate: no snapshots found in $parent_dir"
+        return 0
+    fi
+
+    local total_count keep_count remove_count
+    total_count=$(printf '%s\n' "$plan_blob" | grep -c '	' || true)
+    keep_count=$(printf '%s\n' "$plan_blob" | grep -c '^KEEP	' || true)
+    remove_count=$(printf '%s\n' "$plan_blob" | grep -c '^REMOVE	' || true)
+
+    echo "[core] memory rotate $mode: keep=$keep, total=$total_count, remove=$remove_count"
+    while IFS=$'\t' read -r tag path ts; do
+        [ -n "$tag" ] || continue
+        if [ "$tag" = "KEEP" ]; then
+            printf '  [keep]   %s (ts=%s)\n' "$path" "$ts"
+        else
+            printf '  [remove] %s (ts=%s)\n' "$path" "$ts"
+        fi
+    done <<< "$plan_blob"
+
+    if [ "$mode" = "dry-run" ]; then
+        echo "  Run with --execute to actually delete the [remove] entries."
+        return 0
+    fi
+
+    local removed=0
+    local failed=0
+    while IFS=$'\t' read -r tag path ts; do
+        [ "$tag" = "REMOVE" ] || continue
+        # Defensive: only delete dirs that contain a _manifest.json and live
+        # under the parent_dir we were asked to rotate. Never recursive
+        # outside the snapshot family.
+        if [ -f "$path/_manifest.json" ] && [[ "$path" == "$parent_dir"/* ]]; then
+            if rm -rf -- "$path"; then
+                removed=$((removed + 1))
+            else
+                failed=$((failed + 1))
+                echo "  [fail] $path"
+            fi
+        else
+            failed=$((failed + 1))
+            echo "  [fail-guard] $path (not under $parent_dir or missing manifest)"
+        fi
+    done <<< "$plan_blob"
+
+    echo "[core] memory rotate execute complete"
+    echo "  removed:    $removed"
+    echo "  failed:     $failed"
+    [ "$failed" -eq 0 ] || return 2
+}
+
 # ── Command: cap ──────────────────────────────────────────────────────────
 # Delegates to skill.sh for capability discovery and execution
 
@@ -5562,6 +5697,7 @@ Commands:
   memory restore DIR [--agent ID]      Restore memory entries from a snapshot DIR (upserts; non-destructive)
   memory prune --older-than DAYS [--execute] [--agent ID]   Time-based prune (dry-run by default; --execute to actually remove)
   memory diff SNAPSHOT_A SNAPSHOT_B [--json]   Compare two snapshot directories; report added/removed/modified entries
+  memory rotate DIR --keep N [--execute]   Retain only the N most recent snapshots in DIR (dry-run by default)
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details
