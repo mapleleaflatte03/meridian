@@ -3076,14 +3076,44 @@ cmd_remember() {
 # ── Command: recall ───────────────────────────────────────────────────────
 
 cmd_recall() {
-    local prefix="${1:-}"
+    local prefix=""
+    local text_query=""
+    local limit=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --text)
+                text_query="${2:-}"; shift 2 || true
+                ;;
+            --limit)
+                limit="${2:-}"; shift 2 || true
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh recall [KEY_PREFIX] [--text QUERY] [--limit N]
+
+Search Core memory by key prefix (default) and/or by case-insensitive
+substring against entry key or content. Pass --limit to cap results.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$prefix" ]; then prefix="$1"; else die "Unexpected argument: $1"; fi
+                shift
+                ;;
+        esac
+    done
     require_loom; require_runtime
 
     local agent_id; agent_id="$(resolve_agent_id)"
     [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
 
     local args=("--agent-id" "$agent_id" "--category" "core" "--root" "$LOOM_ROOT" "--format" "json")
-    if [ -n "$prefix" ]; then args+=("--key-prefix" "$prefix"); fi
+    [ -n "$prefix" ] && args+=("--key-prefix" "$prefix")
+    [ -n "$text_query" ] && args+=("--text" "$text_query")
+    [ -n "$limit" ] && args+=("--limit" "$limit")
 
     local mem_json
     mem_json="$("$LOOM_BIN" memory search "${args[@]}" 2>/dev/null || true)"
@@ -3099,6 +3129,45 @@ if not entries:
 for e in entries:
     print(f'  {e.get(\"key\")}: {e.get(\"content\",\"\")[:80]}')
 "
+}
+
+# ── Command: memory search ────────────────────────────────────────────────
+# Full-content search across all categories for the active agent.
+
+cmd_memory_search() {
+    local query="${1:-}"
+    local limit="${2:-}"
+    [ -n "$query" ] || die "Usage: core.sh memory search QUERY [LIMIT]"
+    require_loom; require_runtime
+
+    local agent_id; agent_id="$(resolve_agent_id)"
+    [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
+
+    local args=("--agent-id" "$agent_id" "--root" "$LOOM_ROOT" "--format" "json" "--text" "$query")
+    [ -n "$limit" ] && args+=("--limit" "$limit")
+
+    local mem_json
+    mem_json="$("$LOOM_BIN" memory search "${args[@]}" 2>/dev/null || true)"
+    QUERY="$query" MEM_JSON="$mem_json" python3 - <<'PY'
+import json, os
+query = os.environ.get("QUERY", "")
+raw = os.environ.get("MEM_JSON", "") or "[]"
+try:
+    entries = json.loads(raw)
+except Exception:
+    entries = []
+if not entries:
+    print(f"[core] no memory entries match: {query}")
+    raise SystemExit(0)
+print(f"[core] {len(entries)} match(es) for: {query}")
+for e in entries:
+    cat = e.get("category", "?")
+    key = e.get("key", "?")
+    content = (e.get("content") or "").replace("\n", " ")
+    if len(content) > 100:
+        content = content[:100] + "…"
+    print(f"  [{cat}] {key}: {content}")
+PY
 }
 
 # ── Command: schedule ─────────────────────────────────────────────────────
@@ -4740,8 +4809,11 @@ cmd_memory() {
         status)
             "$LOOM_BIN" memory status --root "$LOOM_ROOT" --format human "${@}"
             ;;
+        search)
+            cmd_memory_search "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search> [args]"
             ;;
     esac
 }
@@ -4879,10 +4951,11 @@ Commands:
   shell list              List safe daily shell presets
   shell run PRESET        Run one bounded shell preset
   remember KEY "VALUE"    Store a memory entry (persistent across sessions)
-  recall [KEY_PREFIX]     Search stored memory
+  recall [KEY_PREFIX] [--text Q] [--limit N]   Search stored memory by key prefix and/or text
   memory receipts         Show recent memory receipts
   memory graph SOURCE_REF Inspect memory graph lineage/forks
   memory overview         Show memory overview
+  memory search QUERY [N] Full-content search across stored memory (case-insensitive)
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details

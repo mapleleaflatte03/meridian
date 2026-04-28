@@ -469,8 +469,28 @@ impl MemoryService {
         category: Option<&str>,
         key_prefix: Option<&str>,
     ) -> LoomResult<Vec<MemoryEntry>> {
+        self.search_filtered(agent_id, category, key_prefix, None, None)
+    }
+
+    /// Search memory entries with optional case-insensitive substring match
+    /// against entry `key` or `content`, plus optional result limit.
+    ///
+    /// `text_query` matches if either `key` or `content` contains the query
+    /// (case-insensitive). When `text_query` is `None`, behavior matches
+    /// [`Self::search`].
+    pub fn search_filtered(
+        &self,
+        agent_id: &str,
+        category: Option<&str>,
+        key_prefix: Option<&str>,
+        text_query: Option<&str>,
+        limit: Option<usize>,
+    ) -> LoomResult<Vec<MemoryEntry>> {
         let entries = self.repo.read_entries(agent_id)?;
-        let filtered: Vec<MemoryEntry> = entries
+        let needle = text_query
+            .map(|q| q.trim().to_lowercase())
+            .filter(|q| !q.is_empty());
+        let mut filtered: Vec<MemoryEntry> = entries
             .into_iter()
             .filter(|e| {
                 if let Some(cat) = category {
@@ -483,16 +503,32 @@ impl MemoryService {
                         return false;
                     }
                 }
+                if let Some(ref q) = needle {
+                    if !e.key.to_lowercase().contains(q)
+                        && !e.content.to_lowercase().contains(q)
+                    {
+                        return false;
+                    }
+                }
                 true
             })
             .collect();
+        if let Some(cap) = limit {
+            if filtered.len() > cap {
+                filtered.truncate(cap);
+            }
+        }
         self.append_receipt(
             "read",
             agent_id,
             &format!(
-                "category={} key_prefix={}",
+                "category={} key_prefix={} text={} limit={}",
                 category.unwrap_or("*"),
-                key_prefix.unwrap_or("*")
+                key_prefix.unwrap_or("*"),
+                needle.as_deref().unwrap_or("*"),
+                limit
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "*".to_string()),
             ),
             &format!("result_count={}", filtered.len()),
             false,
@@ -1362,6 +1398,59 @@ mod tests {
             .unwrap();
         assert_eq!(weather.len(), 1);
         assert_eq!(weather[0].content, "sunny");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn test_service_search_filtered_text_and_limit() {
+        let root = temp_root();
+        let svc = MemoryService::with_defaults(&root);
+        svc.write("atlas", "knowledge", "weather_today", "It is sunny in Hanoi", "user")
+            .unwrap();
+        svc.write("atlas", "knowledge", "weather_tomorrow", "Rainy in Hanoi", "user")
+            .unwrap();
+        svc.write("atlas", "knowledge", "location", "home base", "user")
+            .unwrap();
+        svc.write("atlas", "preferences", "lang", "vi", "user")
+            .unwrap();
+
+        // Case-insensitive substring match against content.
+        let hanoi = svc
+            .search_filtered("atlas", None, None, Some("HANOI"), None)
+            .unwrap();
+        assert_eq!(hanoi.len(), 2);
+
+        // Match against key.
+        let weather = svc
+            .search_filtered("atlas", None, None, Some("weather_"), None)
+            .unwrap();
+        assert_eq!(weather.len(), 2);
+
+        // Combine category + text.
+        let pref = svc
+            .search_filtered("atlas", Some("preferences"), None, Some("vi"), None)
+            .unwrap();
+        assert_eq!(pref.len(), 1);
+        assert_eq!(pref[0].key, "lang");
+
+        // Limit caps the result count.
+        let limited = svc
+            .search_filtered("atlas", None, None, Some("hanoi"), Some(1))
+            .unwrap();
+        assert_eq!(limited.len(), 1);
+
+        // Empty/whitespace text_query is treated as no filter.
+        let no_filter = svc
+            .search_filtered("atlas", None, None, Some("   "), None)
+            .unwrap();
+        assert_eq!(no_filter.len(), 4);
+
+        // Non-matching query returns empty.
+        let nope = svc
+            .search_filtered("atlas", None, None, Some("zzz_no_match"), None)
+            .unwrap();
+        assert!(nope.is_empty());
+
         cleanup(&root);
     }
 

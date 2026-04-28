@@ -460,10 +460,14 @@ fn handle_memory_search(args: &[String]) -> LoomResult<()> {
     let agent_id = required_flag(args, "--agent-id")?;
     let category = take_value(args, "--category");
     let key_prefix = take_value(args, "--key-prefix");
-    let entries = MemoryService::with_defaults(&root).search(
+    let text = take_value(args, "--text");
+    let limit = take_value(args, "--limit").and_then(|value| value.parse::<usize>().ok());
+    let entries = MemoryService::with_defaults(&root).search_filtered(
         &agent_id,
         category.as_deref(),
         key_prefix.as_deref(),
+        text.as_deref(),
+        limit,
     )?;
     match format.as_str() {
         "human" => {
