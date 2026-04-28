@@ -122,5 +122,48 @@ class TestMemorySnapshotSurface(unittest.TestCase):
         self.assertIn('"total_entry_count"', self.source)
 
 
+class TestMemoryRestoreSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_restore(self):
+        self.assertIn("memory restore DIR", _help_block(self.source))
+
+    def test_memory_restore_dispatched_from_cmd_memory(self):
+        self.assertIn("restore)\n            cmd_memory_restore", self.source)
+
+    def test_memory_restore_function_exists(self):
+        self.assertIn("cmd_memory_restore()", self.source)
+
+    def test_memory_restore_supports_agent_filter(self):
+        self.assertIn("--agent", self.source)
+        self.assertIn('agent_filter="${2:-}"', self.source)
+
+    def test_memory_restore_uses_loom_memory_write_upsert(self):
+        # Restore must NOT remove entries; it must upsert via loom memory
+        # write. Owner safety rule: non-destructive by default.
+        self.assertIn('"memory", "write"', self.source)
+
+    def test_memory_restore_does_not_remove_existing_entries(self):
+        # The restore function must not invoke loom memory remove or
+        # truncate the runtime memory directories.
+        # Find the cmd_memory_restore function body and check it.
+        marker = "cmd_memory_restore()"
+        start = self.source.find(marker)
+        self.assertGreater(start, 0)
+        # End at the next top-level function definition.
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        self.assertNotIn("memory remove", body)
+        self.assertNotIn("rm -rf", body)
+
+    def test_memory_restore_requires_manifest(self):
+        # Manifest absence must be a hard error, not a silent no-op.
+        self.assertIn(
+            'die "snapshot manifest missing: $manifest_path"', self.source
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

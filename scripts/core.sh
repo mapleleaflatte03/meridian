@@ -4853,8 +4853,11 @@ cmd_memory() {
         snapshot)
             cmd_memory_snapshot "$@"
             ;;
+        restore)
+            cmd_memory_restore "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore> [args]"
             ;;
     esac
 }
@@ -4971,6 +4974,149 @@ EOF
     echo "  agents:      ${#agents[@]}"
     echo "  entries:     $total_entries"
     echo "  manifest:    $target_dir/_manifest.json"
+}
+
+# ── Command: memory restore ───────────────────────────────────────────────
+# Restore memory entries from a snapshot directory. Existing entries with
+# the same (agent, category, key) are upserted, not removed. Intentionally
+# non-destructive by default — operators must use loom memory remove
+# explicitly to delete entries.
+
+cmd_memory_restore() {
+    local source_dir=""
+    local agent_filter=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --agent)
+                agent_filter="${2:-}"; shift 2 || true
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory restore SNAPSHOT_DIR [--agent ID]
+
+Restore memory entries from a snapshot produced by
+core.sh memory snapshot. Reads SNAPSHOT_DIR/_manifest.json, then
+upserts each entry via loom memory write. Existing entries with the
+same (agent, category, key) are overwritten in place; entries that
+do not exist in the snapshot are left untouched. Use --agent to
+restore only one agent from a multi-agent snapshot.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$source_dir" ]; then source_dir="$1"
+                else die "Unexpected argument: $1"
+                fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$source_dir" ] || die "Usage: core.sh memory restore SNAPSHOT_DIR [--agent ID]"
+    [ -d "$source_dir" ] || die "snapshot dir not found: $source_dir"
+    local manifest_path="$source_dir/_manifest.json"
+    [ -f "$manifest_path" ] || die "snapshot manifest missing: $manifest_path"
+    require_loom; require_runtime
+
+    # Parse manifest and emit `agent_id\tpath` lines for the agents we plan
+    # to restore. Filter by --agent if requested.
+    local plan
+    plan="$(SOURCE_DIR="$source_dir" AGENT_FILTER="$agent_filter" python3 - <<'PY'
+import json, os
+src = os.environ["SOURCE_DIR"]
+flt = os.environ.get("AGENT_FILTER", "") or None
+manifest = json.load(open(os.path.join(src, "_manifest.json"), encoding="utf-8"))
+for entry in manifest.get("agents") or []:
+    aid = str(entry.get("agent_id") or "").strip()
+    rel = str(entry.get("path") or "").strip()
+    if not aid or not rel:
+        continue
+    if flt and aid != flt:
+        continue
+    print(f"{aid}\t{rel}")
+PY
+)"
+
+    if [ -z "$plan" ]; then
+        if [ -n "$agent_filter" ]; then
+            die "no agent matching --agent $agent_filter in snapshot manifest"
+        fi
+        echo "[core] snapshot manifest contains no agents"
+        return 0
+    fi
+
+    local total_restored=0
+    local total_failed=0
+    local agents_touched=0
+    local line aid rel agent_path
+    while IFS=$'\t' read -r aid rel; do
+        agent_path="$source_dir/$rel"
+        [ -f "$agent_path" ] || { echo "[core] skip $aid (missing $rel)"; continue; }
+        agents_touched=$((agents_touched + 1))
+        local agent_summary
+        agent_summary="$(AGENT_PATH="$agent_path" AGENT_ID="$aid" LOOM_BIN="$LOOM_BIN" LOOM_ROOT="$LOOM_ROOT" python3 - <<'PY'
+import json, os, subprocess
+agent_path = os.environ["AGENT_PATH"]
+agent_id = os.environ["AGENT_ID"]
+loom_bin = os.environ["LOOM_BIN"]
+loom_root = os.environ["LOOM_ROOT"]
+try:
+    entries = json.load(open(agent_path, encoding="utf-8"))
+except Exception as exc:
+    print(json.dumps({"agent_id": agent_id, "ok": 0, "fail": 0, "error": str(exc)}))
+    raise SystemExit(0)
+if not isinstance(entries, list):
+    entries = []
+ok = 0
+fail = 0
+for e in entries:
+    try:
+        cat = str(e.get("category") or "").strip()
+        key = str(e.get("key") or "").strip()
+        content = str(e.get("content") or "")
+        source = str(e.get("source") or "snapshot_restore")
+        if not (cat and key):
+            fail += 1
+            continue
+        result = subprocess.run(
+            [
+                loom_bin, "memory", "write",
+                "--agent-id", agent_id,
+                "--category", cat,
+                "--key", key,
+                "--content", content,
+                "--source", source,
+                "--root", loom_root,
+                "--format", "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        if result.returncode == 0:
+            ok += 1
+        else:
+            fail += 1
+    except Exception:
+        fail += 1
+print(json.dumps({"agent_id": agent_id, "ok": ok, "fail": fail}))
+PY
+)"
+        local agent_ok agent_fail
+        agent_ok="$(printf '%s' "$agent_summary" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('ok',0))")"
+        agent_fail="$(printf '%s' "$agent_summary" | python3 -c "import sys,json;d=json.load(sys.stdin);print(d.get('fail',0))")"
+        echo "  $aid: restored=$agent_ok failed=$agent_fail"
+        total_restored=$((total_restored + agent_ok))
+        total_failed=$((total_failed + agent_fail))
+    done <<< "$plan"
+
+    echo "[core] memory restore complete from: $source_dir"
+    echo "  agents:     $agents_touched"
+    echo "  restored:   $total_restored"
+    echo "  failed:     $total_failed"
+    [ "$total_failed" -eq 0 ] || return 2
 }
 
 # ── Command: cap ──────────────────────────────────────────────────────────
@@ -5112,6 +5258,7 @@ Commands:
   memory overview         Show memory overview
   memory search QUERY [N] [--all-agents]   Full-content search across stored memory (case-insensitive). With --all-agents, fan out across every agent and order by recency.
   memory snapshot DIR [--all-agents]   Export memory entries to DIR (one JSON per agent + _manifest.json)
+  memory restore DIR [--agent ID]      Restore memory entries from a snapshot DIR (upserts; non-destructive)
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details
