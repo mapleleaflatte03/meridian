@@ -325,5 +325,49 @@ class TestMemoryRotateSurface(unittest.TestCase):
         self.assertIn("reverse=True", self.source)
 
 
+class TestMemoryHealthSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_health(self):
+        self.assertIn("memory health", _help_block(self.source))
+
+    def test_memory_health_dispatched_from_cmd_memory(self):
+        self.assertIn("health)\n            cmd_memory_health", self.source)
+
+    def test_memory_health_function_exists(self):
+        self.assertIn("cmd_memory_health()", self.source)
+
+    def test_memory_health_supports_json_alert_top(self):
+        self.assertIn("--alert", self.source)
+        self.assertIn("--json", self.source)
+        self.assertIn("--top", self.source)
+
+    def test_memory_health_validates_top_integer(self):
+        self.assertIn("--top must be a non-negative integer", self.source)
+
+    def test_memory_health_is_read_only(self):
+        # Health must never call any mutating loom subcommand.
+        marker = "cmd_memory_health()"
+        start = self.source.find(marker)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        self.assertNotIn("memory remove", body)
+        self.assertNotIn("memory write", body)
+        self.assertNotIn("rm -rf", body)
+        # The function must use overview, not search/write/remove.
+        self.assertIn("memory overview", body)
+
+    def test_memory_health_alert_mode_exits_nonzero_on_alerts(self):
+        # Allow CI / cron jobs to branch on threshold breach.
+        marker = "cmd_memory_health()"
+        start = self.source.find(marker)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        self.assertIn('mode == "alert"', body)
+        self.assertIn("sys.exit(2)", body)
+
+
 if __name__ == "__main__":
     unittest.main()

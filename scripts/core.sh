@@ -4865,8 +4865,11 @@ cmd_memory() {
         rotate)
             cmd_memory_rotate "$@"
             ;;
+        health)
+            cmd_memory_health "$@"
+            ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune|diff|rotate> [args]"
+            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune|diff|rotate|health> [args]"
             ;;
     esac
 }
@@ -5555,6 +5558,149 @@ PY
     [ "$failed" -eq 0 ] || return 2
 }
 
+# ── Command: memory health ────────────────────────────────────────────────
+# Read-only operator dashboard: aggregates loom memory overview into a
+# compact health report with top-N agents and threshold alerts.
+
+cmd_memory_health() {
+    local mode="report"
+    local top_n="5"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --alert)
+                mode="alert"; shift
+                ;;
+            --top)
+                top_n="${2:-}"; shift 2 || true
+                ;;
+            --json)
+                mode="json"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory health [--alert] [--json] [--top N]
+
+Read-only memory health summary: aggregate counts, retention policy,
+and top-N agents by entry count. Pure read; never mutates state.
+
+  --alert   exit non-zero if any agent is over policy.max_entry_bytes
+            or total memory exceeds 80% of any soft threshold
+  --json    machine-readable output
+  --top N   show top N agents by entry count (default 5)
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                die "Unexpected argument: $1"
+                ;;
+        esac
+    done
+    case "$top_n" in
+        ''|*[!0-9]*) die "--top must be a non-negative integer, got: $top_n" ;;
+    esac
+    require_loom; require_runtime
+
+    local raw
+    raw="$("$LOOM_BIN" memory overview --root "$LOOM_ROOT" --format json 2>/dev/null || echo "{}")"
+
+    MEM_JSON="$raw" MODE="$mode" TOP_N="$top_n" python3 - <<'PY'
+import json, os, sys
+
+raw = os.environ.get("MEM_JSON") or "{}"
+mode = os.environ.get("MODE", "report")
+top_n = int(os.environ.get("TOP_N") or "5")
+
+try:
+    data = json.loads(raw)
+except Exception:
+    data = {}
+
+agent_count = int(data.get("agent_count") or 0)
+total_entries = int(data.get("total_entries") or 0)
+total_bytes = int(data.get("total_bytes") or 0)
+policy = data.get("policy") or {}
+max_entry_bytes = int(policy.get("max_entry_bytes") or 0)
+retention_days = int(policy.get("retention_days") or 0)
+agents = data.get("agents") or []
+
+# Compute alerts: any agent whose total_bytes exceeds max_entry_bytes (a
+# rough heuristic; real per-entry checks happen at write time but a single
+# agent ballooning is still operator-actionable).
+alerts = []
+for a in agents:
+    if not isinstance(a, dict):
+        continue
+    if max_entry_bytes and int(a.get("total_bytes") or 0) > max_entry_bytes * 50:
+        # Soft heuristic: 50x max_entry_bytes total = roughly 50 max-sized
+        # entries, suggesting heavy growth on this agent.
+        alerts.append({
+            "agent_id": a.get("agent_id"),
+            "code": "agent_heavy_growth",
+            "total_bytes": int(a.get("total_bytes") or 0),
+        })
+
+if mode == "json":
+    out = {
+        "status": "success",
+        "agent_count": agent_count,
+        "total_entries": total_entries,
+        "total_bytes": total_bytes,
+        "policy": {
+            "max_entry_bytes": max_entry_bytes,
+            "retention_days": retention_days,
+        },
+        "alerts": alerts,
+        "top_agents": sorted(
+            [
+                {
+                    "agent_id": a.get("agent_id"),
+                    "entry_count": int(a.get("entry_count") or 0),
+                    "total_bytes": int(a.get("total_bytes") or 0),
+                }
+                for a in agents
+                if isinstance(a, dict)
+            ],
+            key=lambda x: x["entry_count"],
+            reverse=True,
+        )[:top_n],
+    }
+    print(json.dumps(out, indent=2))
+else:
+    print("[core] memory health")
+    print(f"  agents:          {agent_count}")
+    print(f"  total entries:   {total_entries}")
+    print(f"  total bytes:     {total_bytes}")
+    if max_entry_bytes:
+        print(f"  max entry bytes: {max_entry_bytes}")
+    if retention_days:
+        print(f"  retention days:  {retention_days}")
+    sorted_agents = sorted(
+        [a for a in agents if isinstance(a, dict)],
+        key=lambda x: int(x.get("entry_count") or 0),
+        reverse=True,
+    )[:top_n]
+    if sorted_agents:
+        print(f"  top {len(sorted_agents)} agents by entry count:")
+        for a in sorted_agents:
+            print(
+                f"    {a.get('agent_id'):28s} entries={int(a.get('entry_count') or 0):4d} "
+                f"bytes={int(a.get('total_bytes') or 0)}"
+            )
+    if alerts:
+        print(f"  alerts ({len(alerts)}):")
+        for a in alerts:
+            print(f"    [{a['code']}] {a['agent_id']} total_bytes={a['total_bytes']}")
+    else:
+        print("  alerts:          none")
+
+if mode == "alert" and alerts:
+    sys.exit(2)
+PY
+}
+
 # ── Command: cap ──────────────────────────────────────────────────────────
 # Delegates to skill.sh for capability discovery and execution
 
@@ -5698,6 +5844,7 @@ Commands:
   memory prune --older-than DAYS [--execute] [--agent ID]   Time-based prune (dry-run by default; --execute to actually remove)
   memory diff SNAPSHOT_A SNAPSHOT_B [--json]   Compare two snapshot directories; report added/removed/modified entries
   memory rotate DIR --keep N [--execute]   Retain only the N most recent snapshots in DIR (dry-run by default)
+  memory health [--alert] [--json] [--top N]   Read-only operator memory dashboard with top-N agents and alerts
   schedule status         Show schedule runtime overview
   schedule list           List scheduled jobs
   schedule show JOB_ID    Show full schedule details
