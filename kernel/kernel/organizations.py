@@ -51,11 +51,21 @@ def _slug(name):
     return name.lower().replace(' ', '-').replace('_', '-')[:40]
 
 
+_CACHE_STR = None
+_CACHE_MTIME = 0
+
 def load_orgs():
-    if os.path.exists(ORGS_FILE):
+    global _CACHE_STR, _CACHE_MTIME
+    try:
+        mtime = os.path.getmtime(ORGS_FILE)
+    except OSError:
+        return {'organizations': {}, 'updatedAt': _now()}
+
+    if _CACHE_STR is None or mtime != _CACHE_MTIME:
         with open(ORGS_FILE) as f:
-            return json.load(f)
-    return {'organizations': {}, 'updatedAt': _now()}
+            _CACHE_STR = f.read()
+        _CACHE_MTIME = mtime
+    return json.loads(_CACHE_STR)
 
 
 def save_orgs(data):
