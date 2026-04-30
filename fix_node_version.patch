@@ -1,0 +1,57 @@
+--- .github/workflows/ci.yml
++++ .github/workflows/ci.yml
+@@ -19,7 +19,9 @@
+       intelligence: ${{ steps.filter.outputs.intelligence }}
+       bootstrap: ${{ steps.filter.outputs.bootstrap }}
+     steps:
+-      - uses: actions/checkout@v4
++      - uses: actions/checkout@v4
++        with:
++          node-version: 24
+       - id: filter
+         uses: dorny/paths-filter@v3
+         with:
+@@ -40,7 +42,9 @@
+       run:
+         working-directory: loom
+     steps:
+-      - uses: actions/checkout@v4
++      - uses: actions/checkout@v4
++        with:
++          node-version: 24
+       - uses: dtolnay/rust-toolchain@stable
+       - uses: Swatinem/rust-cache@v2
+         with:
+@@ -53,7 +57,9 @@
+   python-kernel-intelligence:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v4
++      - uses: actions/checkout@v4
++        with:
++          node-version: 24
+       - uses: actions/setup-python@v5
+         with:
+           python-version: '3.11'
+@@ -79,7 +85,9 @@
+   onboarding-ready-lane:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v4
++      - uses: actions/checkout@v4
++        with:
++          node-version: 24
+       - uses: actions/setup-python@v5
+         with:
+           python-version: '3.11'
+@@ -95,7 +103,9 @@
+   deploy-hygiene:
+     runs-on: ubuntu-latest
+     steps:
+-      - uses: actions/checkout@v4
++      - uses: actions/checkout@v4
++        with:
++          node-version: 24
+       - uses: actions/setup-python@v5
+         with:
+           python-version: '3.11'
