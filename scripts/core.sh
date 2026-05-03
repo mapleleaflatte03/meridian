@@ -5712,6 +5712,145 @@ cmd_which_repo() {
     bash "$verifier" "$@"
 }
 
+# ── Command: team ─────────────────────────────────────────────────────────
+# Operator cockpit window into Meridian Team mode. Surfaces the manager +
+# specialist roster, models, scopes, and dispatch flags so the operator
+# can see, at a glance, which agents are alive in the Team plane and how
+# they're configured. Pure read; never mutates topology state.
+
+cmd_team() {
+    local subcmd="${1:-topology}"
+    shift || true
+    case "$subcmd" in
+        topology)
+            cmd_team_topology "$@"
+            ;;
+        --help|-h|help)
+            cat <<EOF
+Usage: core.sh team <subcommand> [args]
+
+Subcommands:
+  topology    Show manager + specialist roster (roles, models, scopes,
+              dispatch flags). Reads /api/team/topology from the live
+              gateway when available; falls back to local team_topology
+              loader. Pure read.
+
+Examples:
+  core.sh team topology
+  core.sh team topology --json
+  core.sh team topology --remote   # force gateway fetch (Origin-protected)
+EOF
+            return 0
+            ;;
+        *)
+            die "Usage: core.sh team <topology> [args]"
+            ;;
+    esac
+}
+
+cmd_team_topology() {
+    local mode="report"
+    local source="auto"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) mode="json"; shift ;;
+            --remote) source="remote"; shift ;;
+            --local) source="local"; shift ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh team topology [--json] [--remote|--local]
+
+Render the Team-mode roster: manager + specialists with role, profile,
+provider/model, kernel scopes, and dispatch flags. Never prints
+api_key_env_var hints — owner-safe.
+
+  --json     machine-readable JSON
+  --remote   force gateway /api/team/topology (Origin-protected)
+  --local    force local team_topology loader (offline-safe)
+EOF
+                return 0
+                ;;
+            -*) die "Unknown flag: $1" ;;
+            *) die "Unexpected argument: $1" ;;
+        esac
+    done
+
+    local raw=""
+    local fetched_from=""
+    if [ "$source" = "remote" ] || [ "$source" = "auto" ]; then
+        local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
+        raw="$(curl -fsS -H "Origin: ${gateway_url}" "${gateway_url}/api/team/topology" 2>/dev/null || true)"
+        if [ -n "$raw" ]; then
+            fetched_from="gateway"
+        elif [ "$source" = "remote" ]; then
+            die "Failed to reach gateway at ${gateway_url}/api/team/topology"
+        fi
+    fi
+    if [ -z "$raw" ]; then
+        require_runtime
+        raw="$(MERIDIAN_ROOT="$ROOT_DIR" python3 - <<'PY'
+import json, sys
+try:
+    sys.path.insert(0, str(__import__("pathlib").Path("intelligence").resolve()))
+    from meridian_gateway import _build_team_topology_response  # type: ignore
+    print(json.dumps(_build_team_topology_response()))
+except Exception as exc:
+    print(json.dumps({"status": "error", "output": f"local_topology_failed: {exc}"}))
+PY
+)"
+        fetched_from="local"
+    fi
+
+    MEM_JSON="$raw" MODE="$mode" FROM="$fetched_from" python3 - <<'PY'
+import json, os, sys
+raw = os.environ.get("MEM_JSON") or "{}"
+mode = os.environ.get("MODE", "report")
+src = os.environ.get("FROM") or "unknown"
+try:
+    data = json.loads(raw)
+except Exception:
+    data = {"status": "error", "output": "team_topology_unparseable"}
+
+if mode == "json":
+    out = dict(data)
+    out["_source"] = src
+    print(json.dumps(out, indent=2, sort_keys=True))
+    sys.exit(0 if data.get("status") == "success" else 1)
+
+if data.get("status") != "success":
+    print(f"[team] topology unavailable ({src}): {data.get('output')}")
+    sys.exit(1)
+
+mgr = data.get("manager") or {}
+specs = data.get("specialists") or []
+print(f"[team] org={data.get('org_id')}  source={src}  specialists={len(specs)}")
+print()
+def render(label, a):
+    if not a:
+        return
+    name = a.get("name") or a.get("handle") or a.get("registry_id") or "?"
+    role = a.get("role") or "?"
+    model = a.get("model") or "?"
+    provider = a.get("provider_kind") or "?"
+    kernel = a.get("kernel_role") or "?"
+    disp = "yes" if a.get("dispatchable") else "no"
+    visible = "yes" if a.get("manager_visible") else "no"
+    aliases = ", ".join(a.get("aliases") or [])
+    scopes = ", ".join(a.get("scopes") or [])
+    print(f"  {label:11} {name}")
+    print(f"    role={role}  kernel={kernel}  model={model}  provider={provider}")
+    print(f"    dispatchable={disp}  manager_visible={visible}")
+    if aliases:
+        print(f"    aliases={aliases}")
+    if scopes:
+        print(f"    scopes={scopes}")
+
+render("manager:", mgr)
+for i, sp in enumerate(specs):
+    render(f"specialist#{i}:", sp)
+PY
+}
+
 # ── Command: cap ──────────────────────────────────────────────────────────
 # Delegates to skill.sh for capability discovery and execution
 
@@ -6075,6 +6214,7 @@ if [ "${MERIDIAN_CORE_SH_SOURCE_ONLY:-0}" != "1" ]; then
         proof)       cmd_proof "$@" ;;
         cap)         cmd_cap "$@" ;;
         which-repo)  cmd_which_repo "$@" ;;
+        team)        cmd_team "$@" ;;
         help|--help) cmd_help ;;
         *)
             echo "[core] Unknown command: $COMMAND" >&2

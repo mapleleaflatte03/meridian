@@ -6197,6 +6197,61 @@ def is_public_read_route(request_path: str) -> bool:
     return False
 
 
+def _build_team_topology_response() -> dict[str, Any]:
+    """Sanitized snapshot of the active Team topology for operator dashboards.
+
+    Pulls from team_topology.load_team_topology(), strips api_key_env_var
+    (no secret hints leak), and shapes the response so UI consumers get a
+    stable schema. Falls back to a structured error payload rather than
+    raising. Origin-protected — Team plane state is not for public read.
+    """
+    try:
+        from company.meridian_platform import team_topology as _tt
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "output": f"team_topology_import_failed: {exc.__class__.__name__}: {exc}",
+        }
+    try:
+        topology = _tt.load_team_topology()
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "output": f"team_topology_load_failed: {exc.__class__.__name__}: {exc}",
+        }
+
+    def _agent_summary(agent: Any) -> dict[str, Any]:
+        # Deliberately omit api_key_env_var — leaking the env var name
+        # leaks deployment shape and can guide an attacker.
+        return {
+            "env_key": getattr(agent, "env_key", ""),
+            "registry_id": getattr(agent, "registry_id", ""),
+            "handle": getattr(agent, "handle", ""),
+            "name": getattr(agent, "name", ""),
+            "role": getattr(agent, "role", ""),
+            "purpose": getattr(agent, "purpose", ""),
+            "profile_name": getattr(agent, "profile_name", ""),
+            "provider_kind": getattr(agent, "provider_kind", ""),
+            "model": getattr(agent, "model", ""),
+            "task_kind": getattr(agent, "task_kind", ""),
+            "kernel_role": getattr(agent, "kernel_role", ""),
+            "scopes": list(getattr(agent, "scopes", ()) or ()),
+            "aliases": list(getattr(agent, "aliases", ()) or ()),
+            "dispatchable": bool(getattr(agent, "dispatchable", False)),
+            "manager_visible": bool(getattr(agent, "manager_visible", False)),
+        }
+
+    manager_summary = _agent_summary(topology.manager)
+    specialists = [_agent_summary(a) for a in (topology.specialists or ())]
+    return {
+        "status": "success",
+        "org_id": getattr(topology, "org_id", ""),
+        "manager": manager_summary,
+        "specialists": specialists,
+        "specialist_count": len(specialists),
+    }
+
+
 def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str, Any]:
     """Run `loom memory overview` and shape the response for operators.
 
@@ -15081,6 +15136,11 @@ class WebAPIAdapter(ChannelAdapter):
                             "showcase": _normalize_status_wording(_workflow_showcase_snapshot_cached()),
                         },
                     )
+                    return
+                if request_path == "/api/team/topology":
+                    payload = _build_team_topology_response()
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
                     return
                 if request_path == "/api/memory/overview":
                     query_params = parse_qs(parsed.query or "")
