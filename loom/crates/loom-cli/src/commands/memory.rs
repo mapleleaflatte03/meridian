@@ -167,6 +167,40 @@ fn handle_memory_fork(args: &[String]) -> LoomResult<()> {
     print_memory_fork_payload(payload, &format)
 }
 
+fn persist_memory_replay_artifact(root: &Path, payload: &mut Value) -> LoomResult<()> {
+    let artifact_dir = root.join("artifacts/memory/replays");
+    std::fs::create_dir_all(&artifact_dir).map_err(|error| error.to_string())?;
+    let source_ref = payload
+        .get("source_ref")
+        .and_then(Value::as_str)
+        .unwrap_or("source");
+    let target_agent_id = payload
+        .get("target_agent_id")
+        .and_then(Value::as_str)
+        .unwrap_or("target");
+    let artifact_path = artifact_dir.join(format!(
+        "{}_to_{}_{}.json",
+        sanitize_token(source_ref),
+        sanitize_token(target_agent_id),
+        chrono_like_timestamp(),
+    ));
+    let latest_artifact_path = artifact_dir.join("latest.json");
+    if let Some(object) = payload.as_object_mut() {
+        object.insert(
+            "artifact_path".to_string(),
+            Value::String(artifact_path.display().to_string()),
+        );
+        object.insert(
+            "latest_artifact_path".to_string(),
+            Value::String(latest_artifact_path.display().to_string()),
+        );
+    }
+    let rendered = serde_json::to_string_pretty(payload).map_err(|error| error.to_string())?;
+    std::fs::write(&artifact_path, rendered.clone() + "\n").map_err(|error| error.to_string())?;
+    std::fs::write(&latest_artifact_path, rendered + "\n").map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 fn print_memory_fork_payload(payload: Value, format: &str) -> LoomResult<()> {
     match format {
         "human" => {
@@ -248,7 +282,7 @@ fn handle_memory_replay(args: &[String]) -> LoomResult<()> {
         org_id.as_str(),
     )?;
     if court.status == "blocked" || authority.status == "denied" {
-        let payload = json!({
+        let mut payload = json!({
             "status": "memory_replay_blocked",
             "source_ref": source_ref,
             "target_agent_id": target_identity.agent_id,
@@ -264,6 +298,7 @@ fn handle_memory_replay(args: &[String]) -> LoomResult<()> {
             "replayed_entries": 0usize,
             "note": "replay blocked by governance gate before memory write",
         });
+        persist_memory_replay_artifact(&root, &mut payload)?;
         return print_memory_replay_payload(payload, &format);
     }
 
@@ -286,7 +321,7 @@ fn handle_memory_replay(args: &[String]) -> LoomResult<()> {
         replayed_entries += 1;
     }
 
-    let payload = json!({
+    let mut payload = json!({
         "status": "memory_replay_applied",
         "source_ref": selection.source_ref,
         "target_agent_id": target_identity.agent_id,
@@ -308,6 +343,7 @@ fn handle_memory_replay(args: &[String]) -> LoomResult<()> {
         "replayed_entries": replayed_entries,
         "note": selection.note,
     });
+    persist_memory_replay_artifact(&root, &mut payload)?;
     print_memory_replay_payload(payload, &format)
 }
 
@@ -316,7 +352,7 @@ fn print_memory_replay_payload(payload: Value, format: &str) -> LoomResult<()> {
         "human" => {
             print_startup_banner();
             print_human(&format!(
-                "status:            {}\nsource_ref:        {}\ntarget_agent_id:   {}\ncourt_status:      {}\nauthority_status:  {}\nmode:              {}\ndirection:         {}\nfocus_node_id:     {}\nselected_nodes:    {}\nreplayed_entries:  {}\nnote:              {}\n",
+                "status:            {}\nsource_ref:        {}\ntarget_agent_id:   {}\ncourt_status:      {}\nauthority_status:  {}\nmode:              {}\ndirection:         {}\nfocus_node_id:     {}\nselected_nodes:    {}\nreplayed_entries:  {}\nartifact_path:     {}\nlatest_artifact:   {}\nnote:              {}\n",
                 payload.get("status").and_then(Value::as_str).unwrap_or("unknown"),
                 payload.get("source_ref").and_then(Value::as_str).unwrap_or(""),
                 payload.get("target_agent_id").and_then(Value::as_str).unwrap_or(""),
@@ -337,6 +373,11 @@ fn print_memory_replay_payload(payload: Value, format: &str) -> LoomResult<()> {
                     .get("replayed_entries")
                     .and_then(Value::as_u64)
                     .unwrap_or(0),
+                payload.get("artifact_path").and_then(Value::as_str).unwrap_or(""),
+                payload
+                    .get("latest_artifact_path")
+                    .and_then(Value::as_str)
+                    .unwrap_or(""),
                 payload.get("note").and_then(Value::as_str).unwrap_or(""),
             ));
         }
@@ -461,23 +502,26 @@ fn handle_memory_search(args: &[String]) -> LoomResult<()> {
     let category = take_value(args, "--category");
     let key_prefix = take_value(args, "--key-prefix");
     let text = take_value(args, "--text");
+    let tags = take_values(args, "--tag");
     let limit = take_value(args, "--limit").and_then(|value| value.parse::<usize>().ok());
     let svc = MemoryService::with_defaults(&root);
     let entries = if all_agents {
-        svc.search_all_agents(
+        svc.search_all_agents_with_tags(
             category.as_deref(),
             key_prefix.as_deref(),
             text.as_deref(),
             limit,
+            &tags,
         )?
     } else {
         let agent_id = required_flag(args, "--agent-id")?;
-        svc.search_filtered(
+        svc.search_filtered_with_tags(
             &agent_id,
             category.as_deref(),
             key_prefix.as_deref(),
             text.as_deref(),
             limit,
+            &tags,
         )?
     };
     match format.as_str() {
@@ -516,8 +560,10 @@ fn handle_memory_write(args: &[String]) -> LoomResult<()> {
     let key = required_flag(args, "--key")?;
     let content = required_flag(args, "--content")?;
     let source = take_value(args, "--source").unwrap_or_else(|| "operator".to_string());
-    let entry =
-        MemoryService::with_defaults(&root).write(&agent_id, &category, &key, &content, &source)?;
+    let tags = take_values(args, "--tag");
+    let entry = MemoryService::with_defaults(&root).write_with_tags(
+        &agent_id, &category, &key, &content, &source, &tags,
+    )?;
     match format.as_str() {
         "human" => {
             print_startup_banner();

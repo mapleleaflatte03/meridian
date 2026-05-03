@@ -3056,8 +3056,34 @@ EOF
 # ── Command: remember ─────────────────────────────────────────────────────
 
 cmd_remember() {
-    local key="${1:-}"; local value="${2:-}"
-    [ -n "$key" ] && [ -n "$value" ] || die "Usage: core.sh remember KEY \"VALUE\""
+    # Positional: KEY VALUE. Optional --tag flags (repeatable) are stripped
+    # before positional parsing so operators can do:
+    #   core.sh remember mykey "the value" --tag release --tag vietnam
+    local tag_args=()
+    local positional=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --tag)
+                tag_args+=("--tag" "${2:-}")
+                shift 2 || true
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh remember KEY "VALUE" [--tag LABEL]...
+
+Store a memory entry under category "core" for the active agent.
+Tags are open-ended labels; matching is case-insensitive trim-only.
+Use core.sh recall --tag LABEL or memory search --tag to retrieve.
+EOF
+                return 0
+                ;;
+            *)
+                positional+=("$1"); shift
+                ;;
+        esac
+    done
+    local key="${positional[0]:-}"; local value="${positional[1]:-}"
+    [ -n "$key" ] && [ -n "$value" ] || die "Usage: core.sh remember KEY \"VALUE\" [--tag LABEL]..."
     require_loom; require_runtime
 
     local agent_id; agent_id="$(resolve_agent_id)"
@@ -3070,7 +3096,8 @@ cmd_remember() {
         --content "$value" \
         --source "core_task_runner" \
         --root "$LOOM_ROOT" \
-        --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); print(f'[core] stored: {d.get(\"key\")} -> {d.get(\"content\",\"\")[:60]}')" 2>/dev/null || echo "[core] stored: $key"
+        "${tag_args[@]}" \
+        --format json 2>/dev/null | python3 -c "import sys,json; d=json.load(sys.stdin); tags=d.get('tags') or []; tagstr=(' tags=['+','.join(tags)+']') if tags else ''; print(f'[core] stored: {d.get(\"key\")} -> {d.get(\"content\",\"\")[:60]}{tagstr}')" 2>/dev/null || echo "[core] stored: $key"
 }
 
 # ── Command: recall ───────────────────────────────────────────────────────
@@ -3079,6 +3106,7 @@ cmd_recall() {
     local prefix=""
     local text_query=""
     local limit=""
+    local tag_args=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --text)
@@ -3087,12 +3115,16 @@ cmd_recall() {
             --limit)
                 limit="${2:-}"; shift 2 || true
                 ;;
+            --tag)
+                tag_args+=("--tag" "${2:-}"); shift 2 || true
+                ;;
             --help|-h)
                 cat <<EOF
-Usage: core.sh recall [KEY_PREFIX] [--text QUERY] [--limit N]
+Usage: core.sh recall [KEY_PREFIX] [--text QUERY] [--tag LABEL]... [--limit N]
 
 Search Core memory by key prefix (default) and/or by case-insensitive
-substring against entry key or content. Pass --limit to cap results.
+substring against entry key or content. Pass --tag (repeatable) to
+filter by tags (AND across tags, case-insensitive).
 EOF
                 return 0
                 ;;
@@ -3114,6 +3146,7 @@ EOF
     [ -n "$prefix" ] && args+=("--key-prefix" "$prefix")
     [ -n "$text_query" ] && args+=("--text" "$text_query")
     [ -n "$limit" ] && args+=("--limit" "$limit")
+    if [ ${#tag_args[@]} -gt 0 ]; then args+=("${tag_args[@]}"); fi
 
     local mem_json
     mem_json="$("$LOOM_BIN" memory search "${args[@]}" 2>/dev/null || true)"
@@ -3127,7 +3160,9 @@ if not entries:
     print('[core] no memory entries found')
     raise SystemExit(0)
 for e in entries:
-    print(f'  {e.get(\"key\")}: {e.get(\"content\",\"\")[:80]}')
+    tags = e.get('tags') or []
+    tagstr = ' [' + ','.join(tags) + ']' if tags else ''
+    print(f'  {e.get(\"key\")}{tagstr}: {e.get(\"content\",\"\")[:80]}')
 "
 }
 
@@ -3138,19 +3173,24 @@ cmd_memory_search() {
     local query=""
     local limit=""
     local all_agents=0
+    local tag_args=()
     while [ $# -gt 0 ]; do
         case "$1" in
             --all-agents)
                 all_agents=1; shift
                 ;;
+            --tag)
+                tag_args+=("--tag" "${2:-}"); shift 2 || true
+                ;;
             --help|-h)
                 cat <<EOF
-Usage: core.sh memory search QUERY [LIMIT] [--all-agents]
+Usage: core.sh memory search QUERY [LIMIT] [--all-agents] [--tag LABEL]...
 
 Full-content search across stored memory (case-insensitive substring
 against entry key or content). Default scope is the active agent.
 Use --all-agents to fan out across every agent in the runtime root;
 results are merged and ordered by most-recent updated_at first.
+Pass --tag (repeatable) to AND-filter results by tag.
 EOF
                 return 0
                 ;;
@@ -3166,7 +3206,7 @@ EOF
                 ;;
         esac
     done
-    [ -n "$query" ] || die "Usage: core.sh memory search QUERY [LIMIT] [--all-agents]"
+    [ -n "$query" ] || die "Usage: core.sh memory search QUERY [LIMIT] [--all-agents] [--tag LABEL]..."
     require_loom; require_runtime
 
     local args=("--root" "$LOOM_ROOT" "--format" "json" "--text" "$query")
@@ -3178,6 +3218,7 @@ EOF
         [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
         args+=("--agent-id" "$agent_id")
     fi
+    if [ ${#tag_args[@]} -gt 0 ]; then args+=("${tag_args[@]}"); fi
 
     local mem_json
     mem_json="$("$LOOM_BIN" memory search "${args[@]}" 2>/dev/null || true)"

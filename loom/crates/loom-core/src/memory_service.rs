@@ -31,6 +31,10 @@ const DEFAULT_RETENTION_DAYS: u64 = 365;
 // ───── Repo types ─────
 
 /// A single memory entry in the repo.
+///
+/// `tags` is an open-ended set of operator-supplied labels (e.g. "release",
+/// "vietnam", "owner_only"). Tag matching is case-insensitive and trim-only.
+/// Existing index.json files without a `tags` field are read as empty.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MemoryEntry {
     pub entry_id: String,
@@ -42,6 +46,7 @@ pub struct MemoryEntry {
     pub updated_at: u64,
     pub source: String,
     pub governed: bool,
+    pub tags: Vec<String>,
 }
 
 impl MemoryEntry {
@@ -56,10 +61,22 @@ impl MemoryEntry {
             "updated_at": self.updated_at,
             "source": self.source,
             "governed": self.governed,
+            "tags": self.tags,
         })
     }
 
     pub fn from_json(value: &Value) -> LoomResult<Self> {
+        let tags = value
+            .get("tags")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|t| t.as_str())
+                    .map(normalize_tag)
+                    .filter(|t| !t.is_empty())
+                    .collect()
+            })
+            .unwrap_or_default();
         Ok(Self {
             entry_id: value["entry_id"].as_str().unwrap_or("").to_string(),
             agent_id: value["agent_id"].as_str().unwrap_or("").to_string(),
@@ -70,12 +87,50 @@ impl MemoryEntry {
             updated_at: value["updated_at"].as_u64().unwrap_or(0),
             source: value["source"].as_str().unwrap_or("unknown").to_string(),
             governed: value["governed"].as_bool().unwrap_or(true),
+            tags,
         })
     }
 
     pub fn byte_size(&self) -> usize {
-        self.content.len() + self.key.len() + self.category.len()
+        self.content.len()
+            + self.key.len()
+            + self.category.len()
+            + self.tags.iter().map(|t| t.len() + 1).sum::<usize>()
     }
+
+    /// Whether this entry matches *every* tag in `required` (AND semantics).
+    /// Comparison is case-insensitive trim-only via [`normalize_tag`].
+    pub fn matches_all_tags(&self, required: &[String]) -> bool {
+        if required.is_empty() {
+            return true;
+        }
+        let owned: Vec<String> = self.tags.iter().map(|t| normalize_tag(t)).collect();
+        required
+            .iter()
+            .map(|t| normalize_tag(t))
+            .filter(|t| !t.is_empty())
+            .all(|needle| owned.iter().any(|t| t == &needle))
+    }
+}
+
+/// Normalize a tag for storage and comparison: trim and lower-case.
+pub fn normalize_tag(raw: &str) -> String {
+    raw.trim().to_lowercase()
+}
+
+/// Normalize and deduplicate a slice of tags. Drops empties.
+pub fn dedupe_tags(tags: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::with_capacity(tags.len());
+    for t in tags {
+        let n = normalize_tag(t);
+        if n.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|x| x == &n) {
+            out.push(n);
+        }
+    }
+    out
 }
 
 /// Index of all memory entries for one agent.
@@ -402,7 +457,26 @@ impl MemoryService {
         content: &str,
         source: &str,
     ) -> LoomResult<MemoryEntry> {
+        self.write_with_tags(agent_id, category, key, content, source, &[])
+    }
+
+    /// Write a memory entry with operator-supplied tags.
+    ///
+    /// Tags are normalized (trim + lowercase) and de-duplicated before
+    /// persistence. On upsert, new tags are *merged* with the existing
+    /// entry's tags rather than replaced — call `clear_tags=true` semantics
+    /// via a dedicated helper if you need replace semantics.
+    pub fn write_with_tags(
+        &self,
+        agent_id: &str,
+        category: &str,
+        key: &str,
+        content: &str,
+        source: &str,
+        tags: &[String],
+    ) -> LoomResult<MemoryEntry> {
         let now = current_unix();
+        let normalized_tags = dedupe_tags(tags);
         let entry = MemoryEntry {
             entry_id: format!("mem_{}_{}", agent_id, now),
             agent_id: agent_id.to_string(),
@@ -413,6 +487,7 @@ impl MemoryService {
             updated_at: now,
             source: source.to_string(),
             governed: true,
+            tags: normalized_tags.clone(),
         };
 
         // Policy: entry size
@@ -432,7 +507,8 @@ impl MemoryService {
             entries.remove(0);
         }
 
-        // Upsert by key
+        // Upsert by key. Tags are merged on update so write_with_tags
+        // accumulates labels across calls — useful for incremental tagging.
         let persisted_entry = if let Some(existing) = entries
             .iter_mut()
             .find(|e| e.key == key && e.category == category)
@@ -440,6 +516,13 @@ impl MemoryService {
             existing.content = entry.content.clone();
             existing.updated_at = now;
             existing.source = entry.source.clone();
+            let mut merged: Vec<String> = existing.tags.clone();
+            for tag in &normalized_tags {
+                if !merged.iter().any(|t| t == tag) {
+                    merged.push(tag.clone());
+                }
+            }
+            existing.tags = merged;
             existing.clone()
         } else {
             entries.push(entry.clone());
@@ -450,7 +533,13 @@ impl MemoryService {
         self.append_receipt(
             "write",
             agent_id,
-            &format!("category={} key={} source={}", category, key, source),
+            &format!(
+                "category={} key={} source={} tags=[{}]",
+                category,
+                key,
+                source,
+                persisted_entry.tags.join(",")
+            ),
             &format!(
                 "entry_id={} bytes={} governed={}",
                 persisted_entry.entry_id,
@@ -486,10 +575,27 @@ impl MemoryService {
         text_query: Option<&str>,
         limit: Option<usize>,
     ) -> LoomResult<Vec<MemoryEntry>> {
+        self.search_filtered_with_tags(agent_id, category, key_prefix, text_query, limit, &[])
+    }
+
+    /// Tag-aware variant of [`Self::search_filtered`].
+    ///
+    /// `tag_filter` is AND across tags: an entry must contain *every* tag
+    /// listed (case-insensitive). Empty `tag_filter` is a no-op.
+    pub fn search_filtered_with_tags(
+        &self,
+        agent_id: &str,
+        category: Option<&str>,
+        key_prefix: Option<&str>,
+        text_query: Option<&str>,
+        limit: Option<usize>,
+        tag_filter: &[String],
+    ) -> LoomResult<Vec<MemoryEntry>> {
         let entries = self.repo.read_entries(agent_id)?;
         let needle = text_query
             .map(|q| q.trim().to_lowercase())
             .filter(|q| !q.is_empty());
+        let normalized_tags = dedupe_tags(tag_filter);
         let mut filtered: Vec<MemoryEntry> = entries
             .into_iter()
             .filter(|e| {
@@ -510,6 +616,9 @@ impl MemoryService {
                         return false;
                     }
                 }
+                if !e.matches_all_tags(&normalized_tags) {
+                    return false;
+                }
                 true
             })
             .collect();
@@ -522,10 +631,11 @@ impl MemoryService {
             "read",
             agent_id,
             &format!(
-                "category={} key_prefix={} text={} limit={}",
+                "category={} key_prefix={} text={} tags=[{}] limit={}",
                 category.unwrap_or("*"),
                 key_prefix.unwrap_or("*"),
                 needle.as_deref().unwrap_or("*"),
+                normalized_tags.join(","),
                 limit
                     .map(|n| n.to_string())
                     .unwrap_or_else(|| "*".to_string()),
@@ -552,10 +662,25 @@ impl MemoryService {
         text_query: Option<&str>,
         limit: Option<usize>,
     ) -> LoomResult<Vec<MemoryEntry>> {
+        self.search_all_agents_with_tags(category, key_prefix, text_query, limit, &[])
+    }
+
+    /// Tag-aware variant of [`Self::search_all_agents`].
+    ///
+    /// `tag_filter` is AND across tags. Empty filter is a no-op.
+    pub fn search_all_agents_with_tags(
+        &self,
+        category: Option<&str>,
+        key_prefix: Option<&str>,
+        text_query: Option<&str>,
+        limit: Option<usize>,
+        tag_filter: &[String],
+    ) -> LoomResult<Vec<MemoryEntry>> {
         let agents = self.repo.list_agents()?;
         let needle = text_query
             .map(|q| q.trim().to_lowercase())
             .filter(|q| !q.is_empty());
+        let normalized_tags = dedupe_tags(tag_filter);
         let mut all: Vec<MemoryEntry> = Vec::new();
         for agent_id in &agents {
             let entries = self.repo.read_entries(agent_id)?;
@@ -577,6 +702,9 @@ impl MemoryService {
                         continue;
                     }
                 }
+                if !e.matches_all_tags(&normalized_tags) {
+                    continue;
+                }
                 all.push(e);
             }
         }
@@ -592,10 +720,11 @@ impl MemoryService {
             "read",
             "_all_agents",
             &format!(
-                "category={} key_prefix={} text={} limit={} agents={}",
+                "category={} key_prefix={} text={} tags=[{}] limit={} agents={}",
                 category.unwrap_or("*"),
                 key_prefix.unwrap_or("*"),
                 needle.as_deref().unwrap_or("*"),
+                normalized_tags.join(","),
                 limit
                     .map(|n| n.to_string())
                     .unwrap_or_else(|| "*".to_string()),
@@ -1418,6 +1547,7 @@ mod tests {
             updated_at: 2000,
             source: "user".to_string(),
             governed: true,
+            tags: Vec::new(),
         };
         let json = entry.to_json();
         let parsed = MemoryEntry::from_json(&json).unwrap();
@@ -1439,6 +1569,7 @@ mod tests {
             updated_at: 1000,
             source: "test".to_string(),
             governed: true,
+            tags: Vec::new(),
         }];
         repo.write_entries("atlas", &entries).unwrap();
         let read = repo.read_entries("atlas").unwrap();
@@ -1829,6 +1960,7 @@ mod tests {
                     updated_at: 1000,
                     source: "test".to_string(),
                     governed: true,
+                    tags: Vec::new(),
                 })
                 .collect();
             svc.repo.write_entries(agent, &old_entries).unwrap();
@@ -1853,24 +1985,28 @@ mod tests {
                 category: "facts".into(), key: "k1".into(),
                 content: "v1".into(), created_at: 1000, updated_at: 1000,
                 source: "test".into(), governed: true,
+            tags: Vec::new(),
             },
             MemoryEntry {
                 entry_id: "m2".into(), agent_id: "atlas".into(),
                 category: "facts".into(), key: "k1".into(),
                 content: "v2".into(), created_at: 1000, updated_at: 2000,
                 source: "test".into(), governed: true,
+            tags: Vec::new(),
             },
             MemoryEntry {
                 entry_id: "m3".into(), agent_id: "atlas".into(),
                 category: "facts".into(), key: "k1".into(),
                 content: "v3".into(), created_at: 1000, updated_at: 3000,
                 source: "test".into(), governed: true,
+            tags: Vec::new(),
             },
             MemoryEntry {
                 entry_id: "m4".into(), agent_id: "atlas".into(),
                 category: "facts".into(), key: "k2".into(),
                 content: "other".into(), created_at: 1000, updated_at: 1000,
                 source: "test".into(), governed: true,
+            tags: Vec::new(),
             },
         ];
         svc.repo.write_entries("atlas", &entries).unwrap();
@@ -1896,12 +2032,14 @@ mod tests {
                 category: "facts".into(), key: "k1".into(),
                 content: "v1".into(), created_at: 1000, updated_at: 1000,
                 source: "test".into(), governed: true,
+            tags: Vec::new(),
             },
             MemoryEntry {
                 entry_id: "m2".into(), agent_id: "atlas".into(),
                 category: "facts".into(), key: "k1".into(),
                 content: "v2".into(), created_at: 1000, updated_at: 2000,
                 source: "test".into(), governed: true,
+            tags: Vec::new(),
             },
         ];
         svc.repo.write_entries("atlas", &entries).unwrap();
@@ -1923,6 +2061,159 @@ mod tests {
         svc.write("atlas", "facts", "k2", "v2", "test").unwrap();
         let compacted = svc.compact("atlas").unwrap();
         assert_eq!(compacted, 0, "no duplicates should mean no compaction");
+        cleanup(&root);
+    }
+
+    // ── Tag schema (Tranche 28) ──────────────────────────────────────
+
+    #[test]
+    fn test_normalize_and_dedupe_tags() {
+        let raw = vec![
+            "Release".to_string(),
+            "  release ".to_string(),
+            "VIETNAM".to_string(),
+            "".to_string(),
+            "vietnam".to_string(),
+        ];
+        let out = dedupe_tags(&raw);
+        assert_eq!(out, vec!["release".to_string(), "vietnam".to_string()]);
+    }
+
+    #[test]
+    fn test_memory_entry_tags_roundtrip_with_legacy_json() {
+        // New entries persist tags.
+        let entry = MemoryEntry {
+            entry_id: "mem_1".to_string(),
+            agent_id: "atlas".to_string(),
+            category: "knowledge".to_string(),
+            key: "release".to_string(),
+            content: "shipping".to_string(),
+            created_at: 1,
+            updated_at: 2,
+            source: "user".to_string(),
+            governed: true,
+            tags: vec!["release".to_string(), "vietnam".to_string()],
+        };
+        let parsed = MemoryEntry::from_json(&entry.to_json()).unwrap();
+        assert_eq!(parsed.tags, vec!["release".to_string(), "vietnam".to_string()]);
+
+        // Legacy entries without a `tags` key still parse to empty.
+        let legacy = serde_json::json!({
+            "entry_id": "mem_2",
+            "agent_id": "atlas",
+            "category": "knowledge",
+            "key": "old",
+            "content": "no tags here",
+            "created_at": 1,
+            "updated_at": 2,
+            "source": "user",
+            "governed": true
+        });
+        let parsed_legacy = MemoryEntry::from_json(&legacy).unwrap();
+        assert!(parsed_legacy.tags.is_empty(), "legacy entries default to no tags");
+    }
+
+    #[test]
+    fn test_write_with_tags_persists_and_merges_on_upsert() {
+        let root = temp_root();
+        let svc = MemoryService::with_defaults(&root);
+
+        let written = svc
+            .write_with_tags(
+                "atlas",
+                "knowledge",
+                "release",
+                "Shipping the team release",
+                "atlas",
+                &["RELEASE".to_string(), "vietnam".to_string()],
+            )
+            .unwrap();
+        assert_eq!(written.tags, vec!["release".to_string(), "vietnam".to_string()]);
+
+        // Upsert with new tag should merge, not replace.
+        let merged = svc
+            .write_with_tags(
+                "atlas",
+                "knowledge",
+                "release",
+                "Shipping",
+                "atlas",
+                &["q4".to_string(), "Vietnam".to_string()],
+            )
+            .unwrap();
+        assert_eq!(
+            merged.tags,
+            vec!["release".to_string(), "vietnam".to_string(), "q4".to_string()],
+            "tags should merge case-insensitively without dropping prior labels"
+        );
+        cleanup(&root);
+    }
+
+    #[test]
+    fn test_search_filtered_with_tags_filters_and() {
+        let root = temp_root();
+        let svc = MemoryService::with_defaults(&root);
+        svc.write_with_tags("atlas", "facts", "a", "alpha", "u", &["release".into(), "vietnam".into()])
+            .unwrap();
+        svc.write_with_tags("atlas", "facts", "b", "beta", "u", &["release".into()])
+            .unwrap();
+        svc.write_with_tags("atlas", "facts", "c", "gamma", "u", &["draft".into()])
+            .unwrap();
+
+        // Single-tag filter.
+        let release_only = svc
+            .search_filtered_with_tags("atlas", None, None, None, None, &["release".into()])
+            .unwrap();
+        let keys: Vec<_> = release_only.iter().map(|e| e.key.clone()).collect();
+        assert_eq!(keys.len(), 2);
+        assert!(keys.contains(&"a".to_string()) && keys.contains(&"b".to_string()));
+
+        // Two-tag AND filter — only entry "a" has both.
+        let both = svc
+            .search_filtered_with_tags(
+                "atlas",
+                None,
+                None,
+                None,
+                None,
+                &["RELEASE".into(), "vietnam".into()],
+            )
+            .unwrap();
+        assert_eq!(both.len(), 1);
+        assert_eq!(both[0].key, "a");
+
+        // Empty tag filter degrades to base search.
+        let all = svc
+            .search_filtered_with_tags("atlas", None, None, None, None, &[])
+            .unwrap();
+        assert_eq!(all.len(), 3);
+        cleanup(&root);
+    }
+
+    #[test]
+    fn test_search_all_agents_with_tags_cross_agent_and() {
+        let root = temp_root();
+        let svc = MemoryService::with_defaults(&root);
+        svc.write_with_tags("atlas", "core", "k1", "atlas v", "u", &["release".into()])
+            .unwrap();
+        svc.write_with_tags("sentinel", "core", "k2", "sentinel v", "u", &["release".into(), "audit".into()])
+            .unwrap();
+        svc.write_with_tags("forge", "core", "k3", "forge v", "u", &["draft".into()])
+            .unwrap();
+
+        let release = svc
+            .search_all_agents_with_tags(None, None, None, None, &["release".into()])
+            .unwrap();
+        assert_eq!(release.len(), 2);
+        let agents: Vec<_> = release.iter().map(|e| e.agent_id.clone()).collect();
+        assert!(agents.contains(&"atlas".to_string()));
+        assert!(agents.contains(&"sentinel".to_string()));
+
+        let audit = svc
+            .search_all_agents_with_tags(None, None, None, None, &["AUDIT".into()])
+            .unwrap();
+        assert_eq!(audit.len(), 1);
+        assert_eq!(audit[0].agent_id, "sentinel");
         cleanup(&root);
     }
 }

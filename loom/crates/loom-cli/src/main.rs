@@ -385,12 +385,12 @@ Bootstrap\n\
   loom context bundle --agent-id ID [--session-id ID] [--root PATH] [--format human|json]\n\
   loom context overlay --agent-id ID --session-id ID --section soul|user|tools|heartbeat|agents|memory [--text TEXT|--file PATH] [--root PATH] [--format human|json]\n\
   loom memory status [--root PATH] [--format human|json]\n\
-  loom memory search (--agent-id ID | --all-agents) [--category NAME] [--key-prefix PREFIX] [--text QUERY] [--limit N] [--root PATH] [--format human|json]\n\
+  loom memory search (--agent-id ID | --all-agents) [--category NAME] [--key-prefix PREFIX] [--text QUERY] [--tag LABEL]... [--limit N] [--root PATH] [--format human|json]\n\
   loom memory receipts [--agent-id ID] [--limit N] [--root PATH] [--format human|json]\n\
   loom memory graph inspect <source-ref> [--node-id ID] [--direction ancestors|descendants|both] [--limit N] [--root PATH] [--format human|json]\n\
   loom memory fork <source-ref> --target-agent-id ID [--branch NAME] [--node-id ID] [--direction ancestors|descendants|both] [--limit N] [--root PATH] [--format human|json]\n\
   loom memory replay <source-ref> --target-agent-id ID --kernel-path PATH [--org-id ORG] [--node-id ID] [--direction ancestors|descendants|both] [--limit N] [--root PATH] [--format human|json]\n\
-  loom memory write --agent-id ID --category NAME --key KEY --content TEXT [--source NAME] [--root PATH] [--format human|json]\n\
+  loom memory write --agent-id ID --category NAME --key KEY --content TEXT [--source NAME] [--tag LABEL]... [--root PATH] [--format human|json]\n\
   loom memory remove --agent-id ID --category NAME --key KEY [--root PATH] [--format human|json]\n\
   loom memory prune [--root PATH] [--format human|json]\n\
   loom skill status [--root PATH] [--format human|json]\n\
