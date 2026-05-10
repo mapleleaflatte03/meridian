@@ -232,6 +232,99 @@ class GatewayBrainRouterIntegrationTests(unittest.TestCase):
         self.assertEqual(result, expected)
         meta_mock.assert_called_once()
 
+    def test_gateway_run_response_source_mentions_provider_runtime_receipt(self):
+        source = (WORKSPACE / "meridian_gateway.py").read_text(encoding="utf-8")
+        self.assertIn('request_provider_runtime = _build_provider_runtime_operator_status(request_model_override)', source)
+        self.assertIn('"provider_runtime": request_provider_runtime', source)
+
+    def test_operator_truth_packet_includes_provider_runtime(self):
+        responses = {
+            "/api/status": {
+                "ok": True,
+                "payload": {
+                    "runtime_id": "loom_runtime_test",
+                    "context": {"bound_org_id": "org_test"},
+                    "treasury": {"balance_usd": 12.5, "reserve_floor_usd": 5.0},
+                    "memory_taxonomy": {"tag_count": 2, "tags": ["release", "vietnam"]},
+                    "provider_runtime": {
+                        "source": "override",
+                        "override_active": True,
+                        "override_fields": ["endpoint"],
+                        "selected_plan": {"provider_profile": "manager_primary"},
+                        "route_alignment": {"matches_policy_route": False, "drift_fields": ["endpoint"]},
+                    },
+                },
+            },
+            "/api/runtime-proof": {"ok": True, "payload": {"runtime_id": "loom_runtime_test"}},
+            "/api/payouts": {"ok": True, "payload": {}},
+        }
+
+        with mock.patch.object(
+            meridian_gateway,
+            "_workspace_api_get_json",
+            side_effect=lambda path: responses.get(path, {"ok": False, "payload": {}}),
+        ), mock.patch.object(
+            meridian_gateway,
+            "_recent_telegram_delivery_summary",
+            return_value={},
+        ), mock.patch.object(
+            meridian_gateway,
+            "_worker_is_restricted",
+            return_value=False,
+        ):
+            packet = meridian_gateway._build_meridian_operator_truth_packet()
+
+        self.assertEqual(packet["provider_runtime"]["source"], "override")
+        self.assertTrue(packet["provider_runtime"]["override_active"])
+        self.assertEqual(packet["provider_runtime"]["route_alignment"]["drift_fields"], ["endpoint"])
+        self.assertEqual(packet["memory_taxonomy"]["tag_count"], 2)
+        self.assertEqual(packet["memory_taxonomy"]["tags"], ["release", "vietnam"])
+
+    def test_operator_truth_packet_falls_back_to_runtime_proof_provider_runtime(self):
+        responses = {
+            "/api/status": {
+                "ok": True,
+                "payload": {
+                    "runtime_id": "loom_runtime_test",
+                    "context": {"bound_org_id": "org_test"},
+                    "treasury": {"balance_usd": 12.5, "reserve_floor_usd": 5.0},
+                },
+            },
+            "/api/runtime-proof": {
+                "ok": True,
+                "payload": {
+                    "runtime_id": "loom_runtime_test",
+                    "provider_runtime": {
+                        "source": "override",
+                        "override_active": True,
+                        "override_fields": ["endpoint"],
+                        "selected_plan": {"provider_profile": "manager_primary"},
+                        "route_alignment": {"matches_policy_route": False, "drift_fields": ["endpoint"]},
+                    },
+                },
+            },
+            "/api/payouts": {"ok": True, "payload": {}},
+        }
+
+        with mock.patch.object(
+            meridian_gateway,
+            "_workspace_api_get_json",
+            side_effect=lambda path: responses.get(path, {"ok": False, "payload": {}}),
+        ), mock.patch.object(
+            meridian_gateway,
+            "_recent_telegram_delivery_summary",
+            return_value={},
+        ), mock.patch.object(
+            meridian_gateway,
+            "_worker_is_restricted",
+            return_value=False,
+        ):
+            packet = meridian_gateway._build_meridian_operator_truth_packet()
+
+        self.assertEqual(packet["provider_runtime"]["source"], "override")
+        self.assertTrue(packet["provider_runtime"]["override_active"])
+        self.assertEqual(packet["provider_runtime"]["route_alignment"]["drift_fields"], ["endpoint"])
+
     def test_loom_manager_defaults_prefers_brain_router_model(self):
         with mock.patch.object(
             meridian_gateway.brain_router,
@@ -252,17 +345,44 @@ class GatewayBrainRouterIntegrationTests(unittest.TestCase):
         self.assertEqual(meridian_gateway._loom_execution_agent_id("agent_forge"), "forge")
 
     def test_build_workflow_showcase_snapshot_returns_live_growth_shape(self):
-        responses = {
-            "/api/status": {
-                "ok": True,
-                "payload": {
-                    "runtime_id": "loom_runtime_test",
-                    "treasury": {"balance_usd": 123.45, "reserve_floor_usd": 50.0},
-                    "authority": {"pending_approvals": [{"id": "a1"}]},
-                    "cases": {"open": 2},
-                    "alert_queue": {"queue_count": 4},
+        status_payload = {
+            "runtime_id": "loom_runtime_test",
+            "treasury": {"balance_usd": 123.45, "reserve_floor_usd": 50.0},
+            "authority": {"pending_approvals": [{"id": "a1"}]},
+            "cases": {"open": 2},
+            "alert_queue": {"queue_count": 4},
+            "provider_runtime": {
+                "source": "override",
+                "override_active": True,
+                "override_fields": ["endpoint", "model"],
+                "selected_plan": {
+                    "provider_profile": "manager_primary",
+                    "model": "runtime-model",
+                    "transport_kind": "http_json",
+                },
+                "active_route": {
+                    "provider_ref": "manager_primary",
+                    "model": "policy-model",
+                    "route_type": "http_json",
+                },
+                "route_alignment": {
+                    "matches_policy_route": False,
+                    "drift_fields": ["endpoint", "model"],
                 },
             },
+            "governed_memory": {
+                "fork_recent_count": 2,
+                "replay_recent_count": 1,
+                "fork_latest_status": "memory_fork_created",
+                "replay_latest_status": "memory_replay_blocked",
+                "replay_authority_status": "denied",
+            },
+            "memory_taxonomy": {
+                "tag_count": 3,
+                "tags": ["audit", "release", "vietnam"],
+            },
+        }
+        responses = {
             "/api/runtime-proof": {
                 "ok": True,
                 "payload": {"proof_type": "receipt_merkle_root", "runtime_id": "loom_runtime_test"},
@@ -290,6 +410,10 @@ class GatewayBrainRouterIntegrationTests(unittest.TestCase):
             side_effect=fake_workspace_get,
         ), mock.patch.object(
             meridian_gateway,
+            "_workspace_status_snapshot_cached",
+            return_value={"ok": True, "status_code": 200, "payload": status_payload},
+        ), mock.patch.object(
+            meridian_gateway,
             "_recent_telegram_delivery_summary",
             return_value={
                 "checked_count": 3,
@@ -307,8 +431,26 @@ class GatewayBrainRouterIntegrationTests(unittest.TestCase):
         self.assertEqual(payload["proof_type"], "receipt_merkle_root")
         self.assertEqual(payload["paid_orders"], 7)
         self.assertEqual(payload["payout_proposals"], 2)
-        self.assertEqual(len(payload["workflows"]), 3)
+        self.assertEqual(len(payload["workflows"]), 6)
         self.assertIn("telegram_delivery", payload)
+        memory_workflow = next(
+            item for item in payload["workflows"] if item["workflow_id"] == "governed_memory_relay"
+        )
+        self.assertEqual(memory_workflow["status"], "live_with_authority_gate")
+        self.assertEqual(memory_workflow["operator_value"], 3)
+        self.assertEqual(memory_workflow["replay_authority_status"], "denied")
+        provider_workflow = next(
+            item for item in payload["workflows"] if item["workflow_id"] == "provider_runtime_alignment"
+        )
+        self.assertEqual(provider_workflow["status"], "drift_detected")
+        self.assertEqual(provider_workflow["operator_value"], 2)
+        self.assertEqual(provider_workflow["drift_fields"], ["endpoint", "model"])
+        taxonomy_workflow = next(
+            item for item in payload["workflows"] if item["workflow_id"] == "memory_tag_taxonomy"
+        )
+        self.assertEqual(taxonomy_workflow["status"], "live")
+        self.assertEqual(taxonomy_workflow["operator_value"], 3)
+        self.assertEqual(taxonomy_workflow["tags"], ["audit", "release", "vietnam"])
 
     def test_web_adapter_public_read_routes_include_live_workflow_and_usdc_surfaces(self):
         adapter = meridian_gateway.WebAPIAdapter(mock.Mock(), "https://app.welliam.codes")
@@ -359,6 +501,32 @@ class GatewayLiveSurfaceAssetTests(unittest.TestCase):
             "both live snapshot and proof summary modules must bind the shared helper",
         )
 
+    def test_meridian_js_renders_governed_memory_workflow_details(self):
+        asset_path = WORKSPACE / "company" / "www" / "assets" / "meridian.js"
+        content = asset_path.read_text(encoding="utf-8")
+
+        self.assertIn("item.workflow_id === 'governed_memory_relay'", content)
+        self.assertIn("Fork latest:", content)
+        self.assertIn("Replay latest:", content)
+        self.assertIn("Authority:", content)
+
+    def test_meridian_js_renders_provider_runtime_workflow_details(self):
+        asset_path = WORKSPACE / "company" / "www" / "assets" / "meridian.js"
+        content = asset_path.read_text(encoding="utf-8")
+
+        self.assertIn("item.workflow_id === 'provider_runtime_alignment'", content)
+        self.assertIn("Selected:", content)
+        self.assertIn("Active route:", content)
+        self.assertIn("Drift:", content)
+
+    def test_meridian_js_renders_memory_taxonomy_workflow_details(self):
+        asset_path = WORKSPACE / "company" / "www" / "assets" / "meridian.js"
+        content = asset_path.read_text(encoding="utf-8")
+
+        self.assertIn("item.workflow_id === 'memory_tag_taxonomy'", content)
+        self.assertIn("Tag count:", content)
+        self.assertIn("Tags:", content)
+
 
 class GatewayStatusCacheConsistencyTests(unittest.TestCase):
     def setUp(self):
@@ -405,6 +573,125 @@ class GatewayStatusCacheConsistencyTests(unittest.TestCase):
         self.assertEqual(result["status_code"], 200)
         self.assertEqual(result["payload"]["treasury"]["balance_usd"], 52.47)
         self.assertEqual(result["payload"]["treasury"]["reserve_floor_usd"], 50.5)
+
+    def test_workspace_status_snapshot_attaches_provider_runtime_truth(self):
+        meridian_gateway.WORKSPACE_STATUS_CACHE["fetched_at_unix_ms"] = 0
+        meridian_gateway.WORKSPACE_STATUS_CACHE["snapshot"] = None
+        meridian_gateway.WORKSPACE_STATUS_REFRESH_IN_FLIGHT = False
+
+        def fake_workspace_get(path: str, timeout_seconds: float):  # noqa: ARG001
+            if path == "/api/status":
+                return {
+                    "ok": True,
+                    "status_code": 200,
+                    "payload": {
+                        "runtime_id": "loom_native",
+                        "slo": {"status": "healthy", "alert_count": 0},
+                        "treasury": {"balance_usd": 52.47, "reserve_floor_usd": 50.5},
+                    },
+                }
+            return {"ok": False, "status_code": 500, "payload": {"status": "error"}}
+
+        with mock.patch.object(
+            meridian_gateway,
+            "_workspace_api_get_json_with_timeout",
+            side_effect=fake_workspace_get,
+        ), mock.patch.object(
+            meridian_gateway.brain_router,
+            "manager_policy_status",
+            return_value={
+                "status": "healthy",
+                "source": "override",
+                "override_active": True,
+                "override_fields": ["endpoint", "model"],
+                "active_route": {
+                    "provider_ref": "manager_primary",
+                    "model": "policy-model",
+                    "route_type": "http_json",
+                    "route_id": "route_primary",
+                    "endpoint": "https://policy.example/v1/chat/completions",
+                    "cli_bin": "",
+                },
+                "selected_plan": {
+                    "provider_profile": "manager_primary",
+                    "provider_ref": "manager_primary",
+                    "model": "runtime-model",
+                    "transport_kind": "http_json",
+                    "auth_mode": "bearer_pool",
+                    "auth_profile": "manager_primary",
+                    "route_id": "route_primary",
+                    "endpoint": "https://runtime.example/v1/chat/completions",
+                    "cli_bin": "",
+                },
+                "route_alignment": {
+                    "matches_policy_route": False,
+                    "drift_fields": ["model", "endpoint"],
+                },
+            },
+        ):
+            result = meridian_gateway._workspace_status_snapshot_cached()
+
+        provider_runtime = result["payload"]["provider_runtime"]
+        self.assertEqual(provider_runtime["source"], "override")
+        self.assertTrue(provider_runtime["override_active"])
+        self.assertEqual(provider_runtime["override_fields"], ["endpoint", "model"])
+        self.assertEqual(provider_runtime["selected_plan"]["model"], "runtime-model")
+        self.assertEqual(provider_runtime["route_alignment"]["drift_fields"], ["model", "endpoint"])
+
+    def test_workspace_runtime_proof_snapshot_attaches_provider_runtime_truth(self):
+        with mock.patch.object(
+            meridian_gateway,
+            "_workspace_api_get_json",
+            return_value={
+                "ok": True,
+                "status_code": 200,
+                "payload": {
+                    "runtime_id": "loom_native",
+                    "proof_type": "receipt_merkle_root",
+                },
+            },
+        ), mock.patch.object(
+            meridian_gateway.brain_router,
+            "manager_policy_status",
+            return_value={
+                "status": "healthy",
+                "source": "override",
+                "override_active": True,
+                "override_fields": ["endpoint", "model"],
+                "active_route": {
+                    "provider_ref": "manager_primary",
+                    "model": "policy-model",
+                    "route_type": "http_json",
+                    "route_id": "route_primary",
+                    "endpoint": "https://policy.example/v1/chat/completions",
+                    "cli_bin": "",
+                },
+                "selected_plan": {
+                    "provider_profile": "manager_primary",
+                    "provider_ref": "manager_primary",
+                    "model": "runtime-model",
+                    "transport_kind": "http_json",
+                    "auth_mode": "bearer_pool",
+                    "auth_profile": "manager_primary",
+                    "route_id": "route_primary",
+                    "endpoint": "https://runtime.example/v1/chat/completions",
+                    "cli_bin": "",
+                },
+                "route_alignment": {
+                    "matches_policy_route": False,
+                    "drift_fields": ["model", "endpoint"],
+                },
+            },
+        ):
+            result = meridian_gateway._workspace_runtime_proof_snapshot()
+
+        self.assertTrue(result["ok"])
+        provider_runtime = result["payload"]["provider_runtime"]
+        self.assertEqual(provider_runtime["source"], "override")
+        self.assertTrue(provider_runtime["override_active"])
+        self.assertEqual(provider_runtime["override_fields"], ["endpoint", "model"])
+        self.assertEqual(provider_runtime["selected_plan"]["model"], "runtime-model")
+        self.assertEqual(provider_runtime["route_alignment"]["drift_fields"], ["model", "endpoint"])
 
     def test_workspace_status_snapshot_repairs_cached_treasury_nulls(self):
         meridian_gateway.WORKSPACE_STATUS_CACHE["fetched_at_unix_ms"] = int(time.time() * 1000)

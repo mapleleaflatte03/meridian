@@ -6,12 +6,19 @@
 #
 # Usage:
 #   ./scripts/core.sh browse URL               — navigate URL, show text
-#   ./scripts/core.sh ask [--file PATH ...] "TASK" — run a prompt with optional file attachments
+#   ./scripts/core.sh ask [--file PATH ...] [--session ID] "TASK" — run a prompt with optional file attachments
 #   ./scripts/core.sh research "cmd [args]"    — run a bounded terminal command
 #   ./scripts/core.sh remember KEY "VALUE"     — store a memory entry
 #   ./scripts/core.sh recall KEY               — search memory by key prefix
 #   ./scripts/core.sh memory receipts          — show recent memory receipts
 #   ./scripts/core.sh memory graph SOURCE_REF  — inspect memory graph fork/root
+#   ./scripts/core.sh memory fork SOURCE_REF   — create a governed memory fork lane
+#   ./scripts/core.sh memory replay SOURCE_REF — replay governed memory into another agent
+#   ./scripts/core.sh memory latest-fork       — inspect latest governed memory fork artifact
+#   ./scripts/core.sh memory latest-replay     — inspect latest governed memory replay artifact
+#   ./scripts/core.sh memory fork-history      — inspect recent governed memory fork artifacts
+#   ./scripts/core.sh memory replay-history    — inspect recent governed memory replay artifacts
+#   ./scripts/core.sh memory governance        — governed memory operator summary
 #   ./scripts/core.sh schedule NAME every SEC  — add a recurring task
 #   ./scripts/core.sh playbook every NAME SEC  — schedule a saved Core playbook
 #   ./scripts/core.sh schedules                — list scheduled tasks
@@ -208,6 +215,54 @@ ensure_core_state_dir() {
 ensure_core_playbooks_dir() {
     ensure_core_state_dir
     mkdir -p "$CORE_PLAYBOOKS_DIR"
+}
+
+wait_for_local_gateway_ready() {
+    local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
+    case "$gateway_url" in
+        http://127.0.0.1:*|http://localhost:*)
+            ;;
+        *)
+            return 0
+            ;;
+    esac
+    local probe
+    for probe in /api/healthz /api/status; do
+        if curl -fsS --max-time 2 "${gateway_url}${probe}" >/dev/null 2>&1; then
+            return 0
+        fi
+    done
+    local attempt
+    for attempt in 1 2 3 4 5 6 7 8 9 10; do
+        for probe in /api/healthz /api/status; do
+            if curl -fsS --max-time 2 "${gateway_url}${probe}" >/dev/null 2>&1; then
+                return 0
+            fi
+        done
+        sleep 1
+    done
+    return 1
+}
+
+attempt_local_gateway_autoheal() {
+    local gateway_url="${MERIDIAN_GATEWAY_URL%/}"
+    case "$gateway_url" in
+        http://127.0.0.1:*|http://localhost:*)
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+    local devup_log
+    devup_log="$(mktemp /tmp/meridian-core-devup.XXXXXX.log)"
+    if ./scripts/dev-up.sh --no-summary >"$devup_log" 2>&1; then
+        cat "$devup_log" >&2 || true
+        rm -f "$devup_log"
+        return 0
+    fi
+    cat "$devup_log" >&2 || true
+    rm -f "$devup_log"
+    return 1
 }
 
 load_pending_files_json() {
@@ -717,9 +772,10 @@ cmd_ask() {
     local goal=""
     local -a file_paths=()
     local model_override=""
+    local session_override=""
     local use_queued_files="0"
     local use_context_files="1"
-    # Parse arguments: support --file PATH (repeatable), --model MODEL before or after the goal
+    # Parse arguments: support --file PATH (repeatable), --model MODEL, and --session ID before or after the goal
     while [ $# -gt 0 ]; do
         case "$1" in
             --file|-f)
@@ -740,6 +796,11 @@ cmd_ask() {
                 model_override="$2"
                 shift 2
                 ;;
+            --session)
+                [ -n "${2:-}" ] || die "Usage: --session requires an ID argument"
+                session_override="$2"
+                shift 2
+                ;;
             *)
                 if [ -z "$goal" ]; then
                     goal="$1"
@@ -750,7 +811,7 @@ cmd_ask() {
                 ;;
         esac
     done
-    [ -n "$goal" ] || die "Usage: core.sh ask [--file PATH ...] [--model MODEL] \"TASK\""
+    [ -n "$goal" ] || die "Usage: core.sh ask [--file PATH ...] [--model MODEL] [--session ID] \"TASK\""
     require_runtime
     ensure_core_state_dir
 
@@ -811,35 +872,71 @@ PY
     fi
 
     local session_id
-    session_id="$(resolve_core_session_id)"
-    local raw_output
-    raw_output="$(python3 - "$MERIDIAN_GATEWAY_URL" "$goal" "$session_id" "$CORE_LAST_RESPONSE_FILE" "$CORE_LAST_OUTPUT_FILE" "$attachments_json" "$model_override" <<'PY'
-import json, sys, urllib.request, urllib.error
+    if [ -n "$session_override" ]; then
+        session_id="$session_override"
+    else
+        session_id="$(resolve_core_session_id)"
+    fi
+    local request_body
+    request_body="$(python3 - "$goal" "$session_id" "$attachments_json" "$model_override" <<'PY'
+import json, sys
 
-base_url, goal, session_id, last_response_path, last_output_path, attachments_json, model_override = sys.argv[1:8]
+goal, session_id, attachments_json, model_override = sys.argv[1:5]
 attachments = json.loads(attachments_json)
 payload = {"goal": goal, "session_id": session_id}
 if attachments:
     payload["attachments"] = attachments
 if model_override:
     payload["model"] = model_override
-request = urllib.request.Request(
-    f"{base_url.rstrip('/')}/api/run",
-    data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-    headers={"Content-Type": "application/json"},
-    method="POST",
-)
-try:
-    with urllib.request.urlopen(request, timeout=180) as response:
-        raw = response.read().decode("utf-8", "replace")
-except urllib.error.HTTPError as exc:
-    detail = exc.read().decode("utf-8", "replace")
-    print(f"[core] gateway http error {exc.code}: {detail}", file=sys.stderr)
-    raise SystemExit(1)
-except Exception as exc:
-    print(f"[core] gateway request failed: {exc}", file=sys.stderr)
-    raise SystemExit(1)
+print(json.dumps(payload, ensure_ascii=False))
+PY
+)"
+    local response_file error_file http_code
+    response_file="$(mktemp /tmp/meridian-core-ask-response.XXXXXX.json)"
+    error_file="$(mktemp /tmp/meridian-core-ask-error.XXXXXX.txt)"
+    if ! wait_for_local_gateway_ready; then
+        echo "[core] gateway preflight not ready: ${MERIDIAN_GATEWAY_URL} (continuing with direct POST retries)" >&2
+    fi
+    local curl_ok="0"
+    local curl_err=""
+    local attempt
+    local autoheal_attempted="0"
+    for attempt in 1 2 3; do
+        if http_code="$(curl -sS -o "$response_file" -w "%{http_code}" -H "Content-Type: application/json" --data-binary "$request_body" "${MERIDIAN_GATEWAY_URL%/}/api/run" 2>"$error_file")"; then
+            curl_ok="1"
+            break
+        fi
+        curl_err="$(cat "$error_file" 2>/dev/null || true)"
+        if [[ "${MERIDIAN_GATEWAY_URL}" == http://127.0.0.1:* || "${MERIDIAN_GATEWAY_URL}" == http://localhost:* ]]; then
+            if [[ "$curl_err" == *"Couldn't connect to server"* || "$curl_err" == *"Failed to connect"* ]]; then
+                if [ "$autoheal_attempted" != "1" ]; then
+                    autoheal_attempted="1"
+                    echo "[core] gateway unavailable; attempting repo-managed dev-up" >&2
+                    attempt_local_gateway_autoheal || true
+                fi
+                sleep 1
+                continue
+            fi
+        fi
+        break
+    done
+    if [ "$curl_ok" != "1" ]; then
+        rm -f "$response_file" "$error_file"
+        die "gateway request failed: ${curl_err:-curl transport error}"
+    fi
+    if [[ ! "$http_code" =~ ^2 ]]; then
+        local body_preview
+        body_preview="$(head -c 800 "$response_file" 2>/dev/null || true)"
+        rm -f "$response_file" "$error_file"
+        die "gateway http error ${http_code}: ${body_preview}"
+    fi
+    local raw_output
+    raw_output="$(python3 - "$response_file" "$session_id" "$CORE_LAST_RESPONSE_FILE" "$CORE_LAST_OUTPUT_FILE" "$attachments_json" <<'PY'
+import json, sys
 
+response_path, session_id, last_response_path, last_output_path, attachments_json = sys.argv[1:6]
+attachments = json.loads(attachments_json)
+raw = open(response_path, encoding="utf-8").read()
 try:
     data = json.loads(raw)
 except Exception:
@@ -867,11 +964,25 @@ trace = dict(data.get("constitutional_trace") or {})
 route = dict(trace.get("route") or {})
 mode = str(route.get("mode") or "").strip()
 workers = route.get("workers") or []
+provider_runtime = dict(data.get("provider_runtime") or {})
+selected_plan = dict(provider_runtime.get("selected_plan") or {})
+route_alignment = dict(provider_runtime.get("route_alignment") or {})
 if mode or workers:
     workers_text = ", ".join(str(item) for item in workers) if workers else "-"
     print(f"\n[core] route={mode or '?'} workers={workers_text} session={data.get('session_key') or session_id}", file=sys.stderr)
+if provider_runtime:
+    drift = ",".join(str(item) for item in (route_alignment.get("drift_fields") or [])) or "-"
+    print(
+        f"[core] provider={selected_plan.get('provider_profile') or '?'} "
+        f"model={selected_plan.get('model') or '(default)'} "
+        f"transport={selected_plan.get('transport_kind') or '?'} "
+        f"source={provider_runtime.get('source') or '?'} "
+        f"drift={drift}",
+        file=sys.stderr,
+    )
 PY
     )"
+    rm -f "$response_file" "$error_file"
 
     # Artifact-safe rendering: truncate long output with pointer to full file
     if [ -n "$raw_output" ]; then
@@ -907,10 +1018,19 @@ payload = dict(data.get("recorded_payload") or {})
 trace = dict(payload.get("constitutional_trace") or {})
 route = dict(trace.get("route") or {})
 workers = route.get("workers") or []
+provider_runtime = dict(payload.get("provider_runtime") or {})
+selected_plan = dict(provider_runtime.get("selected_plan") or {})
+route_alignment = dict(provider_runtime.get("route_alignment") or {})
 print(f"session_key: {payload.get('session_key') or data.get('session_key') or ''}")
 print(f"route_mode: {route.get('mode') or ''}")
 print(f"route_reason: {route.get('reason') or ''}")
 print(f"workers: {', '.join(str(item) for item in workers) if workers else '-'}")
+print(f"provider_source: {provider_runtime.get('source') or ''}")
+print(f"provider_profile: {selected_plan.get('provider_profile') or ''}")
+print(f"provider_model: {selected_plan.get('model') or ''}")
+print(f"provider_transport: {selected_plan.get('transport_kind') or ''}")
+print(f"provider_override_active: {provider_runtime.get('override_active')}")
+print(f"provider_drift: {', '.join(str(item) for item in (route_alignment.get('drift_fields') or [])) if route_alignment.get('drift_fields') else '-'}")
 print(f"output_chars: {len(str(payload.get('output') or ''))}")
 PY
             ;;
@@ -1851,7 +1971,9 @@ try:
     runtime_env = dict(os.environ)
     runtime_env.setdefault("MERIDIAN_ORG_ID", org_id)
     runtime_env.setdefault("MERIDIAN_WORKSPACE_ORG_ID", org_id)
-    meta = brain_router.manager_exec_metadata(runtime_env=runtime_env, model_hint="")
+    manager_status = brain_router.manager_policy_status(runtime_env=runtime_env, model_hint="")
+    meta = manager_status.get("selected_plan") or {}
+    alignment = manager_status.get("route_alignment") or {}
     print("Effective Manager Execution")
     print("-" * 40)
     print(f"  profile:   {meta.get('provider_profile', '?')}")
@@ -1859,6 +1981,10 @@ try:
     print(f"  transport: {meta.get('transport_kind', '?')}")
     print(f"  auth:      {meta.get('auth_mode', '?')}")
     print(f"  source:    {meta.get('source', '?')}")
+    if manager_status.get("override_active"):
+        print(f"  overrides: {', '.join(manager_status.get('override_fields') or [])}")
+    if not alignment.get("matches_policy_route", True):
+        print(f"  drift:     {', '.join(alignment.get('drift_fields') or [])}")
 except Exception as exc:
     print(f"[warn] could not resolve manager plan: {exc}")
 PY
@@ -1899,35 +2025,69 @@ import institution_brain_policy
 # Load current policy so we can show a before/after diff
 current_policy = institution_brain_policy.load_policy(org_id)
 current_route = institution_brain_policy.active_route(current_policy)
+target_defaults = institution_brain_policy.resolve_profile_defaults(current_policy, profile)
 
 # Auto-detect transport if not specified
 if not transport:
-    if current_route:
+    if target_defaults.get("route_type"):
+        transport = str(target_defaults.get("route_type") or "").strip()
+    elif current_route:
         transport = str(current_route.get("route_type") or "").strip() or "cli_session"
     else:
         transport = "cli_session"
 
-# Resolve cli_bin and cli_home from current route or env
+# Resolve model from profile defaults when available
+if not model:
+    model = str(target_defaults.get("model") or "").strip()
+
+# Resolve cli_bin and cli_home from target profile or env
 cli_bin = ""
 cli_home = ""
 if transport == "cli_session":
-    if current_route:
+    cli_bin = str(target_defaults.get("cli_bin") or "").strip()
+    cli_home = str(target_defaults.get("cli_home") or "").strip()
+    if not cli_bin and current_route and str(current_route.get("provider_ref") or current_route.get("provider_profile") or "").strip() == profile:
         cli_bin = str(current_route.get("cli_bin") or "").strip()
+    if not cli_home and current_route and str(current_route.get("provider_ref") or current_route.get("provider_profile") or "").strip() == profile:
         cli_home = str(current_route.get("cli_home") or "").strip()
     explicit_cli_bin = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_BIN") or os.environ.get("MERIDIAN_CODEX_BIN") or "").strip()
     explicit_cli_home = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_HOME") or os.environ.get("MERIDIAN_CODEX_HOME") or "").strip()
     if explicit_cli_bin:
         cli_bin = explicit_cli_bin
-    elif not cli_bin:
-        cli_bin = explicit_cli_bin
     if explicit_cli_home:
         cli_home = explicit_cli_home
     elif not cli_home:
         cli_home = str(os.environ.get("HOME") or "").strip()
+    if not cli_bin:
+        print(f"[core] provider switch failed: no cli_bin available for profile '{profile}'", file=sys.stderr)
+        raise SystemExit(1)
 
-if not endpoint and transport == "http_json":
-    if current_route:
+resolved_auth_env = str(target_defaults.get("auth_env") or "").strip()
+resolved_key_env_pool = [str(item).strip() for item in list(target_defaults.get("key_env_pool") or []) if str(item).strip()]
+
+if transport == "http_json":
+    if not endpoint:
+        endpoint = str(target_defaults.get("endpoint") or "").strip()
+    if not endpoint and current_route and str(current_route.get("provider_ref") or current_route.get("provider_profile") or "").strip() == profile:
         endpoint = str(current_route.get("endpoint") or "").strip()
+    if not auth_env:
+        auth_env = resolved_auth_env
+    if not key_env_pool_csv:
+        key_env_pool_csv = ",".join(resolved_key_env_pool)
+    if (not auth_env) and (not key_env_pool_csv):
+        print(
+            f"[core] provider switch failed: no auth metadata available for HTTP profile '{profile}'. "
+            "Pass --auth-env/--key-env or configure the profile first.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+    if not endpoint:
+        print(
+            f"[core] provider switch failed: no endpoint available for HTTP profile '{profile}'. "
+            "Pass --endpoint or configure the profile first.",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
 
 key_env_pool_list = [item.strip() for item in (key_env_pool_csv or "").split(",") if item.strip()]
 
@@ -4869,11 +5029,10 @@ cmd_memory() {
     shift || true
     require_loom; require_runtime
 
-    local agent_id; agent_id="$(resolve_agent_id)"
-    [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
-
     case "$subcmd" in
         receipts)
+            local agent_id; agent_id="$(resolve_agent_id)"
+            [ -n "$agent_id" ] || die "Could not resolve agent_id. Run onboard.sh first."
             "$LOOM_BIN" memory receipts --agent-id "$agent_id" --root "$LOOM_ROOT" --format human "${@}"
             ;;
         graph)
@@ -4881,6 +5040,30 @@ cmd_memory() {
             [ -n "$source_ref" ] || die "Usage: core.sh memory graph SOURCE_REF [--node-id ID ...]"
             shift || true
             "$LOOM_BIN" memory graph inspect "$source_ref" --root "$LOOM_ROOT" --format human "${@}"
+            ;;
+        fork)
+            cmd_memory_fork "$@"
+            ;;
+        replay)
+            cmd_memory_replay "$@"
+            ;;
+        latest-fork)
+            cmd_memory_latest_artifact fork "$@"
+            ;;
+        latest-replay)
+            cmd_memory_latest_artifact replay "$@"
+            ;;
+        fork-history)
+            cmd_memory_artifact_history fork "$@"
+            ;;
+        replay-history)
+            cmd_memory_artifact_history replay "$@"
+            ;;
+        governance)
+            cmd_memory_governance_summary "$@"
+            ;;
+        team-governance)
+            cmd_memory_team_governance "$@"
             ;;
         overview)
             "$LOOM_BIN" memory overview --root "$LOOM_ROOT" --format human "${@}"
@@ -4910,7 +5093,7 @@ cmd_memory() {
             cmd_memory_health "$@"
             ;;
         *)
-            die "Usage: core.sh memory <receipts|graph|overview|status|search|snapshot|restore|prune|diff|rotate|health> [args]"
+            die "Usage: core.sh memory <receipts|graph|fork|replay|latest-fork|latest-replay|fork-history|replay-history|governance|team-governance|overview|status|search|snapshot|restore|prune|diff|rotate|health> [args]"
             ;;
     esac
 }
@@ -4919,6 +5102,470 @@ cmd_memory() {
 # Backup/export memory entries to a directory: one JSON file per agent
 # plus a _manifest.json with counts and timestamp. Useful before risky
 # operations, for audit, or for migrating between runtime roots.
+
+cmd_memory_fork() {
+    local source_ref=""
+    local target_agent=""
+    local branch=""
+    local node_id=""
+    local direction=""
+    local limit=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --target-agent)
+                target_agent="${2:-}"; shift 2 || true
+                ;;
+            --branch)
+                branch="${2:-}"; shift 2 || true
+                ;;
+            --node-id)
+                node_id="${2:-}"; shift 2 || true
+                ;;
+            --direction)
+                direction="${2:-}"; shift 2 || true
+                ;;
+            --limit)
+                limit="${2:-}"; shift 2 || true
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory fork SOURCE_REF --target-agent ID [--branch NAME] [--node-id ID] [--direction ancestors|descendants|both] [--limit N]
+
+Create a governed memory fork lane from SOURCE_REF into another agent's
+memory namespace. This is additive and leaves the source untouched.
+Useful for warm-starting a specialist or lab agent from an existing
+memory branch before new work begins.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$source_ref" ]; then source_ref="$1"; else die "Unexpected argument: $1"; fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$source_ref" ] || die "Usage: core.sh memory fork SOURCE_REF --target-agent ID [--branch NAME] [--node-id ID] [--direction ancestors|descendants|both] [--limit N]"
+    [ -n "$target_agent" ] || die "--target-agent is required"
+    require_loom; require_runtime
+
+    local args=("memory" "fork" "$source_ref" "--target-agent-id" "$target_agent" "--root" "$LOOM_ROOT" "--format" "human")
+    [ -n "$branch" ] && args+=("--branch" "$branch")
+    [ -n "$node_id" ] && args+=("--node-id" "$node_id")
+    [ -n "$direction" ] && args+=("--direction" "$direction")
+    [ -n "$limit" ] && args+=("--limit" "$limit")
+
+    "$LOOM_BIN" "${args[@]}"
+}
+
+cmd_memory_replay() {
+    local source_ref=""
+    local target_agent=""
+    local node_id=""
+    local direction=""
+    local limit=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --target-agent)
+                target_agent="${2:-}"; shift 2 || true
+                ;;
+            --node-id)
+                node_id="${2:-}"; shift 2 || true
+                ;;
+            --direction)
+                direction="${2:-}"; shift 2 || true
+                ;;
+            --limit)
+                limit="${2:-}"; shift 2 || true
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory replay SOURCE_REF --target-agent ID [--node-id ID] [--direction ancestors|descendants|both] [--limit N]
+
+Replay governed memory entries from SOURCE_REF into another agent. This
+path preserves authority and court checks by passing through the kernel
+governance boundary before any target-agent memory write is applied.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [ -z "$source_ref" ]; then source_ref="$1"; else die "Unexpected argument: $1"; fi
+                shift
+                ;;
+        esac
+    done
+    [ -n "$source_ref" ] || die "Usage: core.sh memory replay SOURCE_REF --target-agent ID [--node-id ID] [--direction ancestors|descendants|both] [--limit N]"
+    [ -n "$target_agent" ] || die "--target-agent is required"
+    require_loom; require_runtime
+
+    local org_id; org_id="$(resolve_org_id)"
+    [ -n "$org_id" ] || die "Could not resolve org_id. Run onboard.sh first."
+
+    local args=("memory" "replay" "$source_ref" "--target-agent-id" "$target_agent" "--kernel-path" "$KERNEL_PATH" "--org-id" "$org_id" "--root" "$LOOM_ROOT" "--format" "human")
+    [ -n "$node_id" ] && args+=("--node-id" "$node_id")
+    [ -n "$direction" ] && args+=("--direction" "$direction")
+    [ -n "$limit" ] && args+=("--limit" "$limit")
+
+    "$LOOM_BIN" "${args[@]}"
+}
+
+cmd_memory_latest_artifact() {
+    local kind="${1:-}"
+    shift || true
+    [ "$kind" = "fork" ] || [ "$kind" = "replay" ] || die "Usage: core.sh memory <latest-fork|latest-replay> [--json]"
+    require_runtime
+
+    local output_mode="human"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json)
+                output_mode="json"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory latest-${kind} [--json]
+
+Inspect the latest governed memory ${kind} artifact recorded under the
+runtime root. Use --json for machine-readable output.
+EOF
+                return 0
+                ;;
+            *)
+                die "Unknown flag: $1"
+                ;;
+        esac
+    done
+
+    local artifact_path="${LOOM_ROOT}/artifacts/memory/${kind}s/latest.json"
+    python3 - "$artifact_path" "$kind" "$output_mode" <<'PY'
+import json, os, sys
+
+artifact_path, kind, output_mode = sys.argv[1], sys.argv[2], sys.argv[3]
+if not os.path.exists(artifact_path):
+    print(f"[core] memory latest {kind}: no artifact at {artifact_path}")
+    raise SystemExit(2)
+
+try:
+    payload = json.load(open(artifact_path, encoding="utf-8"))
+except Exception as exc:
+    print(f"[core] memory latest {kind}: failed to read {artifact_path}: {exc}")
+    raise SystemExit(1)
+
+if output_mode == "json":
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    raise SystemExit(0)
+
+print(f"[core] memory latest {kind}")
+print(f"  artifact_path:     {artifact_path}")
+print(f"  status:            {payload.get('status') or 'unknown'}")
+print(f"  source_ref:        {payload.get('source_ref') or ''}")
+print(f"  target_agent_id:   {payload.get('target_agent_id') or ''}")
+if kind == "fork":
+    print(f"  branch:            {payload.get('branch') or ''}")
+    print(f"  forked_entries:    {int(payload.get('forked_entries') or 0)}")
+    print(f"  selected_entries:  {int(payload.get('selected_entries') or 0)}")
+else:
+    print(f"  court_status:      {payload.get('court_status') or 'unknown'}")
+    print(f"  authority_status:  {payload.get('authority_status') or 'unknown'}")
+    print(f"  replayed_entries:  {int(payload.get('replayed_entries') or 0)}")
+print(f"  latest_artifact:   {payload.get('latest_artifact_path') or artifact_path}")
+print(f"  note:              {payload.get('note') or ''}")
+PY
+}
+
+cmd_memory_artifact_history() {
+    local kind="${1:-}"
+    shift || true
+    [ "$kind" = "fork" ] || [ "$kind" = "replay" ] || die "Usage: core.sh memory <fork-history|replay-history> [LIMIT] [--json]"
+    require_runtime
+
+    local output_mode="human"
+    local limit="10"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json)
+                output_mode="json"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory ${kind}-history [LIMIT] [--json]
+
+Inspect recent governed memory ${kind} artifacts recorded under the
+runtime root. LIMIT defaults to 10. Use --json for machine-readable output.
+EOF
+                return 0
+                ;;
+            -*)
+                die "Unknown flag: $1"
+                ;;
+            *)
+                if [[ "$1" =~ ^[0-9]+$ ]]; then
+                    limit="$1"; shift
+                else
+                    die "Unexpected argument: $1"
+                fi
+                ;;
+        esac
+    done
+
+    local artifact_dir="${LOOM_ROOT}/artifacts/memory/${kind}s"
+    python3 - "$artifact_dir" "$kind" "$limit" "$output_mode" <<'PY'
+import glob, json, os, sys
+
+artifact_dir, kind, raw_limit, output_mode = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+try:
+    limit = max(1, int(raw_limit))
+except ValueError:
+    limit = 10
+
+paths = []
+if os.path.isdir(artifact_dir):
+    paths = [
+        path for path in glob.glob(os.path.join(artifact_dir, "*.json"))
+        if os.path.basename(path) != "latest.json"
+    ]
+    paths.sort(key=lambda path: os.path.getmtime(path), reverse=True)
+
+items = []
+for path in paths[:limit]:
+    try:
+        payload = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        continue
+    if not isinstance(payload, dict):
+        continue
+    item = {
+        "artifact_path": path,
+        "status": str(payload.get("status") or "unknown"),
+        "source_ref": str(payload.get("source_ref") or ""),
+        "target_agent_id": str(payload.get("target_agent_id") or ""),
+        "latest_artifact_path": str(payload.get("latest_artifact_path") or ""),
+        "note": str(payload.get("note") or ""),
+    }
+    if kind == "fork":
+        item["branch"] = str(payload.get("branch") or "")
+        item["selected_entries"] = int(payload.get("selected_entries") or 0)
+        item["forked_entries"] = int(payload.get("forked_entries") or 0)
+    else:
+        item["court_status"] = str(payload.get("court_status") or "unknown")
+        item["authority_status"] = str(payload.get("authority_status") or "unknown")
+        item["replayed_entries"] = int(payload.get("replayed_entries") or 0)
+    items.append(item)
+
+if output_mode == "json":
+    print(json.dumps({
+        "kind": kind,
+        "artifact_dir": artifact_dir,
+        "limit": limit,
+        "artifact_count": len(items),
+        "artifacts": items,
+    }, indent=2, ensure_ascii=False))
+    raise SystemExit(0)
+
+print(f"[core] memory {kind} history")
+print(f"  artifact_dir:      {artifact_dir}")
+print(f"  limit:             {limit}")
+print(f"  artifact_count:    {len(items)}")
+if not items:
+    print("  (no artifacts)")
+    raise SystemExit(0)
+for item in items:
+    if kind == "fork":
+        print(
+            f"  - status={item['status']} source={item['source_ref']} target={item['target_agent_id']} "
+            f"branch={item['branch']} forked={item['forked_entries']} selected={item['selected_entries']}"
+        )
+    else:
+        print(
+            f"  - status={item['status']} source={item['source_ref']} target={item['target_agent_id']} "
+            f"court={item['court_status']} authority={item['authority_status']} replayed={item['replayed_entries']}"
+        )
+PY
+}
+
+cmd_memory_governance_summary() {
+    require_runtime
+    local limit="10"
+    local output_mode="human"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json)
+                output_mode="json"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory governance [LIMIT] [--json]
+
+Show an operator summary for governed memory fork/replay activity:
+latest status plus recent artifact counts from the runtime root.
+EOF
+                return 0
+                ;;
+            *)
+                if [[ "$1" =~ ^[0-9]+$ ]]; then
+                    limit="$1"; shift
+                else
+                    die "Unexpected argument: $1"
+                fi
+                ;;
+        esac
+    done
+
+    local fork_latest="${LOOM_ROOT}/artifacts/memory/forks/latest.json"
+    local replay_latest="${LOOM_ROOT}/artifacts/memory/replays/latest.json"
+    local fork_dir="${LOOM_ROOT}/artifacts/memory/forks"
+    local replay_dir="${LOOM_ROOT}/artifacts/memory/replays"
+    python3 - "$fork_latest" "$replay_latest" "$fork_dir" "$replay_dir" "$limit" "$output_mode" <<'PY'
+import glob, json, os, sys
+
+fork_latest, replay_latest, fork_dir, replay_dir, raw_limit, output_mode = sys.argv[1:7]
+try:
+    limit = max(1, int(raw_limit))
+except ValueError:
+    limit = 10
+
+def load_json(path):
+    if not os.path.exists(path):
+        return None
+    try:
+        payload = json.load(open(path, encoding="utf-8"))
+    except Exception:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+def count_recent(path):
+    if not os.path.isdir(path):
+        return 0
+    return len([p for p in glob.glob(os.path.join(path, "*.json")) if os.path.basename(p) != "latest.json"][:limit])
+
+fork_payload = load_json(fork_latest)
+replay_payload = load_json(replay_latest)
+summary = {
+    "limit": limit,
+    "fork_latest_present": bool(fork_payload),
+    "replay_latest_present": bool(replay_payload),
+    "fork_latest_status": (fork_payload or {}).get("status") or "missing",
+    "replay_latest_status": (replay_payload or {}).get("status") or "missing",
+    "fork_recent_count": count_recent(fork_dir),
+    "replay_recent_count": count_recent(replay_dir),
+    "fork_target_agent_id": (fork_payload or {}).get("target_agent_id") or "",
+    "replay_target_agent_id": (replay_payload or {}).get("target_agent_id") or "",
+    "replay_authority_status": (replay_payload or {}).get("authority_status") or "",
+}
+
+if output_mode == "json":
+    print(json.dumps(summary, indent=2, ensure_ascii=False))
+    raise SystemExit(0)
+
+print("[core] memory governance")
+print(f"  limit:                  {summary['limit']}")
+print(f"  fork_latest_present:    {summary['fork_latest_present']}")
+print(f"  fork_latest_status:     {summary['fork_latest_status']}")
+print(f"  fork_recent_count:      {summary['fork_recent_count']}")
+print(f"  fork_target_agent_id:   {summary['fork_target_agent_id']}")
+print(f"  replay_latest_present:  {summary['replay_latest_present']}")
+print(f"  replay_latest_status:   {summary['replay_latest_status']}")
+print(f"  replay_recent_count:    {summary['replay_recent_count']}")
+print(f"  replay_target_agent_id: {summary['replay_target_agent_id']}")
+if summary["replay_authority_status"]:
+    print(f"  replay_authority:       {summary['replay_authority_status']}")
+PY
+}
+
+cmd_memory_team_governance() {
+    require_runtime
+    local limit="10"
+    local output_mode="human"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json)
+                output_mode="json"; shift
+                ;;
+            --help|-h)
+                cat <<EOF
+Usage: core.sh memory team-governance [LIMIT] [--json]
+
+Show compact governed-memory activity grouped by Team agents.
+EOF
+                return 0
+                ;;
+            *)
+                if [[ "$1" =~ ^[0-9]+$ ]]; then
+                    limit="$1"; shift
+                else
+                    die "Unexpected argument: $1"
+                fi
+                ;;
+        esac
+    done
+
+    local url="${MERIDIAN_GATEWAY_URL%/}/api/team/governed-memory?limit=${limit}"
+    local raw
+    raw="$(curl -fsSL "$url" 2>/dev/null)" || die "gateway request failed: ${url}"
+    python3 - "$output_mode" <<'PY' <<<"$raw"
+import json, sys
+
+output_mode = sys.argv[1]
+try:
+    payload = json.load(sys.stdin)
+except Exception as exc:
+    raise SystemExit(f"invalid team governed-memory payload: {exc}")
+
+if output_mode == "json":
+    print(json.dumps(payload, indent=2, ensure_ascii=False))
+    raise SystemExit(0)
+
+if str(payload.get("status") or "").strip() != "success":
+    print(f"[core] memory team governance error: {payload.get('output') or 'unknown'}")
+    raise SystemExit(0)
+
+summary = dict(payload.get("summary") or {})
+agents = list(payload.get("agents") or [])
+recent_actions = list(payload.get("recent_actions") or [])
+print("[core] memory team governance")
+print(f"  org_id:                 {payload.get('org_id') or ''}")
+print(f"  agent_count:            {int(payload.get('agent_count') or 0)}")
+print(f"  active_agent_count:     {int(payload.get('active_agent_count') or 0)}")
+print(f"  fork_latest_status:     {summary.get('fork_latest_status') or 'missing'}")
+print(f"  fork_recent_count:      {int(summary.get('fork_recent_count') or 0)}")
+print(f"  replay_latest_status:   {summary.get('replay_latest_status') or 'missing'}")
+print(f"  replay_recent_count:    {int(summary.get('replay_recent_count') or 0)}")
+if summary.get("replay_authority_status"):
+    print(f"  replay_authority:       {summary.get('replay_authority_status')}")
+if not agents:
+    print("  (no team agents)")
+    raise SystemExit(0)
+print("  agents:")
+for item in agents:
+    print(
+        "    - "
+        f"{item.get('name') or item.get('registry_id') or '?'} "
+        f"role={item.get('role') or ''} "
+        f"actions={int(item.get('recent_action_count') or 0)} "
+        f"forks={int(item.get('fork_recent_count') or 0)} "
+        f"replays={int(item.get('replay_recent_count') or 0)} "
+        f"fork_latest={item.get('fork_latest_status') or 'missing'} "
+        f"replay_latest={item.get('replay_latest_status') or 'missing'} "
+        f"authority={item.get('replay_authority_status') or '-'}"
+    )
+if recent_actions:
+    print("  recent_actions:")
+    for action in recent_actions:
+        print(
+            "    - "
+            f"{action.get('kind') or 'unknown'} "
+            f"{action.get('handle') or action.get('registry_id') or '?'} "
+            f"status={action.get('status') or 'unknown'} "
+            f"target={action.get('target_agent_id') or '-'} "
+            f"authority={action.get('authority_status') or '-'}"
+        )
+PY
+}
 
 cmd_memory_snapshot() {
     local target_dir=""
@@ -5928,11 +6575,38 @@ import json, sys
 payload = json.load(open(sys.argv[1], encoding="utf-8"))
 summary = dict(payload.get("summary") or {})
 details = dict(payload.get("details") or {})
+lane_truth = dict(payload.get("lane_truth") or {})
 print("[core] proof summary")
 print(f"  status:      {payload.get('status') or 'unknown'}")
 print(f"  checked_at:  {payload.get('checked_at') or ''}")
 for key in sorted(summary):
     print(f"  {key}: {summary[key]}")
+if lane_truth:
+    live_provider = dict(lane_truth.get("live_provider_probe") or {})
+    isolated_ask = dict(lane_truth.get("isolated_ask_lane") or {})
+    distinction = dict(lane_truth.get("distinction") or {})
+    print("  lane_truth:")
+    print(
+        "    live_provider_probe: "
+        f"ok={live_provider.get('ok')} "
+        f"provider={live_provider.get('provider') or '-'} "
+        f"transport={live_provider.get('transport') or '-'} "
+        f"route_id={live_provider.get('route_id') or '-'} "
+        f"error_code={live_provider.get('error_code') or '-'}"
+    )
+    print(
+        "    isolated_ask_lane: "
+        f"ok={isolated_ask.get('ok')} "
+        f"source={isolated_ask.get('provider_source') or '-'} "
+        f"profile={isolated_ask.get('provider_profile') or '-'} "
+        f"transport={isolated_ask.get('provider_transport') or '-'}"
+    )
+    print(
+        "    distinction: "
+        f"status={distinction.get('status') or '-'} "
+        f"live_provider_degraded={distinction.get('live_provider_degraded')} "
+        f"isolated_ask_passed={distinction.get('isolated_ask_passed')}"
+    )
 if details:
     print("  details:")
     for key in sorted(details):
@@ -5956,7 +6630,7 @@ cmd_help() {
 Meridian Core — daily-use task runner
 
 Commands:
-  ask [--file PATH ...] [--model M] [--no-context] "TASK"   Run a daily prompt (with optional file attachments / model override)
+  ask [--file PATH ...] [--model M] [--session ID] [--no-context] "TASK"   Run a daily prompt (with optional file attachments / model override)
   ask --queued-files "TASK"  Run a daily prompt using files from the persistent Core file queue
   files add PATH ...       Add files to the persistent Core file queue
   files list               Show queued Core files
@@ -6028,6 +6702,14 @@ Commands:
   recall [KEY_PREFIX] [--text Q] [--limit N]   Search stored memory by key prefix and/or text
   memory receipts         Show recent memory receipts
   memory graph SOURCE_REF Inspect memory graph lineage/forks
+  memory fork SOURCE_REF --target-agent ID [--branch NAME] [--node-id ID] [--direction D] [--limit N]   Create a governed memory fork lane
+  memory replay SOURCE_REF --target-agent ID [--node-id ID] [--direction D] [--limit N]   Replay governed memory into another agent via kernel checks
+  memory latest-fork [--json]      Show latest governed memory fork artifact
+  memory latest-replay [--json]    Show latest governed memory replay artifact
+  memory fork-history [N] [--json]    Show recent governed memory fork artifacts
+  memory replay-history [N] [--json]  Show recent governed memory replay artifacts
+  memory governance [N] [--json]      Show governed memory operator summary
+  memory team-governance [N] [--json] Show governed memory activity grouped by Team agents
   memory overview         Show memory overview
   memory search QUERY [N] [--all-agents]   Full-content search across stored memory (case-insensitive). With --all-agents, fan out across every agent and order by recency.
   memory snapshot DIR [--all-agents]   Export memory entries to DIR (one JSON per agent + _manifest.json)
@@ -6090,6 +6772,7 @@ File attachments:
   core.sh files list
   core.sh ask --queued-files "compare queued files"
   core.sh ask -f a.py -f b.py "compare these two files"
+  core.sh ask --session proof-123 "reply with exactly: ok"
   In chat mode: /file PATH to queue, then type your message
 
 Persistent context files:

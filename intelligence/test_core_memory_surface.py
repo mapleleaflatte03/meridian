@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Tests for Meridian Core memory recall surface.
+"""Tests for Meridian Core memory recall and governed memory surface.
 
 Covers:
 - core.sh memory search subcommand wiring and dispatch
 - core.sh recall accepts --text and --limit flags
 - Help text exposes search and recall options
 - Cross-agent fan-out flag is wired and renders [agent/category] rows
+- Governed memory fork/replay wrappers are surfaced in Core
 """
 
 import unittest
@@ -120,6 +121,105 @@ class TestMemorySnapshotSurface(unittest.TestCase):
         self.assertIn('"version": 1', self.source)
         self.assertIn('"snapshot_at_unix"', self.source)
         self.assertIn('"total_entry_count"', self.source)
+
+
+class TestMemoryForkReplaySurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_help_lists_memory_fork(self):
+        self.assertIn("memory fork SOURCE_REF", _help_block(self.source))
+
+    def test_help_lists_memory_replay(self):
+        self.assertIn("memory replay SOURCE_REF", _help_block(self.source))
+
+    def test_help_lists_memory_latest_artifacts(self):
+        self.assertIn("memory latest-fork [--json]", _help_block(self.source))
+        self.assertIn("memory latest-replay [--json]", _help_block(self.source))
+        self.assertIn("memory fork-history [N] [--json]", _help_block(self.source))
+        self.assertIn("memory replay-history [N] [--json]", _help_block(self.source))
+        self.assertIn("memory governance [N] [--json]", _help_block(self.source))
+        self.assertIn("memory team-governance [N] [--json]", _help_block(self.source))
+
+    def test_memory_fork_dispatched_from_cmd_memory(self):
+        self.assertIn("fork)\n            cmd_memory_fork", self.source)
+
+    def test_memory_replay_dispatched_from_cmd_memory(self):
+        self.assertIn("replay)\n            cmd_memory_replay", self.source)
+
+    def test_memory_latest_artifacts_dispatched_from_cmd_memory(self):
+        self.assertIn("latest-fork)\n            cmd_memory_latest_artifact fork", self.source)
+        self.assertIn("latest-replay)\n            cmd_memory_latest_artifact replay", self.source)
+        self.assertIn("fork-history)\n            cmd_memory_artifact_history fork", self.source)
+        self.assertIn("replay-history)\n            cmd_memory_artifact_history replay", self.source)
+        self.assertIn("governance)\n            cmd_memory_governance_summary", self.source)
+        self.assertIn("team-governance)\n            cmd_memory_team_governance", self.source)
+
+    def test_memory_fork_function_exists(self):
+        self.assertIn("cmd_memory_fork()", self.source)
+
+    def test_memory_replay_function_exists(self):
+        self.assertIn("cmd_memory_replay()", self.source)
+
+    def test_memory_latest_artifact_function_exists(self):
+        self.assertIn("cmd_memory_latest_artifact()", self.source)
+        self.assertIn("cmd_memory_artifact_history()", self.source)
+        self.assertIn("cmd_memory_governance_summary()", self.source)
+        self.assertIn("cmd_memory_team_governance()", self.source)
+
+    def test_memory_fork_requires_target_agent(self):
+        self.assertIn('die "--target-agent is required"', self.source)
+        self.assertIn('"fork" "$source_ref" "--target-agent-id" "$target_agent"', self.source)
+
+    def test_memory_replay_requires_target_agent(self):
+        self.assertIn('die "--target-agent is required"', self.source)
+        self.assertIn('"replay" "$source_ref" "--target-agent-id" "$target_agent"', self.source)
+
+    def test_memory_replay_passes_kernel_and_org_boundary(self):
+        self.assertIn('"--kernel-path" "$KERNEL_PATH"', self.source)
+        self.assertIn('"--org-id" "$org_id"', self.source)
+
+    def test_memory_replay_usage_mentions_governed_path(self):
+        self.assertIn(
+            "Usage: core.sh memory replay SOURCE_REF --target-agent ID",
+            self.source,
+        )
+
+    def test_memory_latest_artifact_uses_runtime_artifact_paths(self):
+        self.assertIn('artifacts/memory/${kind}s/latest.json', self.source)
+        self.assertIn('Usage: core.sh memory latest-${kind} [--json]', self.source)
+
+    def test_memory_artifact_history_uses_runtime_artifact_dir(self):
+        self.assertIn('artifacts/memory/${kind}s', self.source)
+        self.assertIn('Usage: core.sh memory ${kind}-history [LIMIT] [--json]', self.source)
+
+    def test_memory_governance_summary_mentions_operator_summary(self):
+        self.assertIn("Usage: core.sh memory governance [LIMIT] [--json]", self.source)
+        self.assertIn("[core] memory governance", self.source)
+
+    def test_memory_team_governance_mentions_team_summary(self):
+        self.assertIn("Usage: core.sh memory team-governance [LIMIT] [--json]", self.source)
+        self.assertIn("/api/team/governed-memory?limit=", self.source)
+        self.assertIn("[core] memory team governance", self.source)
+        self.assertIn("recent_actions:", self.source)
+        self.assertIn("recent_action_count", self.source)
+
+    def test_cmd_memory_does_not_require_active_agent_for_fork_or_replay(self):
+        marker = "cmd_memory()"
+        start = self.source.find(marker)
+        self.assertGreater(start, 0)
+        end = self.source.find("\n# ── Command:", start + 1)
+        body = self.source[start:end] if end > 0 else self.source[start:]
+        receipts_branch = body.find("receipts)")
+        global_resolve = body.find('local agent_id; agent_id="$(resolve_agent_id)"')
+        self.assertGreater(receipts_branch, 0)
+        self.assertGreater(global_resolve, 0)
+        self.assertGreater(
+            global_resolve,
+            receipts_branch,
+            "resolve_agent_id should be scoped to receipts branch, not the whole cmd_memory dispatcher",
+        )
 
 
 class TestMemoryRestoreSurface(unittest.TestCase):

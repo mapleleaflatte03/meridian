@@ -42,6 +42,10 @@ Fields collected during guided onboarding. Each can be overridden by setting the
 | First agent role | `MERIDIAN_AGENT_ROLE` | `manager` | One of: `manager`, `analyst`, `executor`, `writer` |
 | Import demo pack | `MERIDIAN_IMPORT_DEMO_PACK` | `no` | Set to `yes` to seed pre-built demo data |
 | Enable governance | `MERIDIAN_ENABLE_GOVERNANCE` | `yes` | Set to `no` to disable governance gates |
+| Brain route type | `MERIDIAN_BRAIN_ROUTE_TYPE` | `http_json` | Core defaults to the Meridian-owned manager route |
+| Brain provider profile | `MERIDIAN_BRAIN_PROVIDER_PROFILE` | `manager_primary` | Provider profile restored from `~/.meridian/.env` / `.env.gateway` when available |
+| Brain model | `MERIDIAN_BRAIN_MODEL` | `grok-4-1-fast-reasoning` | Default manager model for Core onboarding |
+| Brain endpoint | `MERIDIAN_BRAIN_ENDPOINT` | from `MERIDIAN_BRAIN_MANAGER_ENDPOINT` or `MERIDIAN_MANAGER_XAI_BASE_URL` | Required for `http_json` execution |
 
 ## Onboarding Modes (Product Contract)
 

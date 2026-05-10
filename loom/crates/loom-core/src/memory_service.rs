@@ -139,6 +139,7 @@ pub struct MemoryIndex {
     pub agent_id: String,
     pub entry_count: usize,
     pub categories: Vec<String>,
+    pub tags: Vec<String>,
     pub total_bytes: usize,
     pub oldest_entry: u64,
     pub newest_entry: u64,
@@ -394,6 +395,13 @@ impl MemoryRepo {
         let mut categories: Vec<String> = entries.iter().map(|e| e.category.clone()).collect();
         categories.sort();
         categories.dedup();
+        let mut tags = dedupe_tags(
+            &entries
+                .iter()
+                .flat_map(|e| e.tags.iter().cloned())
+                .collect::<Vec<String>>(),
+        );
+        tags.sort();
         let total_bytes: usize = entries.iter().map(|e| e.byte_size()).sum();
         let oldest = entries.iter().map(|e| e.created_at).min().unwrap_or(0);
         let newest = entries.iter().map(|e| e.updated_at).max().unwrap_or(0);
@@ -401,6 +409,7 @@ impl MemoryRepo {
             agent_id: agent_id.to_string(),
             entry_count: entries.len(),
             categories,
+            tags,
             total_bytes,
             oldest_entry: oldest,
             newest_entry: newest,
@@ -885,10 +894,18 @@ impl MemoryService {
             total_bytes += index.total_bytes;
             indices.push(index);
         }
+        let mut tags = dedupe_tags(
+            &indices
+                .iter()
+                .flat_map(|idx| idx.tags.iter().cloned())
+                .collect::<Vec<String>>(),
+        );
+        tags.sort();
         Ok(MemoryServiceOverview {
             agent_count: agents.len(),
             total_entries,
             total_bytes,
+            tags,
             indices,
             policy: self.policy.clone(),
         })
@@ -1140,6 +1157,7 @@ pub struct MemoryServiceOverview {
     pub agent_count: usize,
     pub total_entries: usize,
     pub total_bytes: usize,
+    pub tags: Vec<String>,
     pub indices: Vec<MemoryIndex>,
     pub policy: MemoryPolicy,
 }
@@ -1150,6 +1168,8 @@ impl MemoryServiceOverview {
             "agent_count": self.agent_count,
             "total_entries": self.total_entries,
             "total_bytes": self.total_bytes,
+            "tag_count": self.tags.len(),
+            "tags": self.tags,
             "policy": {
                 "max_entries_per_agent": self.policy.max_entries_per_agent,
                 "max_entry_bytes": self.policy.max_entry_bytes,
@@ -1160,6 +1180,8 @@ impl MemoryServiceOverview {
                 "agent_id": idx.agent_id,
                 "entry_count": idx.entry_count,
                 "categories": idx.categories,
+                "tag_count": idx.tags.len(),
+                "tags": idx.tags,
                 "total_bytes": idx.total_bytes,
             })).collect::<Vec<_>>(),
         })
@@ -1168,10 +1190,16 @@ impl MemoryServiceOverview {
 
 pub fn render_memory_service_overview_human(overview: &MemoryServiceOverview) -> String {
     let mut rendered = format!(
-        "agent_count:       {}\ntotal_entries:     {}\ntotal_bytes:       {}\nmax_entries:       {}\nmax_entry_bytes:   {}\nretention_days:    {}\nagent_isolation:   {}\n",
+        "agent_count:       {}\ntotal_entries:     {}\ntotal_bytes:       {}\ntag_count:         {}\ntags:              {}\nmax_entries:       {}\nmax_entry_bytes:   {}\nretention_days:    {}\nagent_isolation:   {}\n",
         overview.agent_count,
         overview.total_entries,
         overview.total_bytes,
+        overview.tags.len(),
+        if overview.tags.is_empty() {
+            "(none)".to_string()
+        } else {
+            overview.tags.join(",")
+        },
         overview.policy.max_entries_per_agent,
         overview.policy.max_entry_bytes,
         overview.policy.retention_days,
@@ -1179,7 +1207,7 @@ pub fn render_memory_service_overview_human(overview: &MemoryServiceOverview) ->
     );
     for index in &overview.indices {
         rendered.push_str(&format!(
-            "\n[agent:{}]\nentries:          {}\nbytes:            {}\ncategories:       {}\noldest_entry:     {}\nnewest_entry:     {}\n",
+            "\n[agent:{}]\nentries:          {}\nbytes:            {}\ncategories:       {}\ntag_count:        {}\ntags:             {}\noldest_entry:     {}\nnewest_entry:     {}\n",
             index.agent_id,
             index.entry_count,
             index.total_bytes,
@@ -1187,6 +1215,12 @@ pub fn render_memory_service_overview_human(overview: &MemoryServiceOverview) ->
                 "(none)".to_string()
             } else {
                 index.categories.join(",")
+            },
+            index.tags.len(),
+            if index.tags.is_empty() {
+                "(none)".to_string()
+            } else {
+                index.tags.join(",")
             },
             index.oldest_entry,
             index.newest_entry,
@@ -1779,12 +1813,26 @@ mod tests {
     fn test_service_overview() {
         let root = temp_root();
         let svc = MemoryService::with_defaults(&root);
-        svc.write("atlas", "facts", "k1", "v1", "test").unwrap();
-        svc.write("sentinel", "rules", "r1", "no", "test").unwrap();
+        svc.write_with_tags("atlas", "facts", "k1", "v1", "test", &["release".into(), "vietnam".into()]).unwrap();
+        svc.write_with_tags("sentinel", "rules", "r1", "no", "test", &["release".into(), "audit".into()]).unwrap();
 
         let overview = svc.overview().unwrap();
         assert_eq!(overview.agent_count, 2);
         assert_eq!(overview.total_entries, 2);
+        assert_eq!(
+            overview.tags,
+            vec![
+                "audit".to_string(),
+                "release".to_string(),
+                "vietnam".to_string()
+            ]
+        );
+        let atlas = overview
+            .indices
+            .iter()
+            .find(|index| index.agent_id == "atlas")
+            .expect("atlas index");
+        assert_eq!(atlas.tags, vec!["release".to_string(), "vietnam".to_string()]);
         cleanup(&root);
     }
 

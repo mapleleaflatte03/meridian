@@ -57,12 +57,12 @@ class TestGatewayModelOverride(unittest.TestCase):
         payload = {
             "goal": "review this",
             "session_id": "s1",
-            "model": "claude-3-sonnet",
+            "model": "grok-4-1-fast-reasoning",
             "attachments": [{"name": "file.py", "content": "print(1)", "mime_type": "text/x-python"}],
         }
         model = str(payload.get("model") or "").strip()
         attachments = payload.get("attachments") or []
-        self.assertEqual(model, "claude-3-sonnet")
+        self.assertEqual(model, "grok-4-1-fast-reasoning")
         self.assertEqual(len(attachments), 1)
 
     def test_env_save_restore_pattern(self):
@@ -356,6 +356,41 @@ class TestProviderSwitching(unittest.TestCase):
             finally:
                 institution_brain_policy.capsule_path = original_capsule
 
+    def test_policy_reconfigure_prunes_stale_registry_entries(self):
+        """Reconfiguring to a new provider should drop stale unused registry/auth/model entries."""
+        import institution_brain_policy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            org_id = "test-org-prune"
+            original_capsule = institution_brain_policy.capsule_path
+            institution_brain_policy.capsule_path = lambda oid, fname: os.path.join(tmpdir, f"{oid}_{fname}")
+            try:
+                institution_brain_policy.configure_policy(
+                    org_id,
+                    route_type="cli_session",
+                    provider_profile="core_manager_local",
+                    model="gpt-5.4",
+                    updated_by="unit_test",
+                    cli_bin="/usr/bin/echo",
+                    cli_home="/tmp",
+                )
+                policy = institution_brain_policy.configure_policy(
+                    org_id,
+                    route_type="http_json",
+                    provider_profile="manager_primary",
+                    model="grok-4-1-fast-reasoning",
+                    updated_by="unit_test",
+                    endpoint="https://api.example.com/v1/chat/completions",
+                    auth_env="MERIDIAN_MANAGER_XAI_API_KEY_1",
+                    key_env_pool=["MERIDIAN_MANAGER_XAI_API_KEY_1"],
+                )
+                self.assertIn("manager_primary", policy["provider_registry"])
+                self.assertNotIn("core_manager_local", policy["provider_registry"])
+                self.assertIn("manager_primary", policy["auth_profiles"])
+                self.assertNotIn("core_manager_local", policy["auth_profiles"])
+            finally:
+                institution_brain_policy.capsule_path = original_capsule
+
     def test_policy_status_shows_configured(self):
         """policy_status returns configured=True after configure_policy."""
         import institution_brain_policy
@@ -381,6 +416,80 @@ class TestProviderSwitching(unittest.TestCase):
             finally:
                 institution_brain_policy.capsule_path = original_capsule
 
+    def test_resolve_profile_defaults_prefers_profile_auth_metadata(self):
+        """Profile defaults should hydrate auth/env metadata from the saved auth profile."""
+        import institution_brain_policy
+
+        policy = {
+            "primary_route_id": "route_primary",
+            "routes": [
+                {
+                    "route_id": "route_primary",
+                    "route_type": "http_json",
+                    "provider_ref": "manager_primary",
+                    "provider_profile": "manager_primary",
+                    "model": "grok-4-1-fast-reasoning",
+                    "endpoint": "https://api.example.com/v1/chat/completions",
+                    "auth_env": "OLD_KEY",
+                    "key_env_pool": ["OLD_KEY"],
+                    "auth_profile_order": ["manager_primary"],
+                }
+            ],
+            "provider_registry": {
+                "manager_primary": {"provider_id": "manager_primary", "default_route_type": "http_json"},
+            },
+            "auth_profiles": {
+                "manager_primary": {
+                    "profile_name": "manager_primary",
+                    "auth_mode": "bearer_pool",
+                    "auth_env": "MERIDIAN_MANAGER_XAI_API_KEY_1",
+                    "key_env_pool": ["MERIDIAN_MANAGER_XAI_API_KEY_1", "MERIDIAN_MANAGER_XAI_API_KEY_2"],
+                }
+            },
+        }
+
+        defaults = institution_brain_policy.resolve_profile_defaults(policy, "manager_primary")
+        self.assertEqual(defaults["route_type"], "http_json")
+        self.assertEqual(defaults["endpoint"], "https://api.example.com/v1/chat/completions")
+        self.assertEqual(defaults["auth_env"], "MERIDIAN_MANAGER_XAI_API_KEY_1")
+        self.assertEqual(
+            defaults["key_env_pool"],
+            ["MERIDIAN_MANAGER_XAI_API_KEY_1", "MERIDIAN_MANAGER_XAI_API_KEY_2"],
+        )
+
+    def test_policy_status_exposes_override_fields(self):
+        """policy_status should expose sanitized override field names for operator truth."""
+        import institution_brain_policy
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            org_id = "test-org-override-fields"
+            original_capsule = institution_brain_policy.capsule_path
+            institution_brain_policy.capsule_path = lambda oid, fname: os.path.join(tmpdir, f"{oid}_{fname}")
+            try:
+                institution_brain_policy.configure_policy(
+                    org_id,
+                    route_type="http_json",
+                    provider_profile="manager_primary",
+                    model="grok-4-1-fast-reasoning",
+                    updated_by="unit_test",
+                    endpoint="https://api.example.com/v1/chat/completions",
+                    auth_env="MERIDIAN_MANAGER_XAI_API_KEY_1",
+                    key_env_pool=["MERIDIAN_MANAGER_XAI_API_KEY_1"],
+                )
+                status = institution_brain_policy.policy_status(
+                    org_id,
+                    runtime_env={
+                        "MERIDIAN_BRAIN_MANAGER_ENDPOINT": "https://override.example/v1/chat/completions",
+                        "MERIDIAN_BRAIN_MANAGER_MODEL": "override-model",
+                    },
+                )
+                self.assertTrue(status["override_active"])
+                self.assertIn("endpoint", status["override_fields"])
+                self.assertIn("model", status["override_fields"])
+                self.assertEqual(status["runtime_override"]["values"]["model"], "override-model")
+            finally:
+                institution_brain_policy.capsule_path = original_capsule
+
 
 # ── core.sh help text tests ──────────────────────────────────────────────
 
@@ -397,6 +506,15 @@ class TestHelpTextCompleteness(unittest.TestCase):
 
     def test_help_mentions_provider_use(self):
         self.assertIn("provider use", self.help_text)
+
+    def test_help_mentions_provider_fix(self):
+        self.assertIn("provider fix", self.help_text)
+
+    def test_help_mentions_provider_probe(self):
+        self.assertIn("provider probe", self.help_text)
+
+    def test_help_mentions_provider_restore(self):
+        self.assertIn("provider restore", self.help_text)
 
     def test_help_mentions_config_set(self):
         self.assertIn("config set", self.help_text)
@@ -419,6 +537,9 @@ class TestHelpTextCompleteness(unittest.TestCase):
     def test_help_mentions_model_override_example(self):
         self.assertIn("core.sh ask --model", self.help_text)
 
+    def test_help_mentions_ask_session_override(self):
+        self.assertIn("--session ID", self.help_text)
+
 
 # ── core.sh ask --model flag tests ───────────────────────────────────────
 
@@ -436,6 +557,94 @@ class TestAskModelFlag(unittest.TestCase):
         """Verify model_override is included in the gateway payload construction."""
         content = CORE_SH.read_text(encoding="utf-8")
         self.assertIn('payload["model"] = model_override', content)
+
+    def test_ask_uses_curl_gateway_transport(self):
+        """core.sh ask should post to the local gateway via curl, not urllib."""
+        content = CORE_SH.read_text(encoding="utf-8")
+        self.assertIn("wait_for_local_gateway_ready()", content)
+        self.assertIn('curl -sS -o "$response_file" -w "%{http_code}"', content)
+        self.assertIn('--data-binary "$request_body"', content)
+        self.assertIn('for attempt in 1 2 3; do', content)
+        self.assertIn("Couldn't connect to server", content)
+        self.assertIn("attempt_local_gateway_autoheal()", content)
+        self.assertIn("gateway unavailable; attempting repo-managed dev-up", content)
+        self.assertIn("./scripts/dev-up.sh --no-summary", content)
+
+    def test_ask_supports_session_override(self):
+        """cmd_ask should allow a per-request session override."""
+        content = CORE_SH.read_text(encoding="utf-8")
+        self.assertIn("--session)", content)
+        self.assertIn('session_override="$2"', content)
+        self.assertIn('if [ -n "$session_override" ]; then', content)
+
+    def test_ask_records_provider_runtime_receipt_summary(self):
+        """core.sh ask should surface provider runtime truth from the gateway receipt."""
+        content = CORE_SH.read_text(encoding="utf-8")
+        self.assertIn('provider_runtime = dict(data.get("provider_runtime") or {})', content)
+        self.assertIn('[core] provider={selected_plan.get(\'provider_profile\') or \'?\'}', content)
+        self.assertIn('provider_source:', content)
+        self.assertIn('provider_drift:', content)
+
+    def test_local_gateway_readiness_probe_exists(self):
+        content = CORE_SH.read_text(encoding="utf-8")
+        self.assertIn("wait_for_local_gateway_ready()", content)
+        self.assertIn('for probe in /api/healthz /api/status; do', content)
+        self.assertIn('curl -fsS --max-time 2 "${gateway_url}${probe}"', content)
+        self.assertIn('return 1', content)
+
+
+class TestProviderFixSurface(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.source = CORE_SH.read_text(encoding="utf-8")
+
+    def test_provider_fix_command_exists(self):
+        self.assertIn("cmd_provider_fix()", self.source)
+        self.assertIn("restore Meridian-owned manager route", self.source)
+
+    def test_provider_fix_uses_meridian_manager_topology_only(self):
+        self.assertIn('cmd_provider_restore', self.source)
+        self.assertIn('provider fix requires Meridian manager config', self.source)
+        self.assertIn('MERIDIAN_BRAIN_MANAGER_ENDPOINT', self.source)
+        self.assertIn('MERIDIAN_MANAGER_XAI_BASE_URL', self.source)
+        self.assertNotIn('command -v codex', self.source)
+        self.assertNotIn('command -v claude', self.source)
+        self.assertNotIn('cmd_provider_use core_manager_local --transport cli_session --model "$model"', self.source)
+
+    def test_provider_use_explicit_cli_env_overrides_existing_route(self):
+        self.assertIn('explicit_cli_bin = str(os.environ.get("MERIDIAN_BRAIN_MANAGER_CLI_BIN")', self.source)
+        self.assertIn('if explicit_cli_home:', self.source)
+
+    def test_provider_list_sets_org_context_for_manager_metadata(self):
+        self.assertIn('runtime_env.setdefault("MERIDIAN_ORG_ID", org_id)', self.source)
+        self.assertIn('runtime_env.setdefault("MERIDIAN_WORKSPACE_ORG_ID", org_id)', self.source)
+
+    def test_provider_probe_surface_exists(self):
+        self.assertIn("cmd_provider_probe()", self.source)
+        self.assertIn("brain_router.execute_manager(", self.source)
+        self.assertIn("Reply with exactly the provided probe text and nothing else.", self.source)
+        self.assertIn('runtime_env.setdefault("MERIDIAN_ORG_ID", org_id)', self.source)
+
+    def test_brain_router_cli_runner_uses_devnull_stdin(self):
+        brain_router = (MERIDIAN_ROOT / "intelligence" / "company" / "meridian_platform" / "brain_router.py").read_text(encoding="utf-8")
+        self.assertIn("stdin=subprocess.DEVNULL", brain_router)
+
+    def test_provider_restore_uses_meridian_env_topology(self):
+        self.assertIn("cmd_provider_restore()", self.source)
+        self.assertIn('MERIDIAN_MANAGER_XAI_BASE_URL', self.source)
+        self.assertIn('MERIDIAN_MANAGER_XAI_API_KEY_1', self.source)
+        self.assertIn('cmd_provider_use "$profile" --transport http_json', self.source)
+        self.assertNotIn('MERIDIAN_BRAIN_MANAGER_KEY_POOL" 2>/dev/null || true)', self.source)
+
+    def test_provider_probe_clears_override_envs(self):
+        self.assertIn('if name.startswith("MERIDIAN_BRAIN_MANAGER_")', self.source)
+        self.assertIn('runtime_env[name] = ""', self.source)
+        self.assertIn('runtime_env["MERIDIAN_BRAIN_ROUTER_CONFIG_PATH"] = ""', self.source)
+
+    def test_provider_use_hydrates_profile_defaults_and_fails_fast_for_missing_http_metadata(self):
+        self.assertIn("resolve_profile_defaults(current_policy, profile)", self.source)
+        self.assertIn("no auth metadata available for HTTP profile", self.source)
+        self.assertIn("no endpoint available for HTTP profile", self.source)
 
 
 if __name__ == "__main__":

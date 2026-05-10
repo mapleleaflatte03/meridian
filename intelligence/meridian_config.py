@@ -18,6 +18,17 @@ DEFAULT_CONFIG = {
     "llm_api_key": "",
     "telegram_bot_token": "",
     "allowed_origin": DEFAULT_ALLOWED_ORIGIN,
+    "discord_webhook_url": "",
+    "discord_inbound_secret": "",
+    "messenger_outbound_url": "",
+    "messenger_inbound_secret": "",
+    "messenger_verify_token": "",
+    "whatsapp_outbound_url": "",
+    "whatsapp_inbound_secret": "",
+    "whatsapp_verify_token": "",
+    "zalo_outbound_url": "",
+    "zalo_inbound_secret": "",
+    "zalo_bot_token": "",
 }
 
 

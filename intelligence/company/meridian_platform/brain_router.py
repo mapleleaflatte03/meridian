@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import datetime as _dt
+import io
 import json
 import os
 import re
@@ -307,14 +308,17 @@ def _update_policy_success(plan: dict[str, Any], *, failover_trace: list[dict[st
     route_id = str(plan.get("policy_route_id") or "").strip()
     if not org_id or not route_id:
         return
-    institution_brain_policy.update_route_health(
-        org_id,
-        route_id=route_id,
-        health="healthy",
-        reason="",
-        failover=(failover_trace or [])[-1] if failover_trace else {},
-        updated_by="brain_router",
-    )
+    try:
+        institution_brain_policy.update_route_health(
+            org_id,
+            route_id=route_id,
+            health="healthy",
+            reason="",
+            failover=(failover_trace or [])[-1] if failover_trace else {},
+            updated_by="brain_router",
+        )
+    except OSError:
+        return
 
 
 def _update_policy_failure(plan: dict[str, Any], *, detail: str, failover_trace: list[dict[str, Any]] | None = None) -> None:
@@ -325,14 +329,17 @@ def _update_policy_failure(plan: dict[str, Any], *, detail: str, failover_trace:
     if not org_id or not route_id:
         return
     reason_class = institution_brain_policy.classify_reason(detail)
-    institution_brain_policy.update_route_health(
-        org_id,
-        route_id=route_id,
-        health="blocked" if reason_class in {"billing", "auth"} else "degraded",
-        reason=detail,
-        failover=(failover_trace or [])[-1] if failover_trace else {},
-        updated_by="brain_router",
-    )
+    try:
+        institution_brain_policy.update_route_health(
+            org_id,
+            route_id=route_id,
+            health="blocked" if reason_class in {"billing", "auth"} else "degraded",
+            reason=detail,
+            failover=(failover_trace or [])[-1] if failover_trace else {},
+            updated_by="brain_router",
+        )
+    except OSError:
+        return
 
 
 def _route_chain_from_policy(plan: dict[str, Any], *, _cached_policy: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -554,6 +561,7 @@ def _run_claude_cli_default(*, command: list[str], env_vars: dict[str, str], tim
     completed = subprocess.run(
         command,
         capture_output=True,
+        stdin=subprocess.DEVNULL,
         text=True,
         timeout=timeout,
         check=False,
@@ -577,6 +585,7 @@ def _run_cli_default(*, command: list[str], env_vars: dict[str, str], timeout: i
         completed = subprocess.run(
             command,
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             timeout=timeout,
             check=False,
@@ -602,14 +611,99 @@ def _run_cli_default(*, command: list[str], env_vars: dict[str, str], timeout: i
 
 
 def _http_post_default(*, endpoint: str, headers: dict[str, str], payload: dict[str, Any], timeout: int) -> str:
-    request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return response.read().decode("utf-8")
+    response_path = ""
+    error_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(prefix="meridian-brain-http-", suffix=".json", delete=False) as handle:
+            response_path = handle.name
+        with tempfile.NamedTemporaryFile(prefix="meridian-brain-http-", suffix=".err", delete=False) as handle:
+            error_path = handle.name
+        command = [
+            "curl",
+            "-sS",
+            "-o",
+            response_path,
+            "-w",
+            "%{http_code}",
+            "--max-time",
+            str(max(1, int(timeout))),
+            "-X",
+            "POST",
+        ]
+        for key, value in headers.items():
+            command.extend(["-H", f"{key}: {value}"])
+        command.extend(
+            [
+                "--data-binary",
+                json.dumps(payload),
+                endpoint,
+            ]
+        )
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            timeout=max(1, int(timeout)) + 5,
+            check=False,
+        )
+        if completed.returncode != 0:
+            detail = ""
+            if error_path and Path(error_path).exists():
+                detail = Path(error_path).read_text(encoding="utf-8", errors="replace").strip()
+            detail = detail or (completed.stderr or completed.stdout or "curl transport failed").strip()
+            raise urllib.error.URLError(detail)
+        status_text = str(completed.stdout or "").strip() or "000"
+        try:
+            status_code = int(status_text[-3:])
+        except ValueError:
+            status_code = 0
+        body = ""
+        if response_path and Path(response_path).exists():
+            body = Path(response_path).read_text(encoding="utf-8", errors="replace")
+        if status_code < 200 or status_code >= 300:
+            raise urllib.error.HTTPError(
+                url=endpoint,
+                code=status_code or 0,
+                msg=f"HTTP {status_code or 0}",
+                hdrs=None,
+                fp=io.BytesIO(body.encode("utf-8")),
+            )
+        return body
+    finally:
+        for path in (response_path, error_path):
+            if path:
+                try:
+                    Path(path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+
+
+def _merged_user_prompt(system_prompt: str, user_prompt: str) -> str:
+    sys_text = str(system_prompt or "").strip()
+    user_text = str(user_prompt or "").strip()
+    if sys_text and user_text:
+        return (
+            f"System instructions:\n{sys_text}\n\n"
+            f"User request:\n{user_text}\n\n"
+            "Return only the final answer for the user."
+        )
+    return sys_text or user_text
+
+
+def _http_messages_payload(system_prompt: str, user_prompt: str, *, allow_system_role: bool) -> list[dict[str, str]]:
+    if allow_system_role:
+        return [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+    return [{"role": "user", "content": _merged_user_prompt(system_prompt, user_prompt)}]
+
+
+def _requires_user_only_retry(status_code: int | None, detail: str) -> bool:
+    if int(status_code or 0) != 400:
+        return False
+    return "system and developer messages are not allowed" in str(detail or "").strip().lower()
 
 
 def _execute_single_plan(
@@ -619,6 +713,7 @@ def _execute_single_plan(
     system_prompt: str,
     user_prompt: str,
     timeout: int,
+    max_tokens_override: int | None,
     run_cli: Callable[..., dict[str, Any]] | None,
     http_post: Callable[..., str] | None,
 ) -> dict[str, Any]:
@@ -714,7 +809,7 @@ def _execute_single_plan(
         return result
 
     post = http_post or _http_post_default
-    max_tokens = int(plan.get("max_tokens") or DEFAULT_MAX_TOKENS)
+    max_tokens = int(max_tokens_override or plan.get("max_tokens") or DEFAULT_MAX_TOKENS)
 
     for index, api_key in enumerate(key_pool, start=1):
         headers = {
@@ -724,10 +819,7 @@ def _execute_single_plan(
         }
         payload = {
             "model": model_name,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+            "messages": _http_messages_payload(system_prompt, user_prompt, allow_system_role=True),
             "max_tokens": max_tokens,
         }
         try:
@@ -735,6 +827,56 @@ def _execute_single_plan(
         except urllib.error.HTTPError as exc:
             body = exc.read().decode("utf-8", errors="replace")
             detail = body or str(exc)
+            if _requires_user_only_retry(exc.code, detail):
+                retry_payload = {
+                    "model": model_name,
+                    "messages": _http_messages_payload(system_prompt, user_prompt, allow_system_role=False),
+                    "max_tokens": max_tokens,
+                }
+                try:
+                    raw_body = post(endpoint=endpoint, headers=headers, payload=retry_payload, timeout=timeout)
+                except urllib.error.HTTPError as retry_exc:
+                    body = retry_exc.read().decode("utf-8", errors="replace")
+                    detail = body or str(retry_exc)
+                except Exception as retry_exc:
+                    detail = f"{retry_exc.__class__.__name__}: {retry_exc}"
+                else:
+                    warnings.append(f"key slot {index} upstream requires user-only message payload; retried without system role")
+                    try:
+                        parsed = json.loads(raw_body)
+                    except json.JSONDecodeError:
+                        parsed = {}
+                    output_text = _extract_chat_output(parsed)
+                    if output_text:
+                        failover_trace.append(
+                            {
+                                "key_slot": index,
+                                "outcome": "success",
+                                "status_code": 200,
+                                "detail": "retried_without_system_role",
+                                "failover_to_next": False,
+                            }
+                        )
+                        result = {
+                            "ok": True,
+                            "returncode": 0,
+                            "stdout": "",
+                            "stderr": "",
+                            "output_text": output_text,
+                            "model": str(parsed.get("model") or model_name),
+                            "provider_profile": profile_name,
+                            "transport_kind": "http_json",
+                            "auth_mode": auth_mode,
+                            "key_slot": index,
+                            "warnings": warnings,
+                            "failover_trace": failover_trace,
+                            "policy_source": str(plan.get("policy_source") or ""),
+                            "policy_route_id": str(plan.get("policy_route_id") or ""),
+                            "policy_auth_profile": str(plan.get("policy_auth_profile") or ""),
+                        }
+                        _update_policy_success(plan, failover_trace=failover_trace)
+                        return result
+                    detail = str(parsed.get("error") or parsed or "empty output").strip()
             should_failover = index < len(key_pool) and _should_failover(exc.code, detail, failover_status_codes)
             failover_trace.append(
                 {
@@ -860,6 +1002,7 @@ def execute_manager(
     user_prompt: str,
     model: str,
     timeout: int,
+    max_tokens_override: int | None = None,
     run_cli: Callable[..., dict[str, Any]] | None = None,
     http_post: Callable[..., str] | None = None,
 ) -> dict[str, Any]:
@@ -886,6 +1029,7 @@ def execute_manager(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             timeout=timeout,
+            max_tokens_override=max_tokens_override,
             run_cli=run_cli,
             http_post=http_post,
         )
@@ -972,6 +1116,40 @@ def manager_policy_status(*, runtime_env: dict[str, str] | None = None, model_hi
         "route_id": str(plan.get("policy_route_id") or ""),
         "auth_profile": str(plan.get("policy_auth_profile") or ""),
         "budget_band": str(plan.get("policy_budget_band") or ""),
+        "endpoint": str(plan.get("endpoint") or "").strip(),
+        "cli_bin": str(plan.get("cli_bin") or "").strip(),
+        "cli_home": str(plan.get("cli_home") or "").strip(),
+        "auth_env": str(plan.get("auth_env") or "").strip(),
+        "key_env_pool": list(plan.get("key_env_pool") or []),
+    }
+    active_route = dict(base.get("active_route") or {})
+    drift_fields: list[str] = []
+    selected_plan = dict(base["selected_plan"])
+    if active_route:
+        if str(active_route.get("route_type") or "") != str(selected_plan.get("transport_kind") or ""):
+            drift_fields.append("transport")
+        active_provider = str(active_route.get("provider_ref") or active_route.get("provider_profile") or "").strip()
+        if active_provider != str(selected_plan.get("provider_ref") or selected_plan.get("provider_profile") or "").strip():
+            drift_fields.append("provider")
+        if str(active_route.get("model") or "").strip() != str(selected_plan.get("model") or "").strip():
+            drift_fields.append("model")
+        if str(active_route.get("auth_profile_order") or []) != str([selected_plan.get("auth_profile")] if selected_plan.get("auth_profile") else []):
+            drift_fields.append("auth_profile")
+        if str(selected_plan.get("transport_kind") or "") == "http_json":
+            if str(active_route.get("endpoint") or "").strip() != str(selected_plan.get("endpoint") or "").strip():
+                drift_fields.append("endpoint")
+            if str(active_route.get("auth_env") or "").strip() != str(selected_plan.get("auth_env") or "").strip():
+                drift_fields.append("auth_env")
+            if list(active_route.get("key_env_pool") or []) != list(selected_plan.get("key_env_pool") or []):
+                drift_fields.append("key_env_pool")
+        if str(selected_plan.get("transport_kind") or "") == "cli_session":
+            if str(active_route.get("cli_bin") or "").strip() != str(selected_plan.get("cli_bin") or "").strip():
+                drift_fields.append("cli_bin")
+            if str(active_route.get("cli_home") or "").strip() != str(selected_plan.get("cli_home") or "").strip():
+                drift_fields.append("cli_home")
+    base["route_alignment"] = {
+        "matches_policy_route": not drift_fields,
+        "drift_fields": drift_fields,
     }
     return base
 
@@ -995,10 +1173,7 @@ def execute_specialist_http(
     post = http_post or _http_post_default
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        "messages": _http_messages_payload(system_prompt, user_prompt, allow_system_role=True),
         "max_tokens": max_tokens,
     }
     headers = {
@@ -1009,15 +1184,43 @@ def execute_specialist_http(
     try:
         raw_body = post(endpoint=endpoint, headers=headers, payload=payload, timeout=timeout)
     except urllib.error.HTTPError as exc:
-        return {
-            "ok": False,
-            "error": f"direct provider fallback HTTP {exc.code}",
-            "status_code": exc.code,
-            "body": exc.read().decode("utf-8", errors="replace"),
-            "provider_profile": profile_name,
-            "transport_kind": "http_json",
-            "auth_mode": "bearer_env",
-        }
+        body = exc.read().decode("utf-8", errors="replace")
+        if _requires_user_only_retry(exc.code, body):
+            retry_payload = {
+                "model": model,
+                "messages": _http_messages_payload(system_prompt, user_prompt, allow_system_role=False),
+                "max_tokens": max_tokens,
+            }
+            try:
+                raw_body = post(endpoint=endpoint, headers=headers, payload=retry_payload, timeout=timeout)
+            except urllib.error.HTTPError as retry_exc:
+                return {
+                    "ok": False,
+                    "error": f"direct provider fallback HTTP {retry_exc.code}",
+                    "status_code": retry_exc.code,
+                    "body": retry_exc.read().decode("utf-8", errors="replace"),
+                    "provider_profile": profile_name,
+                    "transport_kind": "http_json",
+                    "auth_mode": "bearer_env",
+                }
+            except Exception as retry_exc:
+                return {
+                    "ok": False,
+                    "error": f"direct provider fallback failed: {retry_exc}",
+                    "provider_profile": profile_name,
+                    "transport_kind": "http_json",
+                    "auth_mode": "bearer_env",
+                }
+        else:
+            return {
+                "ok": False,
+                "error": f"direct provider fallback HTTP {exc.code}",
+                "status_code": exc.code,
+                "body": body,
+                "provider_profile": profile_name,
+                "transport_kind": "http_json",
+                "auth_mode": "bearer_env",
+            }
     except Exception as exc:
         return {
             "ok": False,

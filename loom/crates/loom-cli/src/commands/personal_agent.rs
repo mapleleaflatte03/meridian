@@ -2111,6 +2111,76 @@ fn collect_personal_agent_recent_deliveries(
     )
 }
 
+fn collect_governed_memory_artifacts_for_agent(
+    root: &Path,
+    config: &PersonalAgentConfig,
+    kind: &str,
+    limit: usize,
+) -> LoomResult<Vec<serde_json::Value>> {
+    let artifact_dir = root.join("artifacts").join("memory").join(format!("{}s", kind));
+    if !artifact_dir.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut paths = fs::read_dir(&artifact_dir)
+        .map_err(|error| format!("read governed memory artifact dir: {error}"))?
+        .filter_map(|entry| entry.ok().map(|item| item.path()))
+        .filter(|path| path.extension().and_then(|ext| ext.to_str()) == Some("json"))
+        .filter(|path| path.file_name().and_then(|name| name.to_str()) != Some("latest.json"))
+        .collect::<Vec<_>>();
+    paths.sort_by_key(|path| {
+        path.metadata()
+            .and_then(|meta| meta.modified())
+            .unwrap_or(UNIX_EPOCH)
+    });
+    paths.reverse();
+
+    let mut artifacts = Vec::new();
+    for path in paths.into_iter().take(limit.max(1)) {
+        let Ok(raw) = fs::read_to_string(&path) else {
+            continue;
+        };
+        let Ok(payload) = serde_json::from_str::<serde_json::Value>(&raw) else {
+            continue;
+        };
+        let target_agent_id = payload["target_agent_id"].as_str().unwrap_or("");
+        let source_ref = payload["source_ref"].as_str().unwrap_or("");
+        let relevant = target_agent_id == config.agent_id
+            || target_agent_id == config.slug
+            || source_ref == config.agent_id
+            || source_ref == config.slug;
+        if relevant {
+            artifacts.push(payload);
+        }
+    }
+    Ok(artifacts)
+}
+
+fn build_governed_memory_summary(
+    root: &Path,
+    config: &PersonalAgentConfig,
+    limit: usize,
+) -> LoomResult<serde_json::Value> {
+    let fork_artifacts = collect_governed_memory_artifacts_for_agent(root, config, "fork", limit)?;
+    let replay_artifacts =
+        collect_governed_memory_artifacts_for_agent(root, config, "replay", limit)?;
+    let fork_latest = fork_artifacts.first().cloned().unwrap_or(serde_json::json!({}));
+    let replay_latest = replay_artifacts.first().cloned().unwrap_or(serde_json::json!({}));
+    Ok(serde_json::json!({
+        "limit": limit,
+        "fork_latest_present": !fork_artifacts.is_empty(),
+        "fork_latest_status": fork_latest["status"].as_str().unwrap_or("missing"),
+        "fork_recent_count": fork_artifacts.len(),
+        "fork_target_agent_id": fork_latest["target_agent_id"].as_str().unwrap_or(""),
+        "replay_latest_present": !replay_artifacts.is_empty(),
+        "replay_latest_status": replay_latest["status"].as_str().unwrap_or("missing"),
+        "replay_recent_count": replay_artifacts.len(),
+        "replay_target_agent_id": replay_latest["target_agent_id"].as_str().unwrap_or(""),
+        "replay_authority_status": replay_latest["authority_status"].as_str().unwrap_or(""),
+        "recent_fork_artifacts": fork_artifacts,
+        "recent_replay_artifacts": replay_artifacts,
+    }))
+}
+
 fn build_run_agent_operator_payload(
     root: &Path,
     config: &PersonalAgentConfig,
@@ -2125,6 +2195,7 @@ fn build_run_agent_operator_payload(
     let recent_receipts =
         MemoryService::with_defaults(root).list_receipts(receipt_limit, Some(&config.agent_id))?;
     let recent_deliveries = collect_personal_agent_recent_deliveries(root, config, delivery_limit)?;
+    let governed_memory = build_governed_memory_summary(root, config, receipt_limit)?;
     let mut alerts = Vec::new();
     match summary["supervision_action"]
         .as_str()
@@ -2215,6 +2286,7 @@ fn build_run_agent_operator_payload(
             "recipient": record.recipient,
             "status_detail": record.status_detail,
         })).collect::<Vec<_>>(),
+        "governed_memory": governed_memory,
     }))
 }
 
@@ -2318,6 +2390,17 @@ fn render_run_agent_inspect_human(payload: &serde_json::Value) -> String {
             }
         }
     }
+    rendered.push_str("\nGoverned memory\n---------------\n");
+    rendered.push_str(&format!(
+        "- fork latest={} count={} target={}\n- replay latest={} count={} target={} authority={}\n",
+        payload["governed_memory"]["fork_latest_status"].as_str().unwrap_or("missing"),
+        payload["governed_memory"]["fork_recent_count"].as_u64().unwrap_or_default(),
+        payload["governed_memory"]["fork_target_agent_id"].as_str().unwrap_or(""),
+        payload["governed_memory"]["replay_latest_status"].as_str().unwrap_or("missing"),
+        payload["governed_memory"]["replay_recent_count"].as_u64().unwrap_or_default(),
+        payload["governed_memory"]["replay_target_agent_id"].as_str().unwrap_or(""),
+        payload["governed_memory"]["replay_authority_status"].as_str().unwrap_or(""),
+    ));
     rendered.push_str("\nRecent deliveries\n-----------------\n");
     if let Some(deliveries) = payload["recent_deliveries"].as_array() {
         if deliveries.is_empty() {

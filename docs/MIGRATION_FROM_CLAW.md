@@ -18,12 +18,23 @@ One install. One onboarding. Mode selected at first run.
 | Claw-family concept | Meridian Core equivalent | Notes |
 | --- | --- | --- |
 | CLI agent session | `./scripts/core.sh` task runner | Browse, research, memory, scheduling, inspect |
+| Prompt loop / daily ask | `./scripts/core.sh ask "task"` + `core.sh session *` | Session-scoped local prompt entrypoint with resume/switch/reset |
+| Interactive terminal loop | `./scripts/core.sh chat` | Persistent Core chat on the current session, backed by the same gateway path |
+| Session export | `core.sh session export ID DIR` | Export a full session as JSON + Markdown for review, sharing, or audit |
+| Last response inspect | `core.sh response meta` / `core.sh response show` | Keep the most recent prompt result inspectable after terminal output scrolls away |
+| Artifact export | `core.sh response export DIR` | Materialize the latest code/app artifact into a real directory tree |
+| Runtime diagnostics | `core.sh doctor` | One operator surface for runtime, provider, gateway, queue, memory, and channel remediation |
+| Provider/config cockpit | `core.sh provider *` / `core.sh config show` | Inspect routes, auth readiness, profiles, and effective runtime config without dropping to raw runtime commands |
 | Agent config / profile | `runtime/onboard_state.json` + agent registry | Created during onboarding |
 | Memory / context | `core.sh remember` / `core.sh recall` | Key-value memory with receipts |
 | Browser automation | `core.sh browse URL` | Bounded browser navigation |
 | Terminal task execution | `core.sh research "command"` | Bounded terminal execution with proof |
 | Scheduled / recurring tasks | `core.sh schedule NAME INTERVAL` | Cron-style scheduling |
 | Agent status / inspect | `core.sh inspect` / `core.sh status` | Runtime state + last execution |
+| Session / loop diagnostics | `core.sh agent inspect` / `core.sh agent diagnose` | Live operator state + remediation plan |
+| Job ledger / receipts | `core.sh job list` / `core.sh job inspect` | Recent runtime execution ledger |
+| Channel cockpit | `core.sh channel health` / `core.sh channel deliveries` | Delivery and health operator view |
+| Memory graph / receipts | `core.sh memory overview` / `core.sh memory receipts` / `core.sh memory graph` | Inspect recall lineage instead of only key-value lookups |
 
 ### Requires Meridian Team
 
@@ -59,6 +70,16 @@ cd ~/meridian
 ./scripts/onboard.sh --mode team    # if you need governed execution depth
 
 # 3. Try the things you already do in Claw-family tools
+./scripts/core.sh ask "summarize this week"
+./scripts/core.sh session new workbench
+./scripts/core.sh ask "continue the plan from earlier"
+./scripts/core.sh session show
+./scripts/core.sh session export workbench /tmp/core-session
+./scripts/core.sh chat
+./scripts/core.sh doctor
+./scripts/core.sh provider status
+./scripts/core.sh config show
+./scripts/core.sh response export /tmp/core-artifact
 ./scripts/core.sh browse https://example.com
 ./scripts/core.sh research "echo hello world"
 ./scripts/core.sh remember my_note "something useful"
@@ -80,9 +101,10 @@ curl -s -u "${WORKSPACE_USER}:${WORKSPACE_PASS}" \
 ## What to Try First After Migration
 
 1. **Core daily loop**: `core.sh browse` + `core.sh research` + `core.sh remember/recall`
-2. **Inspect proof**: `core.sh inspect` shows execution receipt and agent state
-3. **Run benchmark**: `./scripts/benchmark_meridian.sh --with-comparisons` to see cold-start and RSS differences
-4. **Team depth** (if Team mode): governed execution + audit export via the Team API surface
+2. **Inspect live runtime**: `core.sh agent inspect`, `core.sh channel health`, `core.sh job list`
+3. **Inspect proof**: `core.sh inspect` shows execution receipt and agent state
+4. **Run benchmark**: `./scripts/benchmark_meridian.sh --with-comparisons` to see cold-start and RSS differences
+5. **Team depth** (if Team mode): governed execution + audit export via the Team API surface
 
 ## Honest Assessment
 

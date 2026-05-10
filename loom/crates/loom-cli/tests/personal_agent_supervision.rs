@@ -558,3 +558,61 @@ fn diagnose_surfaces_missing_channel_remediation_for_running_agent() {
             .contains("loom channel connect webhook --agent smoke-agent")
     }));
 }
+
+#[test]
+fn inspect_surfaces_governed_memory_summary_for_agent_artifacts() {
+    let harness = Harness::new("governed_memory_summary");
+    let artifact_dir_forks = Path::new(harness.root_str()).join("artifacts/memory/forks");
+    let artifact_dir_replays = Path::new(harness.root_str()).join("artifacts/memory/replays");
+    fs::create_dir_all(&artifact_dir_forks).expect("create fork artifact dir");
+    fs::create_dir_all(&artifact_dir_replays).expect("create replay artifact dir");
+
+    fs::write(
+        artifact_dir_forks.join("fork_1.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "status": "memory_fork_created",
+            "source_ref": "agent_seed",
+            "target_agent_id": "smoke-agent",
+            "branch": "warm-start",
+            "forked_entries": 2,
+            "selected_entries": 2,
+        }))
+        .expect("serialize fork artifact"),
+    )
+    .expect("write fork artifact");
+
+    fs::write(
+        artifact_dir_replays.join("replay_1.json"),
+        serde_json::to_string_pretty(&serde_json::json!({
+            "status": "memory_replay_blocked",
+            "source_ref": "agent_seed",
+            "target_agent_id": "smoke-agent",
+            "authority_status": "denied",
+            "replayed_entries": 0,
+        }))
+        .expect("serialize replay artifact"),
+    )
+    .expect("write replay artifact");
+
+    let inspect = harness.inspect_json();
+    assert_eq!(
+        inspect["governed_memory"]["fork_latest_status"].as_str(),
+        Some("memory_fork_created")
+    );
+    assert_eq!(
+        inspect["governed_memory"]["fork_recent_count"].as_u64(),
+        Some(1)
+    );
+    assert_eq!(
+        inspect["governed_memory"]["replay_latest_status"].as_str(),
+        Some("memory_replay_blocked")
+    );
+    assert_eq!(
+        inspect["governed_memory"]["replay_authority_status"].as_str(),
+        Some("denied")
+    );
+    assert_eq!(
+        inspect["governed_memory"]["replay_recent_count"].as_u64(),
+        Some(1)
+    );
+}

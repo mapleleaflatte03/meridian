@@ -4,6 +4,7 @@ import json
 import sys
 import unittest
 import urllib.error
+from types import SimpleNamespace
 from pathlib import Path
 
 PLATFORM_DIR = Path(__file__).resolve().parent
@@ -108,6 +109,128 @@ class BrainRouterTests(unittest.TestCase):
         self.assertIn("fallback", result["output_text"])
         self.assertEqual(len(calls), 2)
         self.assertTrue(result.get("warnings"))
+
+    def test_execute_manager_retries_without_system_role_for_user_only_upstream(self):
+        env = {
+            "MERIDIAN_BRAIN_MANAGER_TRANSPORT": "http_json",
+            "MERIDIAN_BRAIN_MANAGER_PROFILE_NAME": "manager_http_pool",
+            "MERIDIAN_BRAIN_MANAGER_ENDPOINT": "https://router.example/v1/chat/completions",
+            "MERIDIAN_BRAIN_MANAGER_MODEL": "fast-reasoner",
+            "MERIDIAN_BRAIN_MANAGER_KEY_POOL": "key-a",
+            "MERIDIAN_BRAIN_MANAGER_MAX_TOKENS": "64",
+        }
+        calls = []
+
+        def fake_http_post(*, endpoint, headers, payload, timeout):
+            calls.append(payload)
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(
+                    url=endpoint,
+                    code=400,
+                    msg="bad request",
+                    hdrs=None,
+                    fp=io.BytesIO(b'{"error":"system and developer messages are not allowed; agent instructions are set via agent configuration","code":400}'),
+                )
+            return json.dumps(
+                {
+                    "model": "fast-reasoner",
+                    "choices": [{"message": {"content": "compat success"}}],
+                }
+            )
+
+        result = brain_router.execute_manager(
+            runtime_env=env,
+            system_prompt="system",
+            user_prompt="user",
+            model="",
+            timeout=5,
+            http_post=fake_http_post,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["output_text"], "compat success")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([item["role"] for item in calls[0]["messages"]], ["system", "user"])
+        self.assertEqual([item["role"] for item in calls[1]["messages"]], ["user"])
+        self.assertTrue(any("without system role" in warning for warning in result.get("warnings", [])))
+
+    def test_http_post_default_uses_curl_contract(self):
+        captured = {}
+
+        def fake_run(command, **kwargs):
+            captured["command"] = list(command)
+            captured["kwargs"] = dict(kwargs)
+            response_path = command[command.index("-o") + 1]
+            Path(response_path).write_text('{"ok":true}', encoding="utf-8")
+            return SimpleNamespace(returncode=0, stdout="200", stderr="")
+
+        original_run = brain_router.subprocess.run
+        brain_router.subprocess.run = fake_run
+        try:
+            body = brain_router._http_post_default(
+                endpoint="https://router.example/v1/chat/completions",
+                headers={"Authorization": "Bearer test", "Content-Type": "application/json"},
+                payload={"model": "x", "messages": []},
+                timeout=7,
+            )
+        finally:
+            brain_router.subprocess.run = original_run
+        self.assertEqual(body, '{"ok":true}')
+        self.assertIn("curl", captured["command"][0])
+        self.assertIn("--data-binary", captured["command"])
+        self.assertIn("--max-time", captured["command"])
+
+    def test_http_post_default_raises_urlerror_on_transport_failure(self):
+        def fake_run(command, **kwargs):
+            return SimpleNamespace(returncode=7, stdout="", stderr="curl: (7) Failed to connect")
+
+        original_run = brain_router.subprocess.run
+        brain_router.subprocess.run = fake_run
+        try:
+            with self.assertRaises(urllib.error.URLError):
+                brain_router._http_post_default(
+                    endpoint="https://router.example/v1/chat/completions",
+                    headers={"Authorization": "Bearer test"},
+                    payload={"model": "x"},
+                    timeout=7,
+                )
+        finally:
+            brain_router.subprocess.run = original_run
+
+    def test_execute_manager_policy_health_save_failure_does_not_crash_result(self):
+        env = {
+            "MERIDIAN_BRAIN_MANAGER_TRANSPORT": "http_json",
+            "MERIDIAN_BRAIN_MANAGER_PROFILE_NAME": "manager_http_pool",
+            "MERIDIAN_BRAIN_MANAGER_ENDPOINT": "https://router.example/v1/chat/completions",
+            "MERIDIAN_BRAIN_MANAGER_MODEL": "fast-reasoner",
+            "MERIDIAN_BRAIN_MANAGER_KEY_POOL": "key-a",
+            "MERIDIAN_BRAIN_MANAGER_FAILOVER_STATUS_CODES": "429,503",
+            "MERIDIAN_BRAIN_MANAGER_MAX_TOKENS": "64",
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_test",
+        }
+
+        institution_brain_policy.update_route_health = lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            OSError(30, "Read-only file system")
+        )
+
+        def fake_http_post(*, endpoint, headers, payload, timeout):  # noqa: ARG001
+            return json.dumps(
+                {
+                    "model": "fast-reasoner",
+                    "choices": [{"message": {"content": "ok even if save is read-only"}}],
+                }
+            )
+
+        result = brain_router.execute_manager(
+            runtime_env=env,
+            system_prompt="system",
+            user_prompt="user",
+            model="",
+            timeout=5,
+            http_post=fake_http_post,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["transport_kind"], "http_json")
+        self.assertIn("ok even if save is read-only", result["output_text"])
 
     def test_execute_manager_http_failover_trace_is_deterministic(self):
         env = {
@@ -421,6 +544,57 @@ class BrainRouterTests(unittest.TestCase):
         self.assertEqual(status["selected_plan"]["model"], "alpha-model-v1")
         self.assertEqual(status["selected_plan"]["auth_profile"], "auth.alpha")
         self.assertEqual(status["selected_plan"]["transport_kind"], "cli_session")
+        self.assertTrue(status["route_alignment"]["matches_policy_route"])
+        self.assertEqual(status["route_alignment"]["drift_fields"], [])
+
+    def test_manager_policy_status_reports_override_drift_fields(self):
+        env = {
+            "MERIDIAN_WORKSPACE_ORG_ID": "org_status",
+            "MERIDIAN_ORG_ID": "org_status",
+            "MERIDIAN_BRAIN_MANAGER_TRANSPORT": "http_json",
+            "MERIDIAN_BRAIN_MANAGER_PROFILE_NAME": "provider.beta",
+            "MERIDIAN_BRAIN_MANAGER_ENDPOINT": "https://override.example/v1/chat/completions",
+            "MERIDIAN_BRAIN_MANAGER_MODEL": "beta-model",
+            "MERIDIAN_BRAIN_MANAGER_AUTH_ENV": "BETA_KEY",
+            "MERIDIAN_BRAIN_MANAGER_KEY_ENV_POOL": "BETA_KEY",
+        }
+        policy_doc = {
+            "schema": "meridian.institution_brain_policy.v1",
+            "institution_id": "org_status",
+            "primary_route_id": "route_primary",
+            "routes": [
+                {
+                    "route_id": "route_primary",
+                    "route_type": "cli_session",
+                    "provider_ref": "provider.alpha",
+                    "provider_profile": "provider.alpha",
+                    "model": "alpha-model-v1",
+                    "auth_profile_order": ["auth.alpha"],
+                    "fallback_route_ids": [],
+                    "approved_by_authority": True,
+                    "allowed_by_treasury": True,
+                    "disabled": False,
+                    "disable_reason": "",
+                    "cli_bin": "alpha-cli",
+                    "cli_home": "/tmp/alpha",
+                    "endpoint": "",
+                    "auth_env": "",
+                    "key_env_pool": [],
+                },
+            ],
+            "auth_profiles": {},
+            "failover_policy": {},
+        }
+        institution_brain_policy.load_policy = lambda _org_id: policy_doc
+        institution_brain_policy.active_route = lambda policy: policy["routes"][0]
+
+        status = brain_router.manager_policy_status(runtime_env=env, model_hint="")
+        self.assertTrue(status["override_active"])
+        self.assertIn("endpoint", status["override_fields"])
+        self.assertFalse(status["route_alignment"]["matches_policy_route"])
+        self.assertIn("transport", status["route_alignment"]["drift_fields"])
+        self.assertIn("provider", status["route_alignment"]["drift_fields"])
+        self.assertIn("endpoint", status["route_alignment"]["drift_fields"])
 
     def test_execute_manager_falls_back_to_next_policy_route(self):
         env = {
@@ -531,6 +705,43 @@ class BrainRouterTests(unittest.TestCase):
         self.assertEqual(calls[0][0], "primary-cli")
         self.assertEqual(calls[1][0], "backup-cli")
         self.assertTrue(len(health_updates) >= 2)
+
+    def test_execute_specialist_http_retries_without_system_role_for_user_only_upstream(self):
+        calls = []
+
+        def fake_http_post(*, endpoint, headers, payload, timeout):
+            calls.append(payload)
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(
+                    url=endpoint,
+                    code=400,
+                    msg="bad request",
+                    hdrs=None,
+                    fp=io.BytesIO(b'{"error":"system and developer messages are not allowed; agent instructions are set via agent configuration","code":400}'),
+                )
+            return json.dumps(
+                {
+                    "model": "fast-reasoner",
+                    "choices": [{"message": {"content": "specialist compat success"}}],
+                }
+            )
+
+        result = brain_router.execute_specialist_http(
+            profile_name="atlas",
+            endpoint="https://router.example/v1/chat/completions",
+            model="fast-reasoner",
+            api_key="secret",
+            system_prompt="system",
+            user_prompt="user",
+            max_tokens=64,
+            timeout=5,
+            http_post=fake_http_post,
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["output_text"], "specialist compat success")
+        self.assertEqual(len(calls), 2)
+        self.assertEqual([item["role"] for item in calls[0]["messages"]], ["system", "user"])
+        self.assertEqual([item["role"] for item in calls[1]["messages"]], ["user"])
 
 
 if __name__ == "__main__":

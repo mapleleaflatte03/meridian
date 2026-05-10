@@ -139,6 +139,22 @@ class ConstitutionalTraceTests(unittest.TestCase):
             loaded = load_recent_traces(limit=2)
             self.assertEqual(len(loaded), 2)
 
+    def test_execution_summary_counts_ok_status_as_completed(self):
+        from constitutional_trace import _execution_summary
+        summary = _execution_summary(
+            [
+                {'status': 'ok', 'agent_id': 'agent_forge'},
+                {'status': 'success', 'agent_id': 'agent_quill'},
+                {'status': 'error', 'agent_id': 'agent_aegis'},
+            ],
+            'done',
+            mode='team',
+        )
+        self.assertEqual(summary['steps_total'], 3)
+        self.assertEqual(summary['steps_completed'], 2)
+        self.assertEqual(summary['steps_failed'], 1)
+        self.assertTrue(summary['manager_synthesized'])
+
 
 if __name__ == '__main__':
     unittest.main()

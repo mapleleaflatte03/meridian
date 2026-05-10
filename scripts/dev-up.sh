@@ -33,6 +33,7 @@ export MERIDIAN_GATEWAY_PORT="${MERIDIAN_GATEWAY_PORT:-8266}"
 export MERIDIAN_HEARTBEAT_ENABLED="${MERIDIAN_HEARTBEAT_ENABLED:-0}"
 export MERIDIAN_WORKSPACE_READY_TIMEOUT="${MERIDIAN_WORKSPACE_READY_TIMEOUT:-45}"
 export MERIDIAN_GATEWAY_READY_TIMEOUT="${MERIDIAN_GATEWAY_READY_TIMEOUT:-90}"
+export MERIDIAN_STACK_STABLE_SECONDS="${MERIDIAN_STACK_STABLE_SECONDS:-6}"
 export MERIDIAN_PEER_WORKSPACE_ENABLED="${MERIDIAN_PEER_WORKSPACE_ENABLED:-1}"
 export MERIDIAN_SUPERVISOR_ENABLE="${MERIDIAN_SUPERVISOR_ENABLE:-1}"
 export MERIDIAN_SUPERVISOR_INTERVAL_SECONDS="${MERIDIAN_SUPERVISOR_INTERVAL_SECONDS:-5}"
@@ -341,6 +342,60 @@ except Exception:
 PY
 }
 
+pid_file_alive() {
+  local name="$1"
+  local pid_file="${PID_DIR}/${name}.pid"
+  if [[ ! -f "${pid_file}" ]]; then
+    return 1
+  fi
+  local pid
+  pid="$(cat "${pid_file}" 2>/dev/null || true)"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" >/dev/null 2>&1
+}
+
+wait_for_stable_stack() {
+  local timeout_s="${1:-20}"
+  local stable_s="${2:-6}"
+  local deadline=$((SECONDS + timeout_s))
+  local stable_deadline=0
+  while (( SECONDS < deadline )); do
+    local stack_ok="1"
+    if ! service_healthy "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/healthz" 5; then
+      stack_ok="0"
+    fi
+    if [[ "${MERIDIAN_PEER_WORKSPACE_ENABLED}" == "1" ]]; then
+      if ! service_healthy "http://127.0.0.1:${MERIDIAN_WORKSPACE_PEER_PORT}/api/healthz" 5; then
+        stack_ok="0"
+      fi
+    fi
+    if ! service_healthy "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" 5; then
+      stack_ok="0"
+    fi
+    if ! pid_file_alive "gateway"; then
+      stack_ok="0"
+    fi
+    if [[ "${MERIDIAN_SUPERVISOR_ENABLE}" == "1" && "${NO_SUPERVISOR}" != "1" ]]; then
+      if ! pid_file_alive "supervisor"; then
+        echo "[dev-up] supervisor failed to remain alive during stabilization" >&2
+        return 1
+      fi
+    fi
+    if [[ "${stack_ok}" == "1" ]]; then
+      if (( stable_deadline == 0 )); then
+        stable_deadline=$((SECONDS + stable_s))
+      fi
+      if (( SECONDS >= stable_deadline )); then
+        return 0
+      fi
+    else
+      stable_deadline=0
+    fi
+    sleep 1
+  done
+  echo "[dev-up] stack failed stabilization window (${stable_s}s within ${timeout_s}s)" >&2
+  return 1
+}
+
 resolve_primary_host_id() {
   local manifest_json host_id
   manifest_json="$(wait_for_json "http://127.0.0.1:${MERIDIAN_WORKSPACE_PORT}/api/federation/manifest" "${MERIDIAN_WORKSPACE_READY_TIMEOUT}")"
@@ -598,12 +653,18 @@ start_gateway_if_needed() {
     )
     local gateway_pid=""
     gateway_pid="$(cat "${PID_DIR}/gateway.pid" 2>/dev/null || true)"
+    local healthy_streak=0
     for _ in $(seq 1 40); do
-      if port_listening "${MERIDIAN_GATEWAY_PORT}"; then
-        return
-      fi
       if [[ -n "${gateway_pid}" ]] && ! kill -0 "${gateway_pid}" >/dev/null 2>&1; then
         break
+      fi
+      if port_listening "${MERIDIAN_GATEWAY_PORT}" && service_healthy "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" 3; then
+        healthy_streak=$((healthy_streak + 1))
+        if (( healthy_streak >= 4 )); then
+          return
+        fi
+      else
+        healthy_streak=0
       fi
       sleep 0.5
     done
@@ -662,6 +723,15 @@ TEMPLATE_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/in
 TREASURY_JSON="$(wait_for_json "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/treasury" "${MERIDIAN_GATEWAY_READY_TIMEOUT}")"
 export STATUS_JSON TEMPLATE_JSON TREASURY_JSON
 start_supervisor_if_needed
+wait_for_stable_stack "${MERIDIAN_GATEWAY_READY_TIMEOUT}" "${MERIDIAN_STACK_STABLE_SECONDS}" || {
+  print_startup_failure "gateway" "${LOG_DIR}/gateway.log"
+  print_startup_failure "workspace" "${LOG_DIR}/workspace.log"
+  print_startup_failure "workspace-peer" "${LOG_DIR}/workspace-peer.log"
+  if [[ -f "${LOG_DIR}/supervisor.log" ]]; then
+    print_startup_failure "supervisor" "${LOG_DIR}/supervisor.log"
+  fi
+  exit 1
+}
 
 if [[ "$QUIET" -eq 0 ]]; then
   python3 - <<'PY'

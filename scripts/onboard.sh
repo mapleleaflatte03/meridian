@@ -26,10 +26,10 @@ set -euo pipefail
 #   MERIDIAN_TEAM_PRESET      team preset                (default: dev_team)
 #   MERIDIAN_IMPORT_DEMO_PACK import demo data           (default: no)
 #   MERIDIAN_ENABLE_GOVERNANCE enable governance gates   (default: yes)
-#   MERIDIAN_BRAIN_ROUTE_TYPE execution route type       (default: cli_session)
-#   MERIDIAN_BRAIN_CLI_BIN    cli provider binary        (default: claude)
-#   MERIDIAN_BRAIN_PROVIDER_PROFILE provider profile     (default: claude_local)
-#   MERIDIAN_BRAIN_MODEL      execution model            (default: empty)
+#   MERIDIAN_BRAIN_ROUTE_TYPE execution route type       (default: http_json)
+#   MERIDIAN_BRAIN_CLI_BIN    cli provider binary        (default: empty)
+#   MERIDIAN_BRAIN_PROVIDER_PROFILE provider profile     (default: manager_primary)
+#   MERIDIAN_BRAIN_MODEL      execution model            (default: grok-4-1-fast-reasoning)
 #   MERIDIAN_BRAIN_AUTH_PROFILE auth profile name        (default: provider profile)
 #   MERIDIAN_BRAIN_CLI_HOME   cli auth home              (default: empty)
 #   MERIDIAN_BRAIN_ENDPOINT   http provider endpoint     (default: empty)
@@ -96,6 +96,27 @@ autodetect_http_execution_route() {
   export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-}"
 }
 
+apply_core_brain_defaults() {
+  local manager_profile="${MERIDIAN_BRAIN_MANAGER_PROFILE_NAME:-manager_primary}"
+  local manager_model="${MERIDIAN_BRAIN_MANAGER_MODEL:-${MERIDIAN_MANAGER_MODEL:-grok-4-1-fast-reasoning}}"
+  local manager_endpoint="${MERIDIAN_BRAIN_MANAGER_ENDPOINT:-${MERIDIAN_MANAGER_XAI_BASE_URL:-}}"
+  local manager_auth_env="${MERIDIAN_BRAIN_MANAGER_AUTH_ENV:-}"
+  local manager_key_env_pool="${MERIDIAN_BRAIN_MANAGER_KEY_ENV_POOL:-}"
+
+  if [[ -z "$manager_auth_env" && -n "${MERIDIAN_MANAGER_XAI_API_KEY_1:-}" ]]; then
+    manager_auth_env="MERIDIAN_MANAGER_XAI_API_KEY_1"
+  fi
+
+  export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-http_json}"
+  export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-$manager_profile}"
+  export MERIDIAN_BRAIN_MODEL="${MERIDIAN_BRAIN_MODEL:-$manager_model}"
+  export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-$MERIDIAN_BRAIN_PROVIDER_PROFILE}"
+  export MERIDIAN_BRAIN_ENDPOINT="${MERIDIAN_BRAIN_ENDPOINT:-$manager_endpoint}"
+  export MERIDIAN_BRAIN_AUTH_ENV="${MERIDIAN_BRAIN_AUTH_ENV:-$manager_auth_env}"
+  export MERIDIAN_BRAIN_KEY_ENV_POOL="${MERIDIAN_BRAIN_KEY_ENV_POOL:-$manager_key_env_pool}"
+  export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-}"
+}
+
 # Parse flags
 prev_arg=""
 for arg in "$@"; do
@@ -125,10 +146,7 @@ if [ "$CORE_MODE" = "1" ]; then
   export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
   export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
   export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
-  export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-cli_session}"
-  export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
-  export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
-  export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+  apply_core_brain_defaults
 fi
 
 # Apply Team defaults (same clean-slate start, governance depth exposed)
@@ -192,10 +210,7 @@ if [ "$CORE_MODE" = "0" ] && [ "$TEAM_MODE" = "0" ] && [ "$NON_INTERACTIVE" = "0
         export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
         export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
         export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
-        export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-cli_session}"
-        export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
-        export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
-        export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+        apply_core_brain_defaults
         break
         ;;
       team|Team|TEAM)
@@ -218,10 +233,7 @@ elif [ "$CORE_MODE" = "0" ] && [ "$TEAM_MODE" = "0" ] && [ "$NON_INTERACTIVE" = 
   export MERIDIAN_INST_PLAN="${MERIDIAN_INST_PLAN:-core}"
   export MERIDIAN_ENABLE_GOVERNANCE="${MERIDIAN_ENABLE_GOVERNANCE:-yes}"
   export MERIDIAN_IMPORT_DEMO_PACK="${MERIDIAN_IMPORT_DEMO_PACK:-no}"
-  export MERIDIAN_BRAIN_ROUTE_TYPE="${MERIDIAN_BRAIN_ROUTE_TYPE:-cli_session}"
-  export MERIDIAN_BRAIN_PROVIDER_PROFILE="${MERIDIAN_BRAIN_PROVIDER_PROFILE:-claude_local}"
-  export MERIDIAN_BRAIN_CLI_BIN="${MERIDIAN_BRAIN_CLI_BIN:-claude}"
-  export MERIDIAN_BRAIN_AUTH_PROFILE="${MERIDIAN_BRAIN_AUTH_PROFILE:-claude_local}"
+  apply_core_brain_defaults
 fi
 
 SELECTED_MODE="${MERIDIAN_MODE:-core}"
@@ -268,11 +280,11 @@ AGENT_ROLE="$(prompt_or_default MERIDIAN_AGENT_ROLE "First agent role label (man
 
 IMPORT_DEMO="$(prompt_or_default MERIDIAN_IMPORT_DEMO_PACK "Import demo data pack? (yes / no)" "no")"
 ENABLE_GOV="$(prompt_or_default MERIDIAN_ENABLE_GOVERNANCE "Enable governance gates? (yes / no)" "yes")"
-BRAIN_ROUTE_TYPE="$(prompt_or_default MERIDIAN_BRAIN_ROUTE_TYPE "Execution route type (cli_session / http_json)" "cli_session")"
-BRAIN_PROVIDER_PROFILE="$(prompt_or_default MERIDIAN_BRAIN_PROVIDER_PROFILE "Execution provider profile" "claude_local")"
-BRAIN_MODEL="$(prompt_or_default MERIDIAN_BRAIN_MODEL "Execution model (blank for provider default)" "")"
+BRAIN_ROUTE_TYPE="$(prompt_or_default MERIDIAN_BRAIN_ROUTE_TYPE "Execution route type (http_json / cli_session)" "http_json")"
+BRAIN_PROVIDER_PROFILE="$(prompt_or_default MERIDIAN_BRAIN_PROVIDER_PROFILE "Execution provider profile" "manager_primary")"
+BRAIN_MODEL="$(prompt_or_default MERIDIAN_BRAIN_MODEL "Execution model (blank for provider default)" "grok-4-1-fast-reasoning")"
 BRAIN_AUTH_PROFILE="$(prompt_or_default MERIDIAN_BRAIN_AUTH_PROFILE "Execution auth profile name" "$BRAIN_PROVIDER_PROFILE")"
-BRAIN_CLI_BIN_DEFAULT="claude"
+BRAIN_CLI_BIN_DEFAULT=""
 if [ "$BRAIN_ROUTE_TYPE" = "http_json" ]; then
   BRAIN_CLI_BIN_DEFAULT=""
 fi
@@ -280,11 +292,15 @@ BRAIN_CLI_BIN="$(prompt_or_default MERIDIAN_BRAIN_CLI_BIN "Execution CLI binary 
 BRAIN_CLI_HOME="$(prompt_or_default MERIDIAN_BRAIN_CLI_HOME "Execution CLI auth home (blank if default session)" "")"
 BRAIN_ENDPOINT_DEFAULT=""
 if [ "$BRAIN_ROUTE_TYPE" = "http_json" ]; then
-  BRAIN_ENDPOINT_DEFAULT="https://example.local/v1/chat/completions"
+  BRAIN_ENDPOINT_DEFAULT="${MERIDIAN_BRAIN_MANAGER_ENDPOINT:-${MERIDIAN_MANAGER_XAI_BASE_URL:-}}"
 fi
 BRAIN_ENDPOINT="$(prompt_or_default MERIDIAN_BRAIN_ENDPOINT "Execution HTTP endpoint (blank if not using http_json)" "$BRAIN_ENDPOINT_DEFAULT")"
-BRAIN_AUTH_ENV="$(prompt_or_default MERIDIAN_BRAIN_AUTH_ENV "Execution auth env var for HTTP route (blank if not using http_json)" "")"
-BRAIN_KEY_ENV_POOL="$(prompt_or_default MERIDIAN_BRAIN_KEY_ENV_POOL "Execution auth env fallback pool (comma-separated, optional)" "")"
+BRAIN_AUTH_ENV_DEFAULT="${MERIDIAN_BRAIN_MANAGER_AUTH_ENV:-}"
+if [ -z "$BRAIN_AUTH_ENV_DEFAULT" ] && [ -n "${MERIDIAN_MANAGER_XAI_API_KEY_1:-}" ]; then
+  BRAIN_AUTH_ENV_DEFAULT="MERIDIAN_MANAGER_XAI_API_KEY_1"
+fi
+BRAIN_AUTH_ENV="$(prompt_or_default MERIDIAN_BRAIN_AUTH_ENV "Execution auth env var for HTTP route (blank if not using http_json)" "$BRAIN_AUTH_ENV_DEFAULT")"
+BRAIN_KEY_ENV_POOL="$(prompt_or_default MERIDIAN_BRAIN_KEY_ENV_POOL "Execution auth env fallback pool (comma-separated, optional)" "${MERIDIAN_BRAIN_MANAGER_KEY_ENV_POOL:-}")"
 
 if [ "$BRAIN_ROUTE_TYPE" != "cli_session" ] && [ "$BRAIN_ROUTE_TYPE" != "http_json" ]; then
   echo "[onboard] Unsupported execution route type: $BRAIN_ROUTE_TYPE" >&2

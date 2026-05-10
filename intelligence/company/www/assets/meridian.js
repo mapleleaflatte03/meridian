@@ -1271,6 +1271,29 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       }
       return;
     }
+    function renderWorkflowExtra(item) {
+      if (!item) {
+        return '';
+      }
+      if (item.workflow_id === 'governed_memory_relay') {
+        return '' +
+          '<p><strong>Fork latest:</strong> ' + escapeHtml(item.fork_latest_status || 'missing') + '</p>' +
+          '<p><strong>Replay latest:</strong> ' + escapeHtml(item.replay_latest_status || 'missing') + '</p>' +
+          '<p><strong>Authority:</strong> ' + escapeHtml(item.replay_authority_status || '-') + '</p>';
+      }
+      if (item.workflow_id === 'provider_runtime_alignment') {
+        return '' +
+          '<p><strong>Selected:</strong> ' + escapeHtml(item.selected_provider || '-') + ' / ' + escapeHtml(item.selected_model || '-') + ' (' + escapeHtml(item.selected_transport || '-') + ')</p>' +
+          '<p><strong>Active route:</strong> ' + escapeHtml(item.active_provider || '-') + ' / ' + escapeHtml(item.active_model || '-') + ' (' + escapeHtml(item.active_transport || '-') + ')</p>' +
+          '<p><strong>Drift:</strong> ' + escapeHtml(Array.isArray(item.drift_fields) ? item.drift_fields.join(', ') : '-') + '</p>';
+      }
+      if (item.workflow_id === 'memory_tag_taxonomy') {
+        return '' +
+          '<p><strong>Tag count:</strong> ' + escapeHtml(item.operator_value) + '</p>' +
+          '<p><strong>Tags:</strong> ' + escapeHtml(Array.isArray(item.tags) && item.tags.length ? item.tags.join(', ') : '(none)') + '</p>';
+      }
+      return '';
+    }
     showcaseGrid.innerHTML = workflows.map(function (item) {
       var hooks = Array.isArray(item.proof_hooks) ? item.proof_hooks.join(', ') : '';
       return '' +
@@ -1278,6 +1301,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
           '<h3>' + escapeHtml(item.title) + '</h3>' +
           '<p><strong>Status:</strong> ' + escapeHtml(item.status) + '</p>' +
           '<p><strong>Signal:</strong> ' + escapeHtml(item.operator_signal) + ' = ' + escapeHtml(item.operator_value) + '</p>' +
+          renderWorkflowExtra(item) +
           '<p><strong>Proof hooks:</strong> ' + escapeHtml(hooks) + '</p>' +
         '</article>';
     }).join('');

@@ -78,11 +78,17 @@ class TestBuildTeamTopologyResponse(unittest.TestCase):
         return patch.object(_tt, "load_team_topology", return_value=topology)
 
     def test_response_shapes_manager_and_specialists(self):
-        with self._patch_loader(self._stub_topology()):
+        with self._patch_loader(self._stub_topology()), patch.object(
+            gateway,
+            "_build_memory_taxonomy_operator_status",
+            return_value={"status": "success", "tag_count": 2, "tags": ["release", "vietnam"]},
+        ):
             result = gateway._build_team_topology_response()
         self.assertEqual(result["status"], "success")
         self.assertEqual(result["org_id"], "org_local_test")
         self.assertEqual(result["specialist_count"], 1)
+        self.assertEqual(result["memory_taxonomy"]["tag_count"], 2)
+        self.assertEqual(result["memory_taxonomy"]["tags"], ["release", "vietnam"])
         self.assertEqual(result["manager"]["name"], "Manager")
         self.assertEqual(result["manager"]["role"], "manager")
         self.assertEqual(result["manager"]["dispatchable"], False)
@@ -99,7 +105,11 @@ class TestBuildTeamTopologyResponse(unittest.TestCase):
         # that points at the secret. Even though it is not the secret
         # itself, leaking the name leaks deployment shape and can guide
         # an attacker.
-        with self._patch_loader(self._stub_topology()):
+        with self._patch_loader(self._stub_topology()), patch.object(
+            gateway,
+            "_build_memory_taxonomy_operator_status",
+            return_value={"status": "success", "tag_count": 1, "tags": ["release"]},
+        ):
             result = gateway._build_team_topology_response()
         for agent in [result["manager"], *result["specialists"]]:
             self.assertNotIn("api_key_env_var", agent)

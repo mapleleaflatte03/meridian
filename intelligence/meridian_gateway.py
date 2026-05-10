@@ -2289,6 +2289,9 @@ def _build_meridian_operator_truth_packet() -> dict[str, Any]:
     cases = dict(status_payload.get("cases") or {})
     execution_gate = dict(payouts_payload.get("execution_gate") or {})
     phase_machine = dict(payouts_payload.get("phase_machine") or {})
+    governed_memory = dict(status_payload.get("governed_memory") or {})
+    memory_taxonomy = dict(status_payload.get("memory_taxonomy") or {})
+    provider_runtime = dict(status_payload.get("provider_runtime") or proof_payload.get("provider_runtime") or {})
     return {
         "runtime_id": str(status_payload.get("runtime_id") or proof_payload.get("runtime_id") or "").strip(),
         "org_id": str(context.get("bound_org_id") or LOOM_ORG_ID).strip(),
@@ -2305,6 +2308,9 @@ def _build_meridian_operator_truth_packet() -> dict[str, Any]:
         "payout_execution_gate_reason": str(execution_gate.get("reason") or "").strip(),
         "sentinel_restricted": _worker_is_restricted("SENTINEL"),
         "telegram_delivery": _recent_telegram_delivery_summary(),
+        "governed_memory": governed_memory,
+        "memory_taxonomy": memory_taxonomy,
+        "provider_runtime": provider_runtime,
     }
 
 
@@ -2414,6 +2420,9 @@ def _build_workflow_showcase_snapshot() -> dict[str, Any]:
     cases = dict(status_payload.get("cases") or {})
     alert_queue = dict(status_payload.get("alert_queue") or {})
     status_treasury = dict(status_payload.get("treasury") or {})
+    governed_memory = dict(status_payload.get("governed_memory") or {})
+    memory_taxonomy = dict(status_payload.get("memory_taxonomy") or {})
+    provider_runtime = dict(status_payload.get("provider_runtime") or {})
     execution_gate = dict(payouts_payload.get("execution_gate") or {})
     phase_machine = dict(payouts_payload.get("phase_machine") or {})
     proposals = list(payouts_payload.get("proposals") or [])
@@ -2470,6 +2479,9 @@ def _build_workflow_showcase_snapshot() -> dict[str, Any]:
             "operator_signal": "open_cases",
             "operator_value": int(cases.get("open") or 0),
         },
+        _governed_memory_workflow_card(governed_memory),
+        _memory_taxonomy_workflow_card(memory_taxonomy),
+        _provider_runtime_workflow_card(provider_runtime),
     ]
 
     return {
@@ -6069,12 +6081,49 @@ def _run_loom_memory_command(args: list[str]) -> dict[str, Any]:
     return {"ok": True, "payload": parsed}
 
 
+def _run_loom_memory_json_command(
+    args: list[str],
+    *,
+    extra_args: list[str] | None = None,
+) -> dict[str, Any]:
+    command = _loom_cli_prefix() + [
+        LOOM_BIN,
+        "memory",
+        *args,
+        *(extra_args or []),
+        "--root",
+        LOOM_ROOT,
+        "--format",
+        "json",
+    ]
+    try:
+        completed = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=False,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": f"{exc.__class__.__name__}: {exc}"}
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "loom memory command failed").strip()
+        return {"ok": False, "error": detail}
+    parsed = _extract_json_value((completed.stdout or "").strip())
+    return {"ok": True, "payload": parsed}
+
+
 # ── Memory search (Origin-protected) ──────────────────────────────────────
 # Bridges core.sh memory recall depth into the operator web surface.
 
 MEMORY_SEARCH_API_DEFAULT_LIMIT = 20
 MEMORY_SEARCH_API_MAX_LIMIT = 100
 MEMORY_SEARCH_API_CONTENT_PREVIEW_CHARS = 240
+
+MEMORY_RECEIPTS_API_DEFAULT_LIMIT = 20
+MEMORY_RECEIPTS_API_MAX_LIMIT = 100
+MEMORY_GRAPH_API_DEFAULT_LIMIT = 10
+MEMORY_GRAPH_API_MAX_LIMIT = 100
 
 
 def _build_memory_search_response(
@@ -6084,9 +6133,11 @@ def _build_memory_search_response(
     all_agents: bool,
     category: str | None,
     key_prefix: str | None,
+    tags: list[str] | None,
     limit: int,
     include_content: bool,
 ) -> dict[str, Any]:
+    tag_filter = [str(item).strip() for item in (tags or []) if str(item).strip()]
     args: list[str] = ["search"]
     if all_agents:
         args.append("--all-agents")
@@ -6104,6 +6155,8 @@ def _build_memory_search_response(
         args.extend(["--key-prefix", key_prefix])
     if query:
         args.extend(["--text", query])
+    for tag in tag_filter:
+        args.extend(["--tag", tag])
     args.extend(["--limit", str(int(limit))])
 
     result = _run_loom_memory_command(args)
@@ -6125,6 +6178,7 @@ def _build_memory_search_response(
             "key": str(e.get("key") or ""),
             "updated_at": int(e.get("updated_at") or 0),
             "created_at": int(e.get("created_at") or 0),
+            "tags": [str(tag).strip() for tag in (e.get("tags") or []) if str(tag).strip()],
         }
         if include_content:
             content = str(e.get("content") or "")
@@ -6142,11 +6196,526 @@ def _build_memory_search_response(
         "agent_id": None if all_agents else agent_id,
         "category": category or None,
         "key_prefix": key_prefix or None,
+        "tag_filter": tag_filter,
         "limit": int(limit),
         "include_content": bool(include_content),
         "match_count": len(matches),
         "matches": matches,
     }
+
+
+def _memory_preview(text: Any, limit: int = MEMORY_SEARCH_API_CONTENT_PREVIEW_CHARS) -> tuple[str, bool]:
+    raw = str(text or "")
+    if len(raw) > limit:
+        return raw[:limit] + "…", True
+    return raw, False
+
+
+def _build_memory_receipts_response(
+    *,
+    agent_id: str | None,
+    limit: int,
+) -> dict[str, Any]:
+    args: list[str] = ["receipts", "--limit", str(int(limit))]
+    if agent_id:
+        args.extend(["--agent-id", agent_id])
+    result = _run_loom_memory_command(args)
+    if not result.get("ok"):
+        return {
+            "status": "error",
+            "output": str(result.get("error") or "memory_receipts_failed"),
+            "receipts": [],
+        }
+    raw = result.get("payload")
+    records = raw if isinstance(raw, list) else []
+    receipts: list[dict[str, Any]] = []
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        input_summary, input_truncated = _memory_preview(record.get("input_summary"))
+        output_summary, output_truncated = _memory_preview(record.get("output_summary"))
+        receipts.append(
+            {
+                "timestamp_unix_ms": int(record.get("timestamp_unix_ms") or 0),
+                "operation": str(record.get("operation") or ""),
+                "agent_id": str(record.get("agent_id") or ""),
+                "kind": str(record.get("kind") or ""),
+                "receipt_hash": str(record.get("receipt_hash") or ""),
+                "input_summary": input_summary,
+                "input_summary_truncated": input_truncated,
+                "output_summary": output_summary,
+                "output_summary_truncated": output_truncated,
+                "is_error": bool(record.get("is_error")),
+            }
+        )
+    return {
+        "status": "success",
+        "agent_id": agent_id or None,
+        "limit": int(limit),
+        "receipt_count": len(receipts),
+        "receipts": receipts,
+    }
+
+
+def _build_memory_graph_response(
+    *,
+    source_ref: str,
+    focus_node_id: str | None,
+    direction: str,
+    limit: int,
+) -> dict[str, Any]:
+    normalized_source = str(source_ref or "").strip()
+    if not normalized_source:
+        return {
+            "status": "error",
+            "output": "memory_graph_requires_source_ref",
+        }
+    args: list[str] = [
+        "graph",
+        "inspect",
+        normalized_source,
+        "--direction",
+        str(direction or "both").strip() or "both",
+        "--limit",
+        str(int(limit)),
+    ]
+    if focus_node_id:
+        args.extend(["--node-id", focus_node_id])
+    result = _run_loom_memory_command(args)
+    if not result.get("ok"):
+        return {
+            "status": "error",
+            "output": str(result.get("error") or "memory_graph_failed"),
+        }
+    payload = result.get("payload") or {}
+    if not isinstance(payload, dict):
+        return {
+            "status": "error",
+            "output": "memory_graph_unexpected_payload_shape",
+        }
+    return {
+        "status": "success",
+        "source_ref": str(payload.get("source_ref") or normalized_source),
+        "graph_status": str(payload.get("status") or "memory_graph_inspect"),
+        "total_nodes": int(payload.get("total_nodes") or 0),
+        "focus_node": payload.get("focus_node"),
+        "ancestor_nodes": payload.get("ancestor_nodes") or [],
+        "descendant_nodes": payload.get("descendant_nodes") or [],
+        "direction": str(payload.get("direction") or direction or "both"),
+        "limit": int(payload.get("limit") or int(limit)),
+        "note": str(payload.get("note") or ""),
+    }
+
+
+def _build_memory_fork_response(
+    *,
+    source_ref: str,
+    target_agent_id: str,
+    branch: str | None,
+    focus_node_id: str | None,
+    direction: str,
+    limit: int,
+) -> dict[str, Any]:
+    normalized_source = str(source_ref or "").strip()
+    normalized_target = str(target_agent_id or "").strip()
+    if not normalized_source:
+        return {"status": "error", "output": "memory_fork_requires_source_ref"}
+    if not normalized_target:
+        return {"status": "error", "output": "memory_fork_requires_target_agent_id"}
+    args: list[str] = [
+        "fork",
+        normalized_source,
+        "--target-agent-id",
+        normalized_target,
+        "--direction",
+        str(direction or "both").strip() or "both",
+        "--limit",
+        str(int(limit)),
+    ]
+    if branch:
+        args.extend(["--branch", str(branch).strip()])
+    if focus_node_id:
+        args.extend(["--node-id", focus_node_id])
+    result = _run_loom_memory_json_command(args)
+    if not result.get("ok"):
+        return {"status": "error", "output": str(result.get("error") or "memory_fork_failed")}
+    payload = result.get("payload") or {}
+    if not isinstance(payload, dict):
+        return {"status": "error", "output": "memory_fork_unexpected_payload_shape"}
+    return dict(payload)
+
+
+def _build_memory_replay_response(
+    *,
+    source_ref: str,
+    target_agent_id: str,
+    org_id: str,
+    focus_node_id: str | None,
+    direction: str,
+    limit: int,
+) -> dict[str, Any]:
+    normalized_source = str(source_ref or "").strip()
+    normalized_target = str(target_agent_id or "").strip()
+    normalized_org_id = str(org_id or "").strip() or LOOM_ORG_ID
+    if not normalized_source:
+        return {"status": "error", "output": "memory_replay_requires_source_ref"}
+    if not normalized_target:
+        return {"status": "error", "output": "memory_replay_requires_target_agent_id"}
+    args: list[str] = [
+        "replay",
+        normalized_source,
+        "--target-agent-id",
+        normalized_target,
+        "--direction",
+        str(direction or "both").strip() or "both",
+        "--limit",
+        str(int(limit)),
+    ]
+    if focus_node_id:
+        args.extend(["--node-id", focus_node_id])
+    result = _run_loom_memory_json_command(
+        args,
+        extra_args=["--kernel-path", str(KERNEL_DIR), "--org-id", normalized_org_id],
+    )
+    if not result.get("ok"):
+        return {"status": "error", "output": str(result.get("error") or "memory_replay_failed")}
+    payload = result.get("payload") or {}
+    if not isinstance(payload, dict):
+        return {"status": "error", "output": "memory_replay_unexpected_payload_shape"}
+    return dict(payload)
+
+
+def _build_memory_latest_artifact_response(kind: str) -> dict[str, Any]:
+    normalized_kind = str(kind or "").strip().lower()
+    if normalized_kind not in {"fork", "replay"}:
+        return {"status": "error", "output": "memory_latest_artifact_requires_supported_kind"}
+    artifact_path = Path(LOOM_ROOT) / "artifacts" / "memory" / f"{normalized_kind}s" / "latest.json"
+    if not artifact_path.exists():
+        return {
+            "status": "success",
+            "kind": normalized_kind,
+            "artifact_present": False,
+            "artifact_path": str(artifact_path),
+            "artifact": None,
+        }
+    try:
+        payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            "status": "error",
+            "output": f"memory_latest_artifact_read_failed: {exc}",
+            "kind": normalized_kind,
+            "artifact_present": False,
+            "artifact_path": str(artifact_path),
+        }
+    if not isinstance(payload, dict):
+        return {
+            "status": "error",
+            "output": "memory_latest_artifact_unexpected_payload_shape",
+            "kind": normalized_kind,
+            "artifact_present": False,
+            "artifact_path": str(artifact_path),
+        }
+    return {
+        "status": "success",
+        "kind": normalized_kind,
+        "artifact_present": True,
+        "artifact_path": str(artifact_path),
+        "artifact": payload,
+    }
+
+
+def _build_memory_artifact_history_response(kind: str, limit: int) -> dict[str, Any]:
+    normalized_kind = str(kind or "").strip().lower()
+    if normalized_kind not in {"fork", "replay"}:
+        return {"status": "error", "output": "memory_artifact_history_requires_supported_kind"}
+    artifact_dir = Path(LOOM_ROOT) / "artifacts" / "memory" / f"{normalized_kind}s"
+    records: list[dict[str, Any]] = []
+    if artifact_dir.is_dir():
+        paths = sorted(
+            [
+                path
+                for path in artifact_dir.glob("*.json")
+                if path.name != "latest.json"
+            ],
+            key=lambda path: path.stat().st_mtime,
+            reverse=True,
+        )
+        for path in paths[: max(1, int(limit))]:
+            try:
+                payload = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if not isinstance(payload, dict):
+                continue
+            item: dict[str, Any] = {
+                "artifact_path": str(path),
+                "timestamp_unix_ms": int(path.stat().st_mtime * 1000),
+                "status": str(payload.get("status") or "unknown"),
+                "source_ref": str(payload.get("source_ref") or ""),
+                "target_agent_id": str(payload.get("target_agent_id") or ""),
+                "latest_artifact_path": str(payload.get("latest_artifact_path") or ""),
+                "note": str(payload.get("note") or ""),
+            }
+            if normalized_kind == "fork":
+                item["branch"] = str(payload.get("branch") or "")
+                item["selected_entries"] = int(payload.get("selected_entries") or 0)
+                item["forked_entries"] = int(payload.get("forked_entries") or 0)
+            else:
+                item["court_status"] = str(payload.get("court_status") or "unknown")
+                item["authority_status"] = str(payload.get("authority_status") or "unknown")
+                item["replayed_entries"] = int(payload.get("replayed_entries") or 0)
+            records.append(item)
+    return {
+        "status": "success",
+        "kind": normalized_kind,
+        "artifact_dir": str(artifact_dir),
+        "limit": max(1, int(limit)),
+        "artifact_count": len(records),
+        "artifacts": records,
+    }
+
+
+def _build_memory_governance_summary_response(limit: int) -> dict[str, Any]:
+    normalized_limit = max(1, int(limit))
+    fork_latest = _build_memory_latest_artifact_response("fork")
+    replay_latest = _build_memory_latest_artifact_response("replay")
+    fork_history = _build_memory_artifact_history_response("fork", normalized_limit)
+    replay_history = _build_memory_artifact_history_response("replay", normalized_limit)
+    return {
+        "status": "success",
+        "limit": normalized_limit,
+        "fork_latest_present": bool(fork_latest.get("artifact_present")),
+        "fork_latest_status": str(((fork_latest.get("artifact") or {}) if isinstance(fork_latest.get("artifact"), dict) else {}).get("status") or "missing"),
+        "fork_recent_count": int(fork_history.get("artifact_count") or 0),
+        "fork_target_agent_id": str(((fork_latest.get("artifact") or {}) if isinstance(fork_latest.get("artifact"), dict) else {}).get("target_agent_id") or ""),
+        "replay_latest_present": bool(replay_latest.get("artifact_present")),
+        "replay_latest_status": str(((replay_latest.get("artifact") or {}) if isinstance(replay_latest.get("artifact"), dict) else {}).get("status") or "missing"),
+        "replay_recent_count": int(replay_history.get("artifact_count") or 0),
+        "replay_target_agent_id": str(((replay_latest.get("artifact") or {}) if isinstance(replay_latest.get("artifact"), dict) else {}).get("target_agent_id") or ""),
+        "replay_authority_status": str(((replay_latest.get("artifact") or {}) if isinstance(replay_latest.get("artifact"), dict) else {}).get("authority_status") or ""),
+    }
+
+
+def _build_governed_memory_operator_status(limit: int = 5) -> dict[str, Any]:
+    """Compact governed-memory summary for broad operator surfaces.
+
+    Keep /api/status and operator packets content-safe: only statuses,
+    counts, and refs needed for runtime supervision are surfaced here.
+    Full history and artifacts remain on Origin-protected /api/memory/*
+    routes.
+    """
+    payload = _build_memory_governance_summary_response(limit)
+    if str(payload.get("status") or "").strip() != "success":
+        return {
+            "status": "degraded",
+            "fork_latest_status": "missing",
+            "fork_recent_count": 0,
+            "fork_target_agent_id": "",
+            "replay_latest_status": "missing",
+            "replay_recent_count": 0,
+            "replay_target_agent_id": "",
+            "replay_authority_status": "",
+            "output": str(payload.get("output") or "memory_governance_unavailable"),
+        }
+    return {
+        "status": "success",
+        "fork_latest_status": str(payload.get("fork_latest_status") or "missing"),
+        "fork_recent_count": int(payload.get("fork_recent_count") or 0),
+        "fork_target_agent_id": str(payload.get("fork_target_agent_id") or "").strip(),
+        "replay_latest_status": str(payload.get("replay_latest_status") or "missing"),
+        "replay_recent_count": int(payload.get("replay_recent_count") or 0),
+        "replay_target_agent_id": str(payload.get("replay_target_agent_id") or "").strip(),
+        "replay_authority_status": str(payload.get("replay_authority_status") or "").strip(),
+    }
+
+
+def _attach_governed_memory_status(payload: dict[str, Any], *, limit: int = 5) -> dict[str, Any]:
+    enriched = dict(payload or {})
+    enriched["governed_memory"] = _build_governed_memory_operator_status(limit=limit)
+    return enriched
+
+
+def _build_memory_taxonomy_operator_status(limit: int = 8) -> dict[str, Any]:
+    overview = _build_memory_overview_response(include_agents=False)
+    tags = [str(tag).strip() for tag in (overview.get("tags") or []) if str(tag).strip()]
+    normalized_limit = max(1, int(limit))
+    return {
+        "status": str(overview.get("status") or "unknown"),
+        "tag_count": int(overview.get("tag_count") or len(tags)),
+        "tags": tags[:normalized_limit],
+    }
+
+
+def _attach_memory_taxonomy_status(payload: dict[str, Any], *, limit: int = 8) -> dict[str, Any]:
+    enriched = dict(payload or {})
+    enriched["memory_taxonomy"] = _build_memory_taxonomy_operator_status(limit=limit)
+    return enriched
+
+
+def _build_provider_runtime_operator_status(model_hint: str = "") -> dict[str, Any]:
+    runtime_env = dict(os.environ)
+    runtime_env.setdefault("MERIDIAN_ORG_ID", LOOM_ORG_ID)
+    runtime_env.setdefault("MERIDIAN_WORKSPACE_ORG_ID", LOOM_ORG_ID)
+    try:
+        status = brain_router.manager_policy_status(runtime_env=runtime_env, model_hint=model_hint)
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "degraded",
+            "source": "unknown",
+            "override_active": False,
+            "override_fields": [],
+            "output": f"provider_runtime_unavailable: {exc.__class__.__name__}: {exc}",
+        }
+
+    selected_plan = dict(status.get("selected_plan") or {})
+    active_route = dict(status.get("active_route") or {})
+    route_alignment = dict(status.get("route_alignment") or {})
+    return {
+        "status": str(status.get("status") or "unknown"),
+        "source": str(status.get("source") or selected_plan.get("source") or "unknown"),
+        "override_active": bool(status.get("override_active")),
+        "override_fields": list(status.get("override_fields") or []),
+        "selected_plan": {
+            "provider_profile": str(selected_plan.get("provider_profile") or "").strip(),
+            "provider_ref": str(selected_plan.get("provider_ref") or "").strip(),
+            "model": str(selected_plan.get("model") or "").strip(),
+            "transport_kind": str(selected_plan.get("transport_kind") or "").strip(),
+            "auth_mode": str(selected_plan.get("auth_mode") or "").strip(),
+            "auth_profile": str(selected_plan.get("auth_profile") or "").strip(),
+            "route_id": str(selected_plan.get("route_id") or "").strip(),
+            "endpoint": str(selected_plan.get("endpoint") or "").strip(),
+            "cli_bin": str(selected_plan.get("cli_bin") or "").strip(),
+        },
+        "active_route": {
+            "provider_ref": str(active_route.get("provider_ref") or active_route.get("provider_profile") or "").strip(),
+            "model": str(active_route.get("model") or "").strip(),
+            "route_type": str(active_route.get("route_type") or "").strip(),
+            "route_id": str(active_route.get("route_id") or "").strip(),
+            "endpoint": str(active_route.get("endpoint") or "").strip(),
+            "cli_bin": str(active_route.get("cli_bin") or "").strip(),
+        },
+        "route_alignment": {
+            "matches_policy_route": bool(route_alignment.get("matches_policy_route", False)),
+            "drift_fields": list(route_alignment.get("drift_fields") or []),
+        },
+    }
+
+
+def _attach_provider_runtime_status(payload: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(payload or {})
+    enriched["provider_runtime"] = _build_provider_runtime_operator_status()
+    return enriched
+
+
+def _governed_memory_workflow_card(governed_memory: dict[str, Any] | None) -> dict[str, Any]:
+    governed_memory = dict(governed_memory or {})
+    return {
+        "workflow_id": "governed_memory_relay",
+        "title": "Governed Memory Relay",
+        "status": (
+            "live"
+            if str(governed_memory.get("replay_latest_status") or "").strip() == "memory_replay_applied"
+            else "live_with_authority_gate"
+            if int(governed_memory.get("fork_recent_count") or 0) > 0
+            or int(governed_memory.get("replay_recent_count") or 0) > 0
+            else "ready"
+        ),
+        "pricing_hint_usd": 0.25,
+        "proof_hooks": ["fork_artifacts", "replay_artifacts", "authority_gate"],
+        "operator_signal": "recent_governed_memory_actions",
+        "operator_value": int(governed_memory.get("fork_recent_count") or 0)
+        + int(governed_memory.get("replay_recent_count") or 0),
+        "fork_latest_status": str(governed_memory.get("fork_latest_status") or "missing"),
+        "replay_latest_status": str(governed_memory.get("replay_latest_status") or "missing"),
+        "replay_authority_status": str(governed_memory.get("replay_authority_status") or "").strip(),
+    }
+
+
+def _memory_taxonomy_workflow_card(memory_taxonomy: dict[str, Any] | None) -> dict[str, Any]:
+    memory_taxonomy = dict(memory_taxonomy or {})
+    tags = [str(tag).strip() for tag in (memory_taxonomy.get("tags") or []) if str(tag).strip()]
+    return {
+        "workflow_id": "memory_tag_taxonomy",
+        "title": "Memory Tag Taxonomy",
+        "status": "live" if int(memory_taxonomy.get("tag_count") or 0) > 0 else "ready",
+        "pricing_hint_usd": 0.0,
+        "proof_hooks": ["memory_overview", "tag_taxonomy"],
+        "operator_signal": "memory_tag_count",
+        "operator_value": int(memory_taxonomy.get("tag_count") or 0),
+        "tags": tags,
+    }
+
+
+def _provider_runtime_workflow_card(provider_runtime: dict[str, Any] | None) -> dict[str, Any]:
+    provider_runtime = dict(provider_runtime or {})
+    route_alignment = dict(provider_runtime.get("route_alignment") or {})
+    drift_fields = list(route_alignment.get("drift_fields") or [])
+    override_fields = list(provider_runtime.get("override_fields") or [])
+    selected_plan = dict(provider_runtime.get("selected_plan") or {})
+    active_route = dict(provider_runtime.get("active_route") or {})
+    return {
+        "workflow_id": "provider_runtime_alignment",
+        "title": "Provider Runtime Alignment",
+        "status": (
+            "drift_detected"
+            if drift_fields
+            else "override_active"
+            if provider_runtime.get("override_active")
+            else "aligned"
+        ),
+        "pricing_hint_usd": 0.0,
+        "proof_hooks": ["provider_plane", "runtime_resolution", "route_alignment"],
+        "operator_signal": "route_drift_fields",
+        "operator_value": len(drift_fields),
+        "source": str(provider_runtime.get("source") or "unknown"),
+        "override_active": bool(provider_runtime.get("override_active")),
+        "override_fields": override_fields,
+        "drift_fields": drift_fields,
+        "selected_provider": str(selected_plan.get("provider_profile") or selected_plan.get("provider_ref") or "").strip(),
+        "selected_model": str(selected_plan.get("model") or "").strip(),
+        "selected_transport": str(selected_plan.get("transport_kind") or "").strip(),
+        "active_provider": str(active_route.get("provider_ref") or "").strip(),
+        "active_model": str(active_route.get("model") or "").strip(),
+        "active_transport": str(active_route.get("route_type") or "").strip(),
+    }
+
+
+def _attach_governed_memory_workflow(snapshot: dict[str, Any]) -> dict[str, Any]:
+    enriched = dict(snapshot or {})
+    workflows = list(enriched.get("workflows") or [])
+    status_payload = _workspace_status_snapshot_cached()
+    governed_memory = {}
+    memory_taxonomy = {}
+    provider_runtime = {}
+    if isinstance(status_payload, dict) and status_payload.get("ok"):
+        governed_memory = dict((status_payload.get("payload") or {}).get("governed_memory") or {})
+        memory_taxonomy = dict((status_payload.get("payload") or {}).get("memory_taxonomy") or {})
+        provider_runtime = dict((status_payload.get("payload") or {}).get("provider_runtime") or {})
+    card = _governed_memory_workflow_card(governed_memory)
+    memory_taxonomy_card = _memory_taxonomy_workflow_card(memory_taxonomy)
+    provider_card = _provider_runtime_workflow_card(provider_runtime)
+    replaced = False
+    taxonomy_replaced = False
+    provider_replaced = False
+    for idx, item in enumerate(workflows):
+        if isinstance(item, dict) and str(item.get("workflow_id") or "").strip() == "governed_memory_relay":
+            workflows[idx] = card
+            replaced = True
+        if isinstance(item, dict) and str(item.get("workflow_id") or "").strip() == "memory_tag_taxonomy":
+            workflows[idx] = memory_taxonomy_card
+            taxonomy_replaced = True
+        if isinstance(item, dict) and str(item.get("workflow_id") or "").strip() == "provider_runtime_alignment":
+            workflows[idx] = provider_card
+            provider_replaced = True
+    if not replaced:
+        workflows.append(card)
+    if not taxonomy_replaced:
+        workflows.append(memory_taxonomy_card)
+    if not provider_replaced:
+        workflows.append(provider_card)
+    enriched["workflows"] = workflows
+    return enriched
 
 
 # ── Public-read allowlist (Origin gate fallback) ──────────────────────────
@@ -6180,30 +6749,13 @@ PUBLIC_READ_ROUTES_EXACT = frozenset(
 )
 
 
-def is_public_read_route(request_path: str) -> bool:
-    """Pure function form of the public-read allowlist used by the gateway.
-
-    Centralized here so tests can verify which routes are publicly readable
-    vs Origin-protected, including the explicit invariant that memory
-    routes (/api/memory/*) are never public.
-    """
-    normalized = str(request_path or "").strip()
-    if normalized in PUBLIC_READ_ROUTES_EXACT:
-        return True
-    if normalized.startswith("/api/channels/") and normalized.endswith("/diagnostics"):
-        return True
-    if normalized.startswith("/api/channels/") and normalized.endswith("/proof"):
-        return True
-    return False
-
-
 def _build_team_topology_response() -> dict[str, Any]:
     """Sanitized snapshot of the active Team topology for operator dashboards.
 
-    Pulls from team_topology.load_team_topology(), strips api_key_env_var
-    (no secret hints leak), and shapes the response so UI consumers get a
-    stable schema. Falls back to a structured error payload rather than
-    raising. Origin-protected — Team plane state is not for public read.
+    Pulls from team_topology.load_team_topology(), strips
+    api_key_env_var (no secret hints leak), and shapes the response so
+    UI consumers get a stable schema. Falls back to a structured error
+    payload rather than raising.
     """
     try:
         from company.meridian_platform import team_topology as _tt
@@ -6221,8 +6773,6 @@ def _build_team_topology_response() -> dict[str, Any]:
         }
 
     def _agent_summary(agent: Any) -> dict[str, Any]:
-        # Deliberately omit api_key_env_var — leaking the env var name
-        # leaks deployment shape and can guide an attacker.
         return {
             "env_key": getattr(agent, "env_key", ""),
             "registry_id": getattr(agent, "registry_id", ""),
@@ -6243,13 +6793,237 @@ def _build_team_topology_response() -> dict[str, Any]:
 
     manager_summary = _agent_summary(topology.manager)
     specialists = [_agent_summary(a) for a in (topology.specialists or ())]
+    team_agent_ids = {
+        str(manager_summary.get("registry_id") or "").strip(),
+        str(manager_summary.get("handle") or "").strip(),
+        *(str(item.get("registry_id") or "").strip() for item in specialists),
+        *(str(item.get("handle") or "").strip() for item in specialists),
+    }
+    team_agent_ids = {item for item in team_agent_ids if item}
+    governed_memory = _build_memory_governance_summary_response(10)
+    memory_taxonomy = _build_memory_taxonomy_operator_status()
+    provider_runtime = _build_provider_runtime_operator_status()
+    fork_history = _build_memory_artifact_history_response("fork", 10)
+    replay_history = _build_memory_artifact_history_response("replay", 10)
+
+    def _matches_agent(entry: dict[str, Any], agent_ref: str) -> bool:
+        ref = str(agent_ref or "").strip()
+        if not ref:
+            return False
+        return ref in {
+            str(entry.get("target_agent_id") or "").strip(),
+            str(entry.get("source_ref") or "").strip(),
+        }
+
+    def _agent_governed_memory(agent_summary: dict[str, Any]) -> dict[str, Any]:
+        refs = {
+            str(agent_summary.get("registry_id") or "").strip(),
+            str(agent_summary.get("handle") or "").strip(),
+        }
+        refs = {ref for ref in refs if ref}
+        fork_hits = [
+            item for item in (fork_history.get("artifacts") or [])
+            if isinstance(item, dict) and any(_matches_agent(item, ref) for ref in refs)
+        ]
+        replay_hits = [
+            item for item in (replay_history.get("artifacts") or [])
+            if isinstance(item, dict) and any(_matches_agent(item, ref) for ref in refs)
+        ]
+        latest_fork = fork_hits[0] if fork_hits else {}
+        latest_replay = replay_hits[0] if replay_hits else {}
+        return {
+            "fork_recent_count": len(fork_hits),
+            "replay_recent_count": len(replay_hits),
+            "fork_latest_status": str(latest_fork.get("status") or "missing"),
+            "replay_latest_status": str(latest_replay.get("status") or "missing"),
+            "replay_authority_status": str(latest_replay.get("authority_status") or "").strip(),
+        }
+
+    manager_summary["governed_memory"] = _agent_governed_memory(manager_summary)
+    for item in specialists:
+        item["governed_memory"] = _agent_governed_memory(item)
     return {
         "status": "success",
-        "org_id": getattr(topology, "org_id", ""),
+        "org_id": topology.org_id,
         "manager": manager_summary,
         "specialists": specialists,
         "specialist_count": len(specialists),
+        "provider_runtime": {
+            "status": str(provider_runtime.get("status") or "unknown"),
+            "source": str(provider_runtime.get("source") or "unknown"),
+            "override_active": bool(provider_runtime.get("override_active")),
+            "override_fields": list(provider_runtime.get("override_fields") or []),
+            "selected_plan": dict(provider_runtime.get("selected_plan") or {}),
+            "active_route": dict(provider_runtime.get("active_route") or {}),
+            "route_alignment": dict(provider_runtime.get("route_alignment") or {}),
+        },
+        "governed_memory": {
+            "status": str(governed_memory.get("status") or "unknown"),
+            "team_agent_ref_count": len(team_agent_ids),
+            "fork_latest_status": str(governed_memory.get("fork_latest_status") or "missing"),
+            "fork_recent_count": int(governed_memory.get("fork_recent_count") or 0),
+            "fork_target_agent_id": str(governed_memory.get("fork_target_agent_id") or "").strip(),
+            "replay_latest_status": str(governed_memory.get("replay_latest_status") or "missing"),
+            "replay_recent_count": int(governed_memory.get("replay_recent_count") or 0),
+            "replay_target_agent_id": str(governed_memory.get("replay_target_agent_id") or "").strip(),
+            "replay_authority_status": str(governed_memory.get("replay_authority_status") or "").strip(),
+        },
+        "memory_taxonomy": {
+            "status": str(memory_taxonomy.get("status") or "unknown"),
+            "tag_count": int(memory_taxonomy.get("tag_count") or 0),
+            "tags": [str(tag).strip() for tag in (memory_taxonomy.get("tags") or []) if str(tag).strip()],
+        },
     }
+
+
+def _build_team_governed_memory_response(limit: int = 10) -> dict[str, Any]:
+    """Compact team-governed-memory operator summary grouped by agent."""
+    topology = _build_team_topology_response()
+    if str(topology.get("status") or "").strip() != "success":
+        return {
+            "status": "error",
+            "output": str(topology.get("output") or "team_governed_memory_topology_unavailable"),
+            "agents": [],
+        }
+
+    agents = [dict(topology.get("manager") or {})] + [
+        dict(item) for item in (topology.get("specialists") or []) if isinstance(item, dict)
+    ]
+    normalized_limit = max(1, int(limit))
+    fork_history = _build_memory_artifact_history_response("fork", normalized_limit)
+    replay_history = _build_memory_artifact_history_response("replay", normalized_limit)
+    agent_ref_map: dict[str, dict[str, Any]] = {}
+    agent_recent_counts: dict[str, int] = {}
+    for item in agents:
+        registry_id = str(item.get("registry_id") or "").strip()
+        handle = str(item.get("handle") or "").strip()
+        refs = {
+            registry_id.lower(),
+            handle.lower(),
+        }
+        for ref in refs:
+            if ref:
+                agent_ref_map[ref] = item
+        if registry_id:
+            agent_recent_counts[registry_id] = 0
+
+    recent_actions: list[dict[str, Any]] = []
+
+    def _collect_recent_actions(kind: str, payload: dict[str, Any]) -> None:
+        if str(payload.get("status") or "").strip() != "success":
+            return
+        for artifact in payload.get("artifacts") or []:
+            if not isinstance(artifact, dict):
+                continue
+            source_ref = str(artifact.get("source_ref") or "").strip()
+            target_agent_id = str(artifact.get("target_agent_id") or "").strip()
+            matched_agent = (
+                agent_ref_map.get(target_agent_id.lower())
+                or agent_ref_map.get(source_ref.lower())
+            )
+            if not matched_agent:
+                continue
+            matched_registry_id = str(matched_agent.get("registry_id") or "").strip()
+            if matched_registry_id:
+                agent_recent_counts[matched_registry_id] = agent_recent_counts.get(matched_registry_id, 0) + 1
+            recent_actions.append(
+                {
+                    "kind": kind,
+                    "registry_id": matched_registry_id,
+                    "handle": str(matched_agent.get("handle") or "").strip(),
+                    "name": str(matched_agent.get("name") or "").strip(),
+                    "role": str(matched_agent.get("role") or "").strip(),
+                    "status": str(artifact.get("status") or "unknown").strip(),
+                    "source_ref": source_ref,
+                    "target_agent_id": target_agent_id,
+                    "timestamp_unix_ms": int(artifact.get("timestamp_unix_ms") or 0),
+                    "authority_status": str(artifact.get("authority_status") or "").strip(),
+                    "court_status": str(artifact.get("court_status") or "").strip(),
+                }
+            )
+
+    _collect_recent_actions("fork", fork_history)
+    _collect_recent_actions("replay", replay_history)
+    recent_actions.sort(
+        key=lambda item: (
+            int(item.get("timestamp_unix_ms") or 0),
+            str(item.get("registry_id") or ""),
+            str(item.get("kind") or ""),
+        ),
+        reverse=True,
+    )
+
+    projected = []
+    for item in agents:
+        gm = dict(item.get("governed_memory") or {})
+        registry_id = str(item.get("registry_id") or "").strip()
+        recent_count = int(agent_recent_counts.get(registry_id, 0))
+        projected.append(
+            {
+                "registry_id": registry_id,
+                "handle": str(item.get("handle") or "").strip(),
+                "name": str(item.get("name") or "").strip(),
+                "role": str(item.get("role") or "").strip(),
+                "dispatchable": bool(item.get("dispatchable")),
+                "manager_visible": bool(item.get("manager_visible")),
+                "recent_action_count": recent_count,
+                "fork_recent_count": int(gm.get("fork_recent_count") or 0),
+                "replay_recent_count": int(gm.get("replay_recent_count") or 0),
+                "fork_latest_status": str(gm.get("fork_latest_status") or "missing"),
+                "replay_latest_status": str(gm.get("replay_latest_status") or "missing"),
+                "replay_authority_status": str(gm.get("replay_authority_status") or "").strip(),
+            }
+        )
+    projected.sort(
+        key=lambda item: (
+            int(item.get("recent_action_count") or 0),
+            int(item.get("fork_recent_count") or 0) + int(item.get("replay_recent_count") or 0),
+            str(item.get("registry_id") or ""),
+        ),
+        reverse=True,
+    )
+    team_governed = dict(topology.get("governed_memory") or {})
+    return {
+        "status": "success",
+        "org_id": str(topology.get("org_id") or "").strip(),
+        "limit": normalized_limit,
+        "agent_count": len(projected),
+        "active_agent_count": len(
+            [
+                item
+                for item in projected
+                if int(item.get("fork_recent_count") or 0) > 0
+                or int(item.get("replay_recent_count") or 0) > 0
+                or int(item.get("recent_action_count") or 0) > 0
+            ]
+        ),
+        "summary": {
+            "fork_latest_status": str(team_governed.get("fork_latest_status") or "missing"),
+            "fork_recent_count": int(team_governed.get("fork_recent_count") or 0),
+            "replay_latest_status": str(team_governed.get("replay_latest_status") or "missing"),
+            "replay_recent_count": int(team_governed.get("replay_recent_count") or 0),
+            "replay_authority_status": str(team_governed.get("replay_authority_status") or "").strip(),
+        },
+        "agents": projected[: max(1, int(limit))],
+        "recent_actions": recent_actions[:normalized_limit],
+    }
+
+
+def is_public_read_route(request_path: str) -> bool:
+    """Pure function form of the public-read allowlist used by the gateway.
+
+    Centralized here so tests can verify which routes are publicly readable
+    vs Origin-protected, including the explicit invariant that memory
+    routes (/api/memory/*) are never public.
+    """
+    normalized = str(request_path or "").strip()
+    if normalized in PUBLIC_READ_ROUTES_EXACT:
+        return True
+    if normalized.startswith("/api/channels/") and normalized.endswith("/diagnostics"):
+        return True
+    if normalized.startswith("/api/channels/") and normalized.endswith("/proof"):
+        return True
+    return False
 
 
 def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str, Any]:
@@ -6272,6 +7046,9 @@ def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str,
             "output": "memory_overview_unexpected_payload_shape",
         }
     agents = payload.get("agents") or []
+    tags = payload.get("tags") or []
+    if not isinstance(tags, list):
+        tags = []
     agent_summaries = []
     if include_agents and isinstance(agents, list):
         for a in agents:
@@ -6280,6 +7057,9 @@ def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str,
             cats = a.get("categories") or []
             if not isinstance(cats, list):
                 cats = []
+            agent_tags = a.get("tags") or []
+            if not isinstance(agent_tags, list):
+                agent_tags = []
             agent_summaries.append(
                 {
                     "agent_id": str(a.get("agent_id") or ""),
@@ -6287,6 +7067,8 @@ def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str,
                     "total_bytes": int(a.get("total_bytes") or 0),
                     "category_count": len(cats),
                     "categories": [str(c) for c in cats],
+                    "tag_count": len(agent_tags),
+                    "tags": [str(tag) for tag in agent_tags],
                 }
             )
     return {
@@ -6294,6 +7076,8 @@ def _build_memory_overview_response(*, include_agents: bool = True) -> dict[str,
         "agent_count": int(payload.get("agent_count") or 0),
         "total_entries": int(payload.get("total_entries") or 0),
         "total_bytes": int(payload.get("total_bytes") or 0),
+        "tag_count": int(payload.get("tag_count") or len(tags)),
+        "tags": [str(tag) for tag in tags],
         "policy": payload.get("policy") or {},
         "agents": agent_summaries if include_agents else [],
     }
@@ -13468,6 +14252,9 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
             payload = _normalize_status_payload_for_open_source(
                 _status_payload_repair_treasury(dict(cached_snapshot))
             )
+            payload = _attach_governed_memory_status(payload)
+            payload = _attach_memory_taxonomy_status(payload)
+            payload = _attach_provider_runtime_status(payload)
             payload["gateway_cache"] = {
                 "state": "fresh",
                 "cached_at_unix_ms": cached_at,
@@ -13501,6 +14288,9 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
         payload = _normalize_status_payload_for_open_source(
             _status_payload_repair_treasury(dict(cached_snapshot))
         )
+        payload = _attach_governed_memory_status(payload)
+        payload = _attach_memory_taxonomy_status(payload)
+        payload = _attach_provider_runtime_status(payload)
         payload["gateway_cache"] = {
             "state": "stale_fallback",
             "cached_at_unix_ms": cached_at,
@@ -13520,7 +14310,9 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
         with WORKSPACE_STATUS_CACHE_LOCK:
             WORKSPACE_STATUS_CACHE["fetched_at_unix_ms"] = now_ms
             WORKSPACE_STATUS_CACHE["snapshot"] = snapshot
-        payload = dict(snapshot)
+        payload = _attach_governed_memory_status(dict(snapshot))
+        payload = _attach_memory_taxonomy_status(payload)
+        payload = _attach_provider_runtime_status(payload)
         payload["gateway_cache"] = {
             "state": "fresh",
             "cached_at_unix_ms": now_ms,
@@ -13558,8 +14350,26 @@ def _workspace_status_snapshot_cached() -> dict[str, Any]:
             "generated_at_unix_ms": now_ms,
         },
     }
-    degraded = _normalize_status_payload_for_open_source(_status_payload_repair_treasury(degraded))
+    degraded = _attach_governed_memory_status(
+        _normalize_status_payload_for_open_source(_status_payload_repair_treasury(degraded))
+    )
+    degraded = _attach_memory_taxonomy_status(degraded)
+    degraded = _attach_provider_runtime_status(degraded)
     return {"ok": True, "status_code": 200, "payload": degraded}
+
+
+def _workspace_runtime_proof_snapshot() -> dict[str, Any]:
+    proxied = _workspace_api_get_json(
+        "/api/runtime-proof",
+        timeout_seconds=WORKSPACE_API_GET_HEAVY_TIMEOUT_SECONDS,
+    )
+    payload = _normalize_status_wording(dict(proxied.get("payload") or {}))
+    payload = _attach_provider_runtime_status(payload)
+    return {
+        "ok": bool(proxied.get("ok")),
+        "status_code": int(proxied.get("status_code") or 200),
+        "payload": payload,
+    }
 
 
 def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
@@ -13573,7 +14383,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
             and cached_at > 0
             and (now_ms - cached_at) <= max(1, WORKFLOW_SHOWCASE_CACHE_TTL_SECONDS) * 1000
         ):
-            snapshot = _normalize_status_wording(dict(cached_snapshot))
+            snapshot = _attach_governed_memory_workflow(_normalize_status_wording(dict(cached_snapshot)))
             snapshot["gateway_cache"] = {
                 "state": "fresh",
                 "cached_at_unix_ms": cached_at,
@@ -13600,7 +14410,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
 
                 threading.Thread(target=_refresh_workflow_showcase, daemon=True).start()
 
-        snapshot = _normalize_status_wording(dict(cached_snapshot))
+        snapshot = _attach_governed_memory_workflow(_normalize_status_wording(dict(cached_snapshot)))
         snapshot["gateway_cache"] = {
             "state": "stale_fallback",
             "cached_at_unix_ms": cached_at,
@@ -13610,7 +14420,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
         return snapshot
 
     try:
-        snapshot = _normalize_status_wording(_build_workflow_showcase_snapshot())
+        snapshot = _attach_governed_memory_workflow(_normalize_status_wording(_build_workflow_showcase_snapshot()))
         with WORKFLOW_SHOWCASE_CACHE_LOCK:
             WORKFLOW_SHOWCASE_CACHE["fetched_at_unix_ms"] = now_ms
             WORKFLOW_SHOWCASE_CACHE["snapshot"] = dict(snapshot)
@@ -13625,7 +14435,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
             cached_at = int(WORKFLOW_SHOWCASE_CACHE.get("fetched_at_unix_ms") or 0)
             cached_snapshot = WORKFLOW_SHOWCASE_CACHE.get("snapshot")
         if isinstance(cached_snapshot, dict):
-            snapshot = _normalize_status_wording(dict(cached_snapshot))
+            snapshot = _attach_governed_memory_workflow(_normalize_status_wording(dict(cached_snapshot)))
             snapshot["gateway_cache"] = {
                 "state": "stale_fallback",
                 "cached_at_unix_ms": cached_at,
@@ -13633,7 +14443,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
                 "error": f"{exc.__class__.__name__}: {exc}",
             }
             return snapshot
-        return {
+        return _attach_governed_memory_workflow({
             "schema_version": "meridian.workflow_showcase.v1",
             "generated_at_unix_ms": now_ms,
             "runtime_id": "loom_native",
@@ -13655,7 +14465,7 @@ def _workflow_showcase_snapshot_cached() -> dict[str, Any]:
                 "generated_at_unix_ms": now_ms,
                 "error": f"{exc.__class__.__name__}: {exc}",
             },
-        }
+        })
 
 
 def _workspace_proxied_get_cached(
@@ -15142,6 +15952,17 @@ class WebAPIAdapter(ChannelAdapter):
                     status_code = 200 if payload.get("status") == "success" else 500
                     self._send_json(status_code, payload)
                     return
+                if request_path == "/api/team/governed-memory":
+                    query_params = parse_qs(parsed.query or "")
+                    raw_limit = str((query_params.get("limit") or ["10"])[0] or "10").strip()
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = 10
+                    payload = _build_team_governed_memory_response(min(max(limit_val, 1), 100))
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
+                    return
                 if request_path == "/api/memory/overview":
                     query_params = parse_qs(parsed.query or "")
                     include_agents = str(
@@ -15163,6 +15984,20 @@ class WebAPIAdapter(ChannelAdapter):
                     def _qp_bool(name: str) -> bool:
                         return _qp(name).lower() in {"1", "true", "yes", "on"}
 
+                    def _qp_tags() -> list[str]:
+                        tags: list[str] = []
+                        for raw in (query_params.get("tag") or []):
+                            text = str(raw or "").strip()
+                            if text:
+                                tags.append(text)
+                        raw_csv = _qp("tags")
+                        if raw_csv:
+                            for item in raw_csv.split(","):
+                                text = str(item or "").strip()
+                                if text:
+                                    tags.append(text)
+                        return tags
+
                     text_query = _qp("q") or _qp("text")
                     raw_limit = _qp("limit") or str(MEMORY_SEARCH_API_DEFAULT_LIMIT)
                     try:
@@ -15176,14 +16011,103 @@ class WebAPIAdapter(ChannelAdapter):
                         all_agents=_qp_bool("all_agents"),
                         category=_qp("category") or None,
                         key_prefix=_qp("key_prefix") or None,
+                        tags=_qp_tags(),
                         limit=limit_val,
                         include_content=_qp_bool("include_content"),
                     )
                     status_code = 200 if payload.get("status") == "success" else 400
                     self._send_json(status_code, payload)
                     return
+                if request_path == "/api/memory/receipts":
+                    query_params = parse_qs(parsed.query or "")
+
+                    def _qp_receipts(name: str, default: str = "") -> str:
+                        values = query_params.get(name) or []
+                        return str(values[0] if values else default).strip()
+
+                    raw_limit = _qp_receipts("limit") or str(MEMORY_RECEIPTS_API_DEFAULT_LIMIT)
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = MEMORY_RECEIPTS_API_DEFAULT_LIMIT
+                    limit_val = max(1, min(limit_val, MEMORY_RECEIPTS_API_MAX_LIMIT))
+                    payload = _build_memory_receipts_response(
+                        agent_id=_qp_receipts("agent_id") or None,
+                        limit=limit_val,
+                    )
+                    status_code = 200 if payload.get("status") == "success" else 400
+                    self._send_json(status_code, payload)
+                    return
+                if request_path == "/api/memory/graph":
+                    query_params = parse_qs(parsed.query or "")
+
+                    def _qp_graph(name: str, default: str = "") -> str:
+                        values = query_params.get(name) or []
+                        return str(values[0] if values else default).strip()
+
+                    raw_limit = _qp_graph("limit") or str(MEMORY_GRAPH_API_DEFAULT_LIMIT)
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = MEMORY_GRAPH_API_DEFAULT_LIMIT
+                    limit_val = max(1, min(limit_val, MEMORY_GRAPH_API_MAX_LIMIT))
+                    payload = _build_memory_graph_response(
+                        source_ref=_qp_graph("source_ref") or _qp_graph("source"),
+                        focus_node_id=_qp_graph("node_id") or _qp_graph("focus_node_id") or None,
+                        direction=_qp_graph("direction") or "both",
+                        limit=limit_val,
+                    )
+                    status_code = 200 if payload.get("status") == "success" else 400
+                    self._send_json(status_code, payload)
+                    return
+                if request_path == "/api/memory/fork/latest":
+                    payload = _build_memory_latest_artifact_response("fork")
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
+                    return
+                if request_path == "/api/memory/replay/latest":
+                    payload = _build_memory_latest_artifact_response("replay")
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
+                    return
+                if request_path == "/api/memory/fork/history":
+                    query_params = parse_qs(parsed.query or "")
+                    raw_limit = str((query_params.get("limit") or ["10"])[0] or "10").strip()
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = 10
+                    payload = _build_memory_artifact_history_response("fork", min(max(limit_val, 1), 100))
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
+                    return
+                if request_path == "/api/memory/replay/history":
+                    query_params = parse_qs(parsed.query or "")
+                    raw_limit = str((query_params.get("limit") or ["10"])[0] or "10").strip()
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = 10
+                    payload = _build_memory_artifact_history_response("replay", min(max(limit_val, 1), 100))
+                    status_code = 200 if payload.get("status") == "success" else 500
+                    self._send_json(status_code, payload)
+                    return
+                if request_path == "/api/memory/governance":
+                    query_params = parse_qs(parsed.query or "")
+                    raw_limit = str((query_params.get("limit") or ["10"])[0] or "10").strip()
+                    try:
+                        limit_val = int(raw_limit)
+                    except ValueError:
+                        limit_val = 10
+                    payload = _build_memory_governance_summary_response(min(max(limit_val, 1), 100))
+                    self._send_json(200, payload)
+                    return
                 if request_path == "/api/status":
                     proxied = _workspace_status_snapshot_cached()
+                    self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
+                    return
+                if request_path == "/api/runtime-proof":
+                    proxied = _workspace_runtime_proof_snapshot()
                     self._send_json(int(proxied.get("status_code") or 200), dict(proxied.get("payload") or {}))
                     return
                 if request_path == "/api/institution/template":
@@ -15431,6 +16355,40 @@ class WebAPIAdapter(ChannelAdapter):
                         return
                     self._send_json(200, {"status": "success", "verify": verify_result})
                     return
+                if request_path == "/api/memory/fork":
+                    try:
+                        limit_val = int(payload.get("limit") or MEMORY_GRAPH_API_DEFAULT_LIMIT)
+                    except (TypeError, ValueError):
+                        limit_val = MEMORY_GRAPH_API_DEFAULT_LIMIT
+                    limit_val = max(1, min(limit_val, MEMORY_GRAPH_API_MAX_LIMIT))
+                    fork_payload = _build_memory_fork_response(
+                        source_ref=str(payload.get("source_ref") or payload.get("source") or "").strip(),
+                        target_agent_id=str(payload.get("target_agent_id") or payload.get("target_agent") or "").strip(),
+                        branch=str(payload.get("branch") or "").strip() or None,
+                        focus_node_id=str(payload.get("node_id") or payload.get("focus_node_id") or "").strip() or None,
+                        direction=str(payload.get("direction") or "both").strip() or "both",
+                        limit=limit_val,
+                    )
+                    status_code = 200 if fork_payload.get("status") != "error" else 400
+                    self._send_json(status_code, fork_payload)
+                    return
+                if request_path == "/api/memory/replay":
+                    try:
+                        limit_val = int(payload.get("limit") or MEMORY_GRAPH_API_DEFAULT_LIMIT)
+                    except (TypeError, ValueError):
+                        limit_val = MEMORY_GRAPH_API_DEFAULT_LIMIT
+                    limit_val = max(1, min(limit_val, MEMORY_GRAPH_API_MAX_LIMIT))
+                    replay_payload = _build_memory_replay_response(
+                        source_ref=str(payload.get("source_ref") or payload.get("source") or "").strip(),
+                        target_agent_id=str(payload.get("target_agent_id") or payload.get("target_agent") or "").strip(),
+                        org_id=str(payload.get("org_id") or "").strip() or LOOM_ORG_ID,
+                        focus_node_id=str(payload.get("node_id") or payload.get("focus_node_id") or "").strip() or None,
+                        direction=str(payload.get("direction") or "both").strip() or "both",
+                        limit=limit_val,
+                    )
+                    status_code = 200 if replay_payload.get("status") != "error" else 400
+                    self._send_json(status_code, replay_payload)
+                    return
                 if request_path == "/api/trust-ops/evidence/review":
                     evidence_key = str(payload.get("evidence_key") or "").strip()
                     decision = str(payload.get("decision") or "").strip().lower()
@@ -15622,6 +16580,7 @@ class WebAPIAdapter(ChannelAdapter):
                 # this single request via MERIDIAN_BRAIN_MANAGER_MODEL.
                 request_model_override = str(payload.get("model") or "").strip()
                 with _temporary_manager_model_override(request_model_override):
+                    request_provider_runtime = _build_provider_runtime_operator_status(request_model_override)
                     web_session = _resolve_web_request_session(payload, self.headers, goal.strip())
                     session_id = str(web_session.get("session_id") or "").strip()
                     ingress = _loom_channel_ingest("web_api", LOOM_ORG_ID, goal.strip(), thread_id=session_id)
@@ -15669,6 +16628,7 @@ class WebAPIAdapter(ChannelAdapter):
                             "output": answer,
                             "session_id": session_id,
                             "session_key": session_key,
+                            "provider_runtime": request_provider_runtime,
                         }
                         if constitutional_trace:
                             response_payload["constitutional_trace"] = constitutional_trace

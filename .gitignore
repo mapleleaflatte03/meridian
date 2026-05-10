@@ -61,6 +61,9 @@ loom/state/
 .worktrees/
 worktrees/
 
+# Local editor / tool metadata
+.kiro/
+
 # Publish-live-real credentials (template committed as .env.publish.example)
 intelligence/company/launch/.env.publish
 intelligence/company/launch/.env.publish.local

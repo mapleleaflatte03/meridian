@@ -115,8 +115,15 @@ def _execution_summary(
     mode: str = '',
 ) -> dict[str, Any]:
     """Summarize execution results with proof hash."""
-    completed = [s for s in steps if s.get('ok') or s.get('status') == 'success']
-    failed = [s for s in steps if not (s.get('ok') or s.get('status') == 'success')]
+    completed_statuses = {'ok', 'success', 'completed'}
+    completed = [
+        s for s in steps
+        if s.get('ok') or str(s.get('status') or '').strip().lower() in completed_statuses
+    ]
+    failed = [
+        s for s in steps
+        if not (s.get('ok') or str(s.get('status') or '').strip().lower() in completed_statuses)
+    ]
     return {
         'steps_total': len(steps),
         'steps_completed': len(completed),

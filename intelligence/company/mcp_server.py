@@ -44,6 +44,7 @@ import subprocess
 import sys
 import time
 from urllib.parse import quote_plus
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 try:
@@ -279,6 +280,32 @@ def _specialist_completion_url(agent_id: str) -> str:
     return base_url
 
 
+def _runtime_profiles_payload() -> dict[str, Any]:
+    root = Path(os.environ.get("MERIDIAN_ROOT") or "/home/ubuntu/meridian")
+    path = root / "runtime" / "default" / "providers" / "profiles.json"
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _runtime_profile_entry(profile_name: str) -> dict[str, Any]:
+    target = str(profile_name or "").strip()
+    if not target:
+        return {}
+    payload = _runtime_profiles_payload()
+    profiles = payload.get("profiles")
+    if not isinstance(profiles, list):
+        return {}
+    for item in profiles:
+        if isinstance(item, dict) and str(item.get("name") or "").strip() == target:
+            return dict(item)
+    return {}
+
+
 def _specialist_direct_provider_fallback(
     agent_id: str,
     *,
@@ -286,16 +313,33 @@ def _specialist_direct_provider_fallback(
     user_prompt: str,
     max_tokens: int = 900,
     timeout: int = 90,
+    profile_name_override: str = "",
+    model_override: str = "",
 ) -> dict[str, Any]:
     specialist = _team_specialist(agent_id)
     if specialist is None:
         return {'ok': False, 'error': f'unknown specialist {agent_id}'}
+    profile_name = profile_name_override.strip() or specialist.profile_name
+    model_name = model_override.strip() or specialist.model
     api_key = (TEAM_RUNTIME_ENV.get(specialist.api_key_env_var) or os.environ.get(specialist.api_key_env_var) or '').strip()
     url = _specialist_completion_url(agent_id)
+    if profile_name_override.strip():
+        profile_entry = _runtime_profile_entry(profile_name_override)
+        profile_url = str(profile_entry.get("base_url") or "").strip()
+        auth = dict(profile_entry.get("auth") or {}) if isinstance(profile_entry.get("auth"), dict) else {}
+        profile_env_var = str(auth.get("env_var") or "").strip()
+        profile_key = (TEAM_RUNTIME_ENV.get(profile_env_var) or os.environ.get(profile_env_var) or "").strip() if profile_env_var else ""
+        profile_model = str(profile_entry.get("model") or "").strip()
+        if profile_url:
+            url = profile_url
+        if profile_key:
+            api_key = profile_key
+        if profile_model and not model_override.strip():
+            model_name = profile_model
     result = brain_router.execute_specialist_http(
-        profile_name=specialist.profile_name,
+        profile_name=profile_name,
         endpoint=url,
-        model=specialist.model,
+        model=model_name,
         api_key=api_key,
         system_prompt=system_prompt,
         user_prompt=user_prompt,
@@ -1824,8 +1868,10 @@ def do_qa_verify_route(
     prompt = (
         f"Verify the following text for {criteria} quality. "
         f"Return PASS or FAIL with specific reasons and confidence score (0-100). "
-        f"Text to verify:\n\n{text[:3000]}"
+        f"Text to verify:\n\n{text[:6000]}"
     )
+    build_artifact_qa = "complete code" in text.lower() or "file tree" in text.lower() or "run instructions" in text.lower()
+    direct_qa_max_tokens = 1800 if build_artifact_qa else 900
     specialist_payload = _specialist_llm_payload(
         agent_id,
         f'You are Meridian specialist {agent_id}. Verify claims for {criteria} quality and return strict JSON with keys verification, confidence, warnings.',
@@ -1840,7 +1886,7 @@ def do_qa_verify_route(
             agent_id,
             system_prompt=f'You are Meridian specialist {agent_id}. Verify claims for {criteria} quality and return strict JSON with keys verification, confidence, warnings.',
             user_prompt=prompt,
-            max_tokens=900,
+            max_tokens=direct_qa_max_tokens,
             timeout=timeout,
         )
         if not direct.get('ok'):

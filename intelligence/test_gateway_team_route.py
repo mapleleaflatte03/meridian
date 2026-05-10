@@ -5,6 +5,7 @@ import tempfile
 import time
 import urllib.error
 import unittest
+from email.message import Message
 from pathlib import Path
 from unittest import mock
 
@@ -20,6 +21,46 @@ spec.loader.exec_module(meridian_gateway)
 
 
 class GatewayTeamRouteTests(unittest.TestCase):
+    def test_temporary_manager_model_override_restores_previous_value_on_success(self):
+        original = meridian_gateway.os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL")
+        meridian_gateway.os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = "baseline-model"
+        try:
+            with meridian_gateway._temporary_manager_model_override("override-model"):
+                self.assertEqual(
+                    meridian_gateway.os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL"),
+                    "override-model",
+                )
+            self.assertEqual(
+                meridian_gateway.os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL"),
+                "baseline-model",
+            )
+        finally:
+            if original is None:
+                meridian_gateway.os.environ.pop("MERIDIAN_BRAIN_MANAGER_MODEL", None)
+            else:
+                meridian_gateway.os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = original
+
+    def test_temporary_manager_model_override_restores_previous_value_after_exception(self):
+        original = meridian_gateway.os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL")
+        meridian_gateway.os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = "baseline-model"
+        try:
+            with self.assertRaisesRegex(RuntimeError, "boom"):
+                with meridian_gateway._temporary_manager_model_override("override-model"):
+                    self.assertEqual(
+                        meridian_gateway.os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL"),
+                        "override-model",
+                    )
+                    raise RuntimeError("boom")
+            self.assertEqual(
+                meridian_gateway.os.environ.get("MERIDIAN_BRAIN_MANAGER_MODEL"),
+                "baseline-model",
+            )
+        finally:
+            if original is None:
+                meridian_gateway.os.environ.pop("MERIDIAN_BRAIN_MANAGER_MODEL", None)
+            else:
+                meridian_gateway.os.environ["MERIDIAN_BRAIN_MANAGER_MODEL"] = original
+
     def test_skill_registry_reads_frontmatter_description(self):
         registry = meridian_gateway.SkillRegistry(meridian_gateway.SKILLS_DIR)
         items = registry.load()
@@ -145,6 +186,533 @@ class GatewayTeamRouteTests(unittest.TestCase):
         self.assertEqual(score['decision'], 'team')
         self.assertTrue(score['requires_team_execution'])
 
+    def test_small_code_request_does_not_require_team_execution(self):
+        self.assertFalse(
+            meridian_gateway._route_requires_team_execution(
+                'Write a Python function that returns fibonacci numbers and include tests.',
+                [],
+            )
+        )
+
+    def test_build_artifact_request_forces_executor_lane(self):
+        workers = meridian_gateway._refine_skill_routed_workers(
+            'Build a small Flutter mobile app with login, offline notes, and complete code for every file.',
+            [{'name': 'ai-stack-watch'}],
+            ['ATLAS', 'QUILL', 'AEGIS'],
+        )
+        self.assertIn('FORGE', workers)
+        self.assertIn('QUILL', workers)
+
+    def test_mobile_build_artifact_worker_hints_do_not_force_backend_lane_without_backend_surface(self):
+        workers = meridian_gateway._software_delivery_worker_hints(
+            'Build a minimal runnable Flutter offline notes mobile app. Return the file tree and complete code.'
+        )
+        self.assertIn('ATLAS', workers)
+        self.assertIn('AEGIS', workers)
+        self.assertIn('QUILL', workers)
+        self.assertNotIn('FORGE', workers)
+
+    def test_mobile_build_artifact_promotes_quill_to_executor_profile(self):
+        profile_name, model = meridian_gateway._specialist_execution_profile_override(
+            'QUILL',
+            'Build a minimal runnable Flutter offline notes mobile app. Return the file tree and complete code.',
+        )
+        self.assertEqual(profile_name, 'executor_tooling')
+        self.assertTrue(model)
+
+    def test_web_build_artifact_promotes_quill_to_executor_profile(self):
+        profile_name, model = meridian_gateway._specialist_execution_profile_override(
+            'QUILL',
+            'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.',
+        )
+        self.assertEqual(profile_name, 'executor_tooling')
+        self.assertTrue(model)
+
+    def test_mobile_build_artifact_extends_quill_budget(self):
+        request = 'Build a minimal runnable Flutter offline notes mobile app. Return the file tree and complete code.'
+        self.assertEqual(meridian_gateway._specialist_timeout_for_request('QUILL', request, []), 70)
+
+    def test_web_build_artifact_extends_quill_budget(self):
+        request = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        self.assertEqual(meridian_gateway._specialist_timeout_for_request('QUILL', request, []), 55)
+
+    def test_web_build_specialist_ownership_prompt_assigns_frontend_slice_to_quill(self):
+        request = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        prompt = meridian_gateway._build_artifact_specialist_ownership_prompt('QUILL', request)
+        self.assertIn('frontend slice', prompt)
+        self.assertIn('static/index.html', prompt)
+
+    def test_web_build_specialist_ownership_prompt_assigns_backend_slice_to_forge(self):
+        request = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        prompt = meridian_gateway._build_artifact_specialist_ownership_prompt('FORGE', request)
+        self.assertIn('backend slice', prompt)
+        self.assertIn('main.py', prompt)
+
+    def test_build_artifact_request_drops_research_watch_skill_matches(self):
+        with mock.patch.object(
+            meridian_gateway.TEAM_SKILLS,
+            'search',
+            return_value=[
+                {'name': 'safe-web-research', 'description': 'safe url fetch', 'score': 12},
+                {'name': 'ai-stack-watch', 'description': 'watch market changes', 'score': 11},
+            ],
+        ):
+            bundle = meridian_gateway._skill_bundle_for_request(
+                'Build a React web app with a FastAPI backend. Return the file tree and complete code.',
+                'web_api:test-build-artifact',
+                manager_brief='Build a React web app with a FastAPI backend.',
+                allow_create=True,
+            )
+        self.assertEqual(bundle['matches'], [])
+
+    def test_manager_response_shape_for_build_artifact_requires_stack_file_tree_and_code(self):
+        shape = meridian_gateway._manager_response_shape(
+            'Build a React web app with a FastAPI backend. Return the file tree and complete code.',
+            {'skills': []},
+        )
+        self.assertIn('Stack', shape)
+        self.assertIn('File Tree', shape)
+        self.assertIn('Complete Code', shape)
+        self.assertIn('Run Instructions', shape)
+
+    def test_build_artifact_shape_rejects_watch_brief_output(self):
+        request = 'Build a Flutter mobile app with offline notes. Return the file tree and complete code.'
+        artifact = (
+            '**Status**\n'
+            '- Watching providers.\n\n'
+            '**Watched changes**\n'
+            '- No code yet.\n\n'
+            '**Impact on trust answers**\n'
+            '- None.\n\n'
+            '**Next move**\n'
+            '- Continue monitoring.\n'
+        )
+        self.assertFalse(meridian_gateway._artifact_matches_skill_shape(artifact, request, []))
+
+    def test_build_artifact_shape_accepts_file_tree_and_code_blocks(self):
+        request = 'Build a React web app with a FastAPI backend. Return the file tree and complete code.'
+        artifact = (
+            'Stack\n'
+            '- FastAPI + React\n\n'
+            'File Tree\n'
+            '- backend/main.py\n'
+            '- frontend/index.html\n\n'
+            'Code\n'
+            '```py\nprint(\"hello\")\n```\n\n'
+            '```html\n<div id=\"app\"></div>\n```\n'
+            '\nRun Instructions\n'
+            '1. uvicorn backend.main:app --reload\n'
+        )
+        self.assertTrue(meridian_gateway._artifact_matches_skill_shape(artifact, request, []))
+
+    def test_build_artifact_shape_accepts_dict_like_artifact(self):
+        request = 'Build a minimal runnable Flutter offline notes mobile app. Return the file tree and complete code.'
+        artifact = str({
+            'Stack': 'Flutter',
+            'File Tree': 'pubspec.yaml\\nlib/main.dart',
+            'Code': {
+                'pubspec.yaml': 'name: app',
+                'lib/main.dart': 'void main() {}',
+            },
+            'Run Instructions': 'flutter pub get && flutter run',
+        })
+        self.assertTrue(meridian_gateway._artifact_matches_skill_shape(artifact, request, []))
+
+    def test_request_language_instruction_prefers_vietnamese(self):
+        instruction = meridian_gateway._request_language_instruction(
+            'Hãy build một app Flutter tối giản và trả lời bằng tiếng Việt.'
+        )
+        self.assertIn('Respond in Vietnamese', instruction)
+
+    def test_request_wants_small_code_artifact_understands_vietnamese(self):
+        self.assertTrue(
+            meridian_gateway._request_wants_small_code_artifact(
+                'Hãy viết hàm JavaScript slugify(text) và kèm 3 test ngắn. Chỉ trả về code runnable hoàn chỉnh.'
+            )
+        )
+
+    def test_chunk_telegram_text_splits_long_payload(self):
+        text = ('A' * 3600) + '\n\n' + ('B' * 3600)
+        chunks = meridian_gateway._chunk_telegram_text(text, limit=3500)
+        self.assertGreaterEqual(len(chunks), 2)
+        self.assertTrue(all(len(chunk) <= 3510 for chunk in chunks))
+        self.assertTrue(chunks[0].startswith('[1/'))
+
+    def test_sanitize_telegram_user_visible_text_strips_operator_wrappers(self):
+        wrapped = (
+            '[Rerun sau fix Telegram + đa ngôn ngữ] Hãy reply đúng prompt này để test Team Web bằng tiếng Việt:\n\n'
+            'Hãy build một web app quản lý bookmark tối giản bằng FastAPI.'
+        )
+        self.assertEqual(
+            meridian_gateway._sanitize_telegram_user_visible_text(wrapped),
+            'Hãy build một web app quản lý bookmark tối giản bằng FastAPI.',
+        )
+
+    def test_sanitize_telegram_user_visible_text_strips_legacy_english_wrapper(self):
+        wrapped = (
+            'Reply with this exact prompt to test manager-led mobile build:\n\n'
+            'Build a minimal runnable Flutter habit tracker mobile app.'
+        )
+        self.assertEqual(
+            meridian_gateway._sanitize_telegram_user_visible_text(wrapped),
+            'Build a minimal runnable Flutter habit tracker mobile app.',
+        )
+
+    def test_flatten_external_channel_messages_for_messenger(self):
+        payload = {
+            'entry': [
+                {
+                    'messaging': [
+                        {'sender': {'id': 'u1'}, 'message': {'mid': 'm1', 'text': 'xin chao'}},
+                    ]
+                }
+            ]
+        }
+        messages = meridian_gateway._flatten_external_channel_messages('messenger', payload)
+        self.assertEqual(messages, [{'sender_id': 'u1', 'text': 'xin chao', 'message_id': 'm1'}])
+
+    def test_flatten_external_channel_messages_for_whatsapp(self):
+        payload = {
+            'entry': [
+                {'changes': [{'value': {'messages': [{'id': 'wamid.1', 'from': '8499', 'text': {'body': 'hello'}}]}}]}
+            ]
+        }
+        messages = meridian_gateway._flatten_external_channel_messages('whatsapp', payload)
+        self.assertEqual(messages, [{'sender_id': '8499', 'text': 'hello', 'message_id': 'wamid.1'}])
+
+    def test_flatten_external_channel_messages_for_discord(self):
+        payload = {'id': 'd1', 'content': 'ship it', 'author': {'id': 'user-9'}}
+        messages = meridian_gateway._flatten_external_channel_messages('discord', payload)
+        self.assertEqual(messages, [{'sender_id': 'user-9', 'text': 'ship it', 'message_id': 'd1'}])
+
+    def test_flatten_external_channel_messages_for_zalo(self):
+        payload = {'message_id': 'z1', 'fromuid': '12345', 'text': 'xin chao zalo'}
+        messages = meridian_gateway._flatten_external_channel_messages('zalo', payload)
+        self.assertEqual(messages, [{'sender_id': '12345', 'text': 'xin chao zalo', 'message_id': 'z1'}])
+
+    def test_external_channel_verify_query_for_meta_webhook(self):
+        ok, challenge = meridian_gateway._external_channel_verify_query(
+            'messenger',
+            {'hub.mode': ['subscribe'], 'hub.verify_token': ['abc'], 'hub.challenge': ['123']},
+            'abc',
+        )
+        self.assertTrue(ok)
+        self.assertEqual(challenge, '123')
+
+    def test_external_webhook_adapter_authorize_accepts_header_secret(self):
+        adapter = meridian_gateway.ExternalWebhookAdapter(mock.Mock(), 'zalo', inbound_secret='secret-1')
+        headers = Message()
+        headers['X-Meridian-Channel-Secret'] = 'secret-1'
+        self.assertTrue(adapter.authorize(headers, {}))
+
+    def test_external_webhook_adapter_uses_zalo_send_message_shape(self):
+        adapter = meridian_gateway.ExternalWebhookAdapter(
+            mock.Mock(),
+            'zalo',
+            outbound_url='https://bot-api.zaloplatforms.com/botTOKEN/sendMessage',
+        )
+        headers, payload = adapter._outbound_request('chat-1', 'xin chao')
+        self.assertEqual(headers['Content-Type'], 'application/json')
+        self.assertEqual(payload, {'chat_id': 'chat-1', 'text': 'xin chao'})
+
+    def test_external_webhook_adapter_handle_inbound_routes_through_manager(self):
+        adapter = meridian_gateway.ExternalWebhookAdapter(mock.Mock(), 'discord', outbound_url='http://example.test/webhook', inbound_secret='secret-1')
+        payload = {'id': 'msg-1', 'content': 'hello team', 'author': {'id': 'discord-user'}}
+        with mock.patch.object(meridian_gateway, '_external_channel_inbound_seen_recently', return_value=False):
+            with mock.patch.object(meridian_gateway, '_loom_channel_registered', return_value=True):
+                with mock.patch.object(meridian_gateway, '_run_team_route', return_value=('manager answer', {'mode': 'team', 'job_id': 'job-1'})):
+                    with mock.patch.object(meridian_gateway, '_loom_channel_ingest', return_value={'payload': {'session_key': 'discord:discord-user', 'ingress_id': 'ing-1'}}):
+                        with mock.patch.object(meridian_gateway, '_loom_channel_send', return_value={'payload': {'delivery_id': 'del-1'}}):
+                            with mock.patch.object(meridian_gateway, '_loom_channel_update'):
+                                with mock.patch.object(meridian_gateway, '_loom_session_route'):
+                                    with mock.patch.object(adapter, '_send_direct', return_value={'id': 'ext-1'}):
+                                        result = adapter.handle_inbound(payload)
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['processed'], 1)
+        self.assertEqual(result['results'][0]['route_mode'], 'team')
+
+    def test_external_webhook_adapter_skips_loom_channel_calls_when_channel_is_not_registered(self):
+        adapter = meridian_gateway.ExternalWebhookAdapter(mock.Mock(), 'discord', outbound_url='http://example.test/webhook', inbound_secret='secret-1')
+        payload = {'id': 'msg-2', 'content': 'hello direct', 'author': {'id': 'discord-user'}}
+        with mock.patch.object(meridian_gateway, '_external_channel_inbound_seen_recently', return_value=False):
+            with mock.patch.object(meridian_gateway, '_loom_channel_registered', return_value=False):
+                with mock.patch.object(meridian_gateway, '_run_team_route', return_value=('manager answer', {'mode': 'direct', 'job_id': ''})):
+                    with mock.patch.object(meridian_gateway, '_loom_channel_ingest') as ingest_mock:
+                        with mock.patch.object(meridian_gateway, '_loom_channel_send') as send_mock:
+                            with mock.patch.object(meridian_gateway, '_loom_session_route') as session_route_mock:
+                                with mock.patch.object(adapter, '_send_direct', return_value={'id': 'ext-2'}):
+                                    result = adapter.handle_inbound(payload)
+        ingest_mock.assert_not_called()
+        send_mock.assert_not_called()
+        session_route_mock.assert_not_called()
+        self.assertEqual(result['status'], 'success')
+        self.assertEqual(result['results'][0]['route_mode'], 'direct')
+
+    def test_build_artifact_shape_accepts_complete_code_json_payload(self):
+        request = 'Build a minimal runnable FastAPI task tracker web app. Return exactly 4 sections: Stack, File Tree, Complete Code, Run Instructions.'
+        artifact = str({
+            'Stack': 'FastAPI, HTML, CSS, JavaScript',
+            'File Tree': {'app': {'main.py': '', 'static': {'index.html': '', 'script.js': '', 'style.css': ''}}},
+            'Complete Code': {
+                'app/main.py': 'from fastapi import FastAPI\\napp = FastAPI()\\n@app.get(\"/\")\\ndef root():\\n    return {\"ok\": True}\\n',
+                'app/static/index.html': '<html><body><h1>Task Tracker</h1><script src=\"/static/script.js\"></script></body></html>',
+                'app/static/script.js': 'console.log(\"ready\")',
+                'app/static/style.css': 'body { font-family: sans-serif; }',
+            },
+            'Run Instructions': 'uvicorn app.main:app --host 0.0.0.0 --port 8000',
+        })
+        self.assertTrue(meridian_gateway._artifact_matches_skill_shape(artifact, request, []))
+
+    def test_coerce_request_specific_artifact_renders_build_payload_dict_to_four_sections(self):
+        request = 'Hãy build một app Flutter habit tracker tối giản. Trả về đúng 4 phần: Stack, File Tree, Complete Code, Run Instructions.'
+        artifact = str({
+            'Stack': 'Flutter, Dart',
+            'File Tree': {'lib': {'main.dart': '', 'store.dart': ''}, 'pubspec.yaml': ''},
+            'Complete Code': {
+                'pubspec.yaml': 'name: app',
+                'lib/main.dart': 'void main() {}',
+                'lib/store.dart': 'class Store {}',
+            },
+            'Run Instructions': 'flutter pub get && flutter run',
+        })
+        rendered = meridian_gateway._coerce_request_specific_artifact(artifact, request)
+        self.assertIn('### Stack', rendered)
+        self.assertIn('### File Tree', rendered)
+        self.assertIn('### Complete Code', rendered)
+        self.assertIn('### Run Instructions', rendered)
+        self.assertIn('**lib/main.dart**', rendered)
+        self.assertTrue(meridian_gateway._final_artifact_is_usable(artifact, ['FORGE', 'QUILL', 'AEGIS']))
+
+    def test_valid_build_artifact_payload_has_shape_and_no_obvious_contract_errors(self):
+        artifact = str({
+            'Stack': 'FastAPI, HTML, CSS, JavaScript',
+            'File Tree': {'app': {'main.py': '', 'static': {'index.html': '', 'script.js': '', 'style.css': ''}}},
+            'Complete Code': {
+                'app/main.py': (
+                    'from fastapi import FastAPI\\n'
+                    'from fastapi.staticfiles import StaticFiles\\n'
+                    'from fastapi.responses import HTMLResponse\\n'
+                    'app = FastAPI()\\n'
+                    'app.mount(\"/static\", StaticFiles(directory=\"app/static\"), name=\"static\")\\n'
+                    '@app.get(\"/\", response_class=HTMLResponse)\\n'
+                    'def root():\\n'
+                    '    return \"<html></html>\"\\n'
+                ),
+                'app/static/index.html': '<html><body><h1>Task Tracker</h1><script src=\"/static/script.js\"></script></body></html>',
+                'app/static/script.js': 'console.log(\"ready\")',
+                'app/static/style.css': 'body { font-family: sans-serif; }',
+            },
+            'Run Instructions': 'uvicorn app.main:app --host 0.0.0.0 --port 8000',
+        })
+        self.assertTrue(meridian_gateway._artifact_looks_like_build_output(artifact))
+        self.assertFalse(meridian_gateway._artifact_has_obvious_web_build_contract_errors(artifact))
+
+    def test_web_build_artifact_rejects_fastapi_query_param_contract_mismatch(self):
+        request = (
+            'Build the smallest runnable FastAPI task tracker web app using only main.py, requirements.txt, '
+            'and static/index.html. POST /tasks must accept a JSON body, not a query string. '
+            'Return exactly 4 sections in this order: Stack, File Tree, Code, Run Instructions.'
+        )
+        artifact = (
+            '## Stack\\nFastAPI, HTML\\n\\n'
+            '## File Tree\\nmain.py\\nrequirements.txt\\nstatic/index.html\\n\\n'
+            '## Code\\n'
+            '### main.py\\n```python\\n'
+            'from fastapi import FastAPI\\n'
+            'from fastapi.staticfiles import StaticFiles\\n\\n'
+            'app = FastAPI()\\n'
+            'app.mount(\"/static\", StaticFiles(directory=\"static\"), name=\"static\")\\n\\n'
+            '@app.post(\"/tasks/\")\\n'
+            'def create_task(task: str):\\n'
+            '    return {\"task\": task}\\n\\n'
+            '@app.get(\"/static/index.html\")\\n'
+            'def read_index():\\n'
+            '    return \"ok\"\\n'
+            '```\\n\\n'
+            '### requirements.txt\\n```txt\\nfastapi\\nuvicorn\\n```\\n\\n'
+            '### static/index.html\\n```html\\n'
+            '<script>\\n'
+            'fetch(\"/tasks/\", {method: \"POST\", headers: {\"Content-Type\": \"application/json\"}, body: JSON.stringify({task: \"demo\"})})\\n'
+            '</script>\\n'
+            '```\\n\\n'
+            '## Run Instructions\\n1. uvicorn main:app --reload\\n'
+        )
+        issues = meridian_gateway._artifact_has_obvious_web_build_contract_errors(artifact)
+        self.assertTrue(issues)
+        self.assertTrue(meridian_gateway._build_artifact_contribution_is_too_thin(artifact, request))
+        self.assertFalse(meridian_gateway._artifact_matches_skill_shape(artifact, request, []))
+
+    def test_manager_response_shape_for_fastapi_web_build_mentions_json_body_contract(self):
+        request = (
+            'Build the smallest runnable FastAPI task tracker web app using only main.py, requirements.txt, '
+            'and static/index.html.'
+        )
+        shape = meridian_gateway._manager_response_shape(request, None)
+        self.assertIn('JSON request body', shape)
+        self.assertIn('StaticFiles', shape)
+
+    def test_build_artifact_requests_do_not_use_direct_provider_fast_lane(self):
+        request = 'Build a Flutter mobile app with offline notes. Return the file tree and complete code for every file.'
+        self.assertFalse(meridian_gateway._prefer_direct_provider_first('FORGE', request, []))
+        self.assertFalse(meridian_gateway._prefer_direct_provider_first('QUILL', request, []))
+
+    def test_web_build_artifact_uses_direct_provider_fast_lane_for_quill_only(self):
+        request = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        self.assertTrue(meridian_gateway._prefer_direct_provider_first('QUILL', request, []))
+        self.assertFalse(meridian_gateway._prefer_direct_provider_first('FORGE', request, []))
+
+    def test_web_build_direct_provider_timeout_for_quill_is_extended(self):
+        request = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        timeout = meridian_gateway._direct_provider_timeout_for_request('QUILL', request, [], 55)
+        self.assertGreaterEqual(timeout, 40)
+        self.assertLessEqual(timeout, 60)
+
+    def test_web_build_quill_loom_fallback_timeout_keeps_useful_budget(self):
+        specialist_timeout = meridian_gateway._specialist_timeout_for_request(
+            'QUILL',
+            'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.',
+            [],
+        )
+        direct_timeout = meridian_gateway._direct_provider_timeout_for_request(
+            'QUILL',
+            'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.',
+            [],
+            specialist_timeout,
+        )
+        loom_timeout = max(8, specialist_timeout - min(direct_timeout, max(specialist_timeout - 6, 0)))
+        if meridian_gateway._request_targets_ui_surface('Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'):
+            loom_timeout = max(22, loom_timeout)
+        self.assertGreaterEqual(loom_timeout, 22)
+
+    def test_build_artifact_request_does_not_prefer_safe_web_research(self):
+        request = 'Build a minimal runnable FastAPI + HTML/CSS/JS todo web app. Return file tree and complete code for every file.'
+        self.assertFalse(meridian_gateway._request_prefers_safe_web_research(request))
+
+    def test_build_artifact_contribution_marks_success_stub_as_too_thin(self):
+        request = 'Build a React web app with a FastAPI backend. Return the file tree and complete code for every file.'
+        self.assertTrue(meridian_gateway._build_artifact_contribution_is_too_thin('success', request))
+        self.assertTrue(
+            meridian_gateway._build_artifact_contribution_is_too_thin(
+                'Stack\nFastAPI\n\nFile Tree\n- main.py\n\n```py\nprint(\"ok\")\n```',
+                request,
+            )
+        )
+        self.assertFalse(
+            meridian_gateway._build_artifact_contribution_is_too_thin(
+                'Stack\nFastAPI\n\nFile Tree\n- backend/main.py\n- frontend/index.html\n\nCode\n```py\nprint(\"ok\")\n```\n\n```html\n<div></div>\n```\n\nRun Instructions\n1. run it',
+                request,
+            )
+        )
+
+    def test_web_build_worker_frontend_contribution_is_not_rejected_for_missing_full_app_sections(self):
+        request = 'Build the smallest runnable FastAPI task tracker web app using only main.py, requirements.txt, and static/index.html.'
+        artifact = (
+            '### static/index.html\n'
+            '```html\n'
+            '<!DOCTYPE html><html><body><form id="task-form"></form><script>\n'
+            'fetch("/tasks", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({title, description})})\n'
+            '</script></body></html>\n'
+            '```\n'
+        )
+        self.assertFalse(
+            meridian_gateway._build_artifact_contribution_is_too_thin(artifact, request, 'QUILL')
+        )
+
+    def test_web_build_worker_backend_contribution_is_not_rejected_for_missing_full_app_sections(self):
+        request = 'Build the smallest runnable FastAPI task tracker web app using only main.py, requirements.txt, and static/index.html.'
+        artifact = (
+            '### main.py\n'
+            '```python\n'
+            'from fastapi import FastAPI\n'
+            'from pydantic import BaseModel\n'
+            'app = FastAPI()\n'
+            'class Task(BaseModel):\n'
+            '    title: str\n'
+            '@app.post("/tasks")\n'
+            'async def create_task(task: Task):\n'
+            '    return task\n'
+            '```\n'
+            '### requirements.txt\n```txt\nfastapi\nuvicorn\npydantic\n```\n'
+        )
+        self.assertFalse(
+            meridian_gateway._build_artifact_contribution_is_too_thin(artifact, request, 'FORGE')
+        )
+
+    def test_build_artifact_team_deadline_is_extended(self):
+        request = 'Build a React web app with a FastAPI backend. Return the file tree and complete code for every file.'
+        self.assertGreaterEqual(meridian_gateway._team_request_deadline_seconds(request, {'reason': 'software_delivery_build_artifact'}), 150)
+
+    def test_qa_gate_allows_fastpath_for_soft_findings_only(self):
+        steps = [
+            {
+                'task_kind': 'qa_gate',
+                'status': 'ok',
+                'result': 'FAIL',
+                'warnings': ['No persistence validation for large data sets'],
+            }
+        ]
+        self.assertTrue(meridian_gateway._qa_gate_allows_manager_fastpath(steps))
+
+    def test_qa_gate_blocks_fastpath_for_partial_result(self):
+        steps = [
+            {
+                'task_kind': 'qa_gate',
+                'status': 'ok',
+                'result': 'PARTIAL',
+                'warnings': ['frontend lacks initial task loading'],
+            }
+        ]
+        self.assertFalse(meridian_gateway._qa_gate_allows_manager_fastpath(steps))
+
+    def test_qa_gate_blocks_fastpath_for_json_fail_result(self):
+        steps = [
+            {
+                'task_kind': 'qa_gate',
+                'status': 'ok',
+                'result': '{"verification":"FAIL","warnings":[{"location":"root","description":"UI not reachable at /"}]}',
+                'warnings': [],
+            }
+        ]
+        self.assertFalse(meridian_gateway._qa_gate_allows_manager_fastpath(steps))
+
+    def test_build_artifact_fastpath_is_blocked_by_failed_qa_gate(self):
+        goal = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        steps = [
+            {
+                'task_kind': 'write',
+                'status': 'ok',
+                'agent_id': 'agent_forge',
+                'result': (
+                    'Stack\nFastAPI\n\nFile Tree\n- main.py\n- static/index.html\n\n'
+                    'Code\n```python\nfrom fastapi import FastAPI\napp = FastAPI()\n```\n\n'
+                    '```html\n<div id=\"app\"></div>\n```\n\nRun Instructions\n1. uvicorn main:app --reload\n'
+                ),
+            },
+            {
+                'task_kind': 'qa_gate',
+                'status': 'ok',
+                'result': 'FAIL',
+                'warnings': ['runtime issue: frontend does not render created tasks'],
+            },
+        ]
+        artifact, warning = meridian_gateway._manager_fastpath_artifact(goal, steps, [])
+        self.assertEqual(artifact, '')
+        self.assertEqual(warning, '')
+
+    def test_qa_findings_block_reads_description_field(self):
+        goal = 'Build a minimal runnable FastAPI task tracker web app with HTML frontend. Return the file tree and complete code.'
+        steps = [
+            {
+                'task_kind': 'qa_gate',
+                'status': 'ok',
+                'warnings': [
+                    {'location': 'root route', 'description': 'UI is not served from /'}
+                ],
+            }
+        ]
+        findings = meridian_gateway._qa_findings_block(goal, steps)
+        self.assertIn('root route: UI is not served from /', findings)
+
     def test_software_delivery_request_does_not_match_security_questionnaire_shape(self):
         request = (
             'Design the architecture, implement the backend API, build the frontend delivery surface, '
@@ -233,6 +801,16 @@ class GatewayTeamRouteTests(unittest.TestCase):
         self.assertEqual(plan['reason'], 'skill_routed_request')
         self.assertIsInstance(plan.get('verified_facts'), dict)
         self.assertIn('runtime_id', plan['verified_facts'])
+
+    def test_short_memory_turn_stays_direct_instead_of_skill_routed(self):
+        plan = meridian_gateway._team_route_plan(
+            'Remember this code name: cobalt-otter. Reply in one short sentence.',
+            'web_api:workbench',
+        )
+        self.assertEqual(plan['mode'], 'direct')
+        self.assertEqual(plan['reason'], 'short_memory_direct')
+        self.assertEqual(plan['workers'], [])
+        self.assertEqual(plan['skills'], [])
 
     def test_decision_grade_route_score_prefers_direct_for_short_ambiguous_prompt(self):
         bundle = {

@@ -54,6 +54,32 @@ def _default_auth_profiles() -> dict[str, dict[str, Any]]:
     return {}
 
 
+def _runtime_override_summary(env: dict[str, Any]) -> dict[str, Any]:
+    def _csv(raw: Any) -> list[str]:
+        return [item.strip() for item in str(raw or '').split(',') if item.strip()]
+
+    fields = {
+        'profile_name': str(env.get('MERIDIAN_BRAIN_MANAGER_PROFILE_NAME') or '').strip(),
+        'transport': str(env.get('MERIDIAN_BRAIN_MANAGER_TRANSPORT') or '').strip(),
+        'endpoint': str(env.get('MERIDIAN_BRAIN_MANAGER_ENDPOINT') or '').strip(),
+        'model': str(env.get('MERIDIAN_BRAIN_MANAGER_MODEL') or '').strip(),
+        'cli_bin': str(env.get('MERIDIAN_BRAIN_MANAGER_CLI_BIN') or '').strip(),
+        'cli_home': str(env.get('MERIDIAN_BRAIN_MANAGER_CLI_HOME') or '').strip(),
+        'auth_env': str(env.get('MERIDIAN_BRAIN_MANAGER_AUTH_ENV') or '').strip(),
+        'key_env_pool': _csv(env.get('MERIDIAN_BRAIN_MANAGER_KEY_ENV_POOL')),
+        'config_path': str(env.get('MERIDIAN_BRAIN_ROUTER_CONFIG_PATH') or '').strip(),
+    }
+    active_fields = sorted(
+        key for key, value in fields.items()
+        if (value if not isinstance(value, list) else len(value) > 0)
+    )
+    return {
+        'active': bool(active_fields),
+        'fields': active_fields,
+        'values': fields,
+    }
+
+
 def unconfigured_policy(org_id: str, *, updated_by: str = 'system') -> dict[str, Any]:
     return {
         'schema': POLICY_SCHEMA,
@@ -242,6 +268,58 @@ def load_policy(org_id: str) -> dict[str, Any]:
     return _ensure_route_registry_bindings(merged)
 
 
+def resolve_profile_defaults(policy: dict[str, Any], provider_profile: str) -> dict[str, Any]:
+    provider_profile = str(provider_profile or '').strip()
+    provider_registry = dict(policy.get('provider_registry') or {})
+    auth_profiles = dict(policy.get('auth_profiles') or {})
+    primary_route_id = str(policy.get('primary_route_id') or '').strip()
+    routes = [dict(item) for item in list(policy.get('routes') or []) if isinstance(item, dict)]
+    matched_routes = [
+        route for route in routes
+        if str(route.get('provider_ref') or route.get('provider_profile') or '').strip() == provider_profile
+    ]
+
+    preferred_route = None
+    if matched_routes:
+        preferred_route = next(
+            (route for route in matched_routes if str(route.get('route_id') or '').strip() == primary_route_id),
+            matched_routes[0],
+        )
+
+    auth_profile_name = ''
+    if provider_profile and isinstance(auth_profiles.get(provider_profile), dict):
+        auth_profile_name = provider_profile
+    elif preferred_route:
+        for candidate in list(preferred_route.get('auth_profile_order') or []):
+            token = str(candidate or '').strip()
+            if token and isinstance(auth_profiles.get(token), dict):
+                auth_profile_name = token
+                break
+
+    auth_profile = dict(auth_profiles.get(auth_profile_name) or {})
+    provider_entry = dict(provider_registry.get(provider_profile) or {})
+    route_type = (
+        str((preferred_route or {}).get('route_type') or '').strip()
+        or str(provider_entry.get('default_route_type') or '').strip()
+    )
+
+    return {
+        'provider_profile': provider_profile,
+        'provider_entry': provider_entry,
+        'route_type': route_type,
+        'model': str((preferred_route or {}).get('model') or '').strip(),
+        'endpoint': str((preferred_route or {}).get('endpoint') or '').strip(),
+        'cli_bin': str(auth_profile.get('cli_bin') or (preferred_route or {}).get('cli_bin') or '').strip(),
+        'cli_home': str(auth_profile.get('cli_home') or (preferred_route or {}).get('cli_home') or '').strip(),
+        'auth_profile_name': auth_profile_name,
+        'auth_profile': auth_profile,
+        'auth_env': str(auth_profile.get('auth_env') or (preferred_route or {}).get('auth_env') or '').strip(),
+        'key_env_pool': list(auth_profile.get('key_env_pool') or (preferred_route or {}).get('key_env_pool') or []),
+        'matched_route': preferred_route,
+        'matched_routes': matched_routes,
+    }
+
+
 def save_policy(org_id: str, policy: dict[str, Any]) -> dict[str, Any]:
     import json
 
@@ -347,14 +425,59 @@ def configure_policy(
         )
 
     routes = [primary_route, *list(fallback_routes or [])]
-    return save_policy(org_id, {
+    payload = {
         'primary_route_id': primary_route_id,
         'routes': routes,
         'provider_registry': provider_registry,
         'model_registry': model_registry,
         'auth_profiles': auth_profiles,
         'updated_by': updated_by,
-    })
+    }
+    return save_policy(org_id, _prune_unreferenced_entries(payload))
+
+
+def _prune_unreferenced_entries(policy: dict[str, Any]) -> dict[str, Any]:
+    payload = copy.deepcopy(policy)
+    provider_registry = dict(payload.get('provider_registry') or {})
+    model_registry = dict(payload.get('model_registry') or {})
+    auth_profiles = dict(payload.get('auth_profiles') or {})
+    routes = list(payload.get('routes') or [])
+
+    used_provider_ids: set[str] = set()
+    used_model_ids: set[str] = set()
+    used_auth_profile_names: set[str] = set()
+
+    for route in routes:
+        provider_id = str(route.get('provider_ref') or route.get('provider_profile') or '').strip()
+        model_id = str(route.get('model_ref') or '').strip()
+        if provider_id:
+            used_provider_ids.add(provider_id)
+        if model_id:
+            used_model_ids.add(model_id)
+        for auth_name in list(route.get('auth_profile_order') or []):
+            auth_name = str(auth_name or '').strip()
+            if auth_name:
+                used_auth_profile_names.add(auth_name)
+
+    used_provider_ids.update(
+        str(auth_profiles[name].get('profile_name') or '').strip()
+        for name in used_auth_profile_names
+        if isinstance(auth_profiles.get(name), dict)
+    )
+
+    payload['provider_registry'] = {
+        key: value for key, value in provider_registry.items()
+        if str(key or '').strip() in used_provider_ids
+    }
+    payload['model_registry'] = {
+        key: value for key, value in model_registry.items()
+        if str(key or '').strip() in used_model_ids
+    }
+    payload['auth_profiles'] = {
+        key: value for key, value in auth_profiles.items()
+        if str(key or '').strip() in used_auth_profile_names
+    }
+    return payload
 
 
 def route_map(policy: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -405,16 +528,8 @@ def policy_status(org_id: str, *, runtime_env: dict[str, str] | None = None) -> 
     policy = load_policy(org_id)
     route = active_route(policy)
     chain = resolve_route_chain(policy)
-    has_override = any(
-        bool(str(env.get(name) or '').strip())
-        for name in (
-            'MERIDIAN_BRAIN_MANAGER_TRANSPORT',
-            'MERIDIAN_BRAIN_MANAGER_CLI_BIN',
-            'MERIDIAN_BRAIN_MANAGER_ENDPOINT',
-            'MERIDIAN_BRAIN_MANAGER_MODEL',
-            'MERIDIAN_BRAIN_ROUTER_CONFIG_PATH',
-        )
-    )
+    override_summary = _runtime_override_summary(env)
+    has_override = bool(override_summary.get('active'))
     if not route:
         return {
             'configured': False,
@@ -424,6 +539,9 @@ def policy_status(org_id: str, *, runtime_env: dict[str, str] | None = None) -> 
             'active_route': None,
             'active_provider': None,
             'active_model': None,
+            'override_active': has_override,
+            'override_fields': list(override_summary.get('fields') or []),
+            'runtime_override': dict(override_summary),
             'fallback_chain': [],
             'provider_registry': copy.deepcopy(policy.get('provider_registry', {})),
             'model_registry': copy.deepcopy(policy.get('model_registry', {})),
@@ -444,6 +562,9 @@ def policy_status(org_id: str, *, runtime_env: dict[str, str] | None = None) -> 
         'active_route': copy.deepcopy(route),
         'active_provider': copy.deepcopy(provider_registry.get(provider_ref) or {}),
         'active_model': copy.deepcopy(model_registry.get(model_ref) or {}),
+        'override_active': has_override,
+        'override_fields': list(override_summary.get('fields') or []),
+        'runtime_override': dict(override_summary),
         'fallback_chain': [copy.deepcopy(item) for item in chain[1:]],
         'provider_registry': copy.deepcopy(provider_registry),
         'model_registry': copy.deepcopy(model_registry),

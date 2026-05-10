@@ -1170,6 +1170,30 @@ class LiveWorkspaceContextTests(unittest.TestCase):
             self.assertIn('MERIDIAN_ENV_PROFILE', source)
             self.assertIn('meridian_local_operator', source)
 
+    def test_dev_up_contract_mentions_stack_stabilization(self):
+        script_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'dev-up.sh'))
+        with open(script_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('MERIDIAN_STACK_STABLE_SECONDS', source)
+        self.assertIn('wait_for_stable_stack()', source)
+        self.assertIn('stack failed stabilization window', source)
+        self.assertIn('pid_file_alive "gateway"', source)
+
+    def test_dev_up_contract_requires_supervisor_liveness_when_enabled(self):
+        script_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'dev-up.sh'))
+        with open(script_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('pid_file_alive "supervisor"', source)
+        self.assertIn('supervisor failed to remain alive during stabilization', source)
+
+    def test_dev_up_contract_requires_gateway_health_streak_before_return(self):
+        script_path = os.path.abspath(os.path.join(PLATFORM_DIR, '..', '..', '..', 'scripts', 'dev-up.sh'))
+        with open(script_path, 'r', encoding='utf-8') as f:
+            source = f.read()
+        self.assertIn('local healthy_streak=0', source)
+        self.assertIn('service_healthy "http://127.0.0.1:${MERIDIAN_GATEWAY_PORT}/api/status" 3', source)
+        self.assertIn('if (( healthy_streak >= 4 )); then', source)
+
     def test_acceptance_skip_warning_text_is_consistent(self):
         for rel in (
             ('..', '..', '..', 'scripts', 'acceptance_publish_live_lane.sh'),

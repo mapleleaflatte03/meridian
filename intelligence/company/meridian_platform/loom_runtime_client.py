@@ -107,6 +107,57 @@ def _load_job_record(context: LoomRuntimeContext, job_id: str) -> dict:
     return payload if isinstance(payload, dict) else {}
 
 
+def _service_runtime_state_path(context: LoomRuntimeContext) -> str:
+    return os.path.join(context.loom_root, 'run', 'service', 'runtime_state.json')
+
+
+def _load_service_runtime_state(context: LoomRuntimeContext) -> dict:
+    path = _service_runtime_state_path(context)
+    try:
+        with open(path, 'r', encoding='utf-8') as handle:
+            payload = json.load(handle)
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _pid_is_running(pid_value: Any) -> bool:
+    try:
+        pid = int(pid_value)
+    except (TypeError, ValueError):
+        return False
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _service_state_warning(context: LoomRuntimeContext) -> str:
+    state = _load_service_runtime_state(context)
+    if not state:
+        return ''
+    running = bool(state.get('running'))
+    status = str(state.get('status') or '').strip().lower()
+    pid = state.get('pid')
+    note = str(state.get('note') or '').strip()
+    if not running or status not in {'running', 'healthy'} or not _pid_is_running(pid):
+        details: list[str] = []
+        if status:
+            details.append(f'status={status}')
+        if pid is not None:
+            details.append(f'pid={pid}')
+            if not _pid_is_running(pid):
+                details.append('pid_not_running')
+        if note:
+            details.append(note)
+        rendered = ', '.join(part for part in details if part)
+        return f'Loom service runtime state is unhealthy ({rendered})'
+    return ''
+
+
 def capability_preflight(
     context: LoomRuntimeContext,
     capability_name: str,
@@ -425,6 +476,25 @@ def run_capability(
         submit_cmd.extend(['--service-token', context.service_token])
     submit_cmd.extend(['--format', 'json'])
 
+    service_state_warning = _service_state_warning(context)
+    if service_state_warning:
+        direct = _direct_execute_capability(
+            context,
+            capability_name,
+            payload,
+            timeout,
+            agent_id=(agent_id or context.agent_id).strip(),
+            session_id=session_id,
+            action_type=resolved_action_type,
+            resource=resolved_resource,
+            estimated_cost_usd=resolved_estimated_cost_usd,
+            runner=runner,
+            result_loader=result_loader,
+        )
+        if direct.get('ok'):
+            direct['warnings'] = [service_state_warning]
+            return direct
+
     try:
         submit = runner(
             submit_cmd,
@@ -534,6 +604,26 @@ def run_capability(
                 'Loom service submit stayed in staged file_ingress without an acceptance receipt; '
                 'continuing by job_id because staged ingress can still execute asynchronously.'
             )
+            current_job_record = _load_job_record(context, job_id)
+            current_service_warning = _service_state_warning(context)
+            if not current_job_record and current_service_warning:
+                direct = _direct_execute_capability(
+                    context,
+                    capability_name,
+                    payload,
+                    timeout,
+                    agent_id=(agent_id or context.agent_id).strip(),
+                    session_id=session_id,
+                    action_type=resolved_action_type,
+                    resource=resolved_resource,
+                    estimated_cost_usd=resolved_estimated_cost_usd,
+                    runner=runner,
+                    result_loader=result_loader,
+                )
+                if direct.get('ok'):
+                    direct['warnings'] = [staged_ingress_warning, current_service_warning]
+                    direct['submit_fallback'] = submit_payload
+                    return direct
 
     inspect_cmd = [
         context.loom_bin,
@@ -601,6 +691,28 @@ def run_capability(
 
     job_record = _load_job_record(context, job_id)
     job_status = str(job_record.get('job_status') or '').strip().lower()
+    if job_status == 'completed':
+        result_path = os.path.join(context.loom_root, 'state', 'runtime', 'jobs', job_id, 'result.json')
+        worker_result = {}
+        if result_loader is not None:
+            loaded = result_loader(result_path, default={})
+            worker_result = loaded or {}
+        result = {
+            'ok': True,
+            'runtime': 'loom',
+            'capability_name': capability_name,
+            'job_id': job_id,
+            'submit': submit_payload,
+            'snapshot': last_snapshot or job_record,
+            'worker_result': worker_result,
+            'estimated_cost_usd': resolved_estimated_cost_usd,
+        }
+        warnings: list[str] = []
+        if staged_ingress_warning:
+            warnings.append(staged_ingress_warning)
+        warnings.append(f'Loom inspect polling timed out, but job record completed within the request budget ({timeout}s limit)')
+        result['warnings'] = warnings
+        return result
     if job_status in {'failed', 'denied', 'cancelled', 'hard_deny'}:
         note = str(job_record.get('budget_reservation_reason') or job_record.get('note') or '').strip()
         message = f'Loom job ended with status={job_status}'

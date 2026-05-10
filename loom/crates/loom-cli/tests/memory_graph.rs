@@ -335,6 +335,23 @@ fn memory_replay_subgraph_is_blocked_by_court_gate() {
         replay.get("replayed_entries").and_then(Value::as_u64),
         Some(0)
     );
+    let artifact_path = PathBuf::from(
+        replay
+            .get("artifact_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    let latest_artifact_path = Path::new(harness.root_str()).join("artifacts/memory/replays/latest.json");
+    assert!(
+        artifact_path.exists(),
+        "memory replay blocked artifact should exist: {}",
+        artifact_path.display()
+    );
+    assert!(
+        latest_artifact_path.exists(),
+        "memory replay latest artifact should exist: {}",
+        latest_artifact_path.display()
+    );
 }
 
 #[test]
@@ -387,6 +404,23 @@ fn memory_replay_subgraph_replays_selected_nodes_when_allowed() {
             .and_then(Value::as_u64)
             .unwrap_or(0)
             >= 1
+    );
+    let artifact_path = PathBuf::from(
+        replay
+            .get("artifact_path")
+            .and_then(Value::as_str)
+            .unwrap_or_default(),
+    );
+    let latest_artifact_path = Path::new(harness.root_str()).join("artifacts/memory/replays/latest.json");
+    assert!(
+        artifact_path.exists(),
+        "memory replay artifact should exist: {}",
+        artifact_path.display()
+    );
+    assert!(
+        latest_artifact_path.exists(),
+        "memory replay latest artifact should exist: {}",
+        latest_artifact_path.display()
     );
 
     let target_entries = harness.json_ok(&[
