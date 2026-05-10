@@ -1,0 +1,3 @@
+## 2026-05-10 - Optimization for Observability Cache
+**Learning:** Using copy.deepcopy on parsed dictionaries (like observability snapshots) is slow compared to caching the raw JSON string and parsing it on demand with json.loads.
+**Action:** Replace copy.deepcopy in observability_snapshot caching with json.loads(json.dumps(snapshot)) pattern where json string is cached, or just json.dumps at cache write and json.loads at read. But we have memory constraint, wait, memory says: 'avoid using copy.deepcopy() on the parsed dictionary as it is often slower than reading from the OS page cache. Instead, cache the raw JSON string and parse it on demand with json.loads(cached_str).' So we should cache json string.
