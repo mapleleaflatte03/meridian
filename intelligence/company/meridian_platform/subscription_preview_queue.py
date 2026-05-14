@@ -182,7 +182,7 @@ def _normalize_store(data, org_id):
                 record['preview_id'] = record.get('preview_id') or preview_id
                 previews[record['preview_id']] = record
 
-    for preview_id, record in list(previews.items()):
+    for preview_id, record in previews.items():
         previews[preview_id] = _normalize_preview(record, org_id, existing=record)
     store['subscription_previews'] = previews
     if 'states' not in store or not store['states']:

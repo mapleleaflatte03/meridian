@@ -102,7 +102,7 @@ def normalize_agent_record(agent, context_source='agent_registry'):
 def _backfill_runtime_bindings(data, context_source='agent_registry'):
     changed = False
     agents = data.get('agents') or {}
-    for agent_id, agent in list(agents.items()):
+    for agent_id, agent in agents.items():
         normalized = normalize_agent_record(agent, context_source=context_source)
         if normalized != agent:
             agents[agent_id] = normalized
