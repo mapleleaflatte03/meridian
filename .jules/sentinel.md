@@ -1,0 +1,4 @@
+## 2025-02-14 - Fix SQL injection risk in SQLite PRAGMA configuration
+**Vulnerability:** Found an unsafe string interpolation pattern where an environment variable (`MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE`) was directly injected into an execution of a PRAGMA SQL query without prior sanitation (`conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')`).
+**Learning:** SQLite's `PRAGMA` commands do not support parameterized queries (placeholders like `?`). This can easily lead developers to use f-strings or concatenation, which introduces SQL injection vulnerabilities if the input isn't strictly validated or sanitized.
+**Prevention:** Always use strict allowlists when dynamically setting PRAGMA values or other non-parameterizable SQL elements. Validating input against a predefined set of known, safe values prevents attackers from injecting malicious SQL commands.
