@@ -861,7 +861,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
         with _public_kernel_proof_cache_lock:
             _public_kernel_proof_cache[cache_key] = {
                 'cached_at_epoch': time.time(),
-                'payload': copy.deepcopy(cached_payload),
+                'payload_json': json.dumps(cached_payload),
             }
             _public_kernel_proof_last_error.pop(cache_key, None)
         return cached_payload
@@ -887,12 +887,12 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
             return future
 
     with _public_kernel_proof_cache_lock:
-        cache_entry = copy.deepcopy(_public_kernel_proof_cache.get(cache_key))
+        cache_entry = _public_kernel_proof_cache.get(cache_key)
         last_error = _public_kernel_proof_last_error.get(cache_key)
 
     if cache_entry:
         cache_age = max(0.0, now - float(cache_entry.get('cached_at_epoch', 0.0)))
-        payload = dict(cache_entry.get('payload') or {})
+        payload = json.loads(cache_entry.get('payload_json')) if cache_entry.get('payload_json') else {}
         if PUBLIC_PROOF_CACHE_TTL_SECONDS > 0 and cache_age <= PUBLIC_PROOF_CACHE_TTL_SECONDS:
             payload['cache'] = {
                 'state': 'fresh',
@@ -929,7 +929,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
                     base_url=normalized_base,
                     run_reference_proofs=False,
                 )
-                fallback_payload = copy.deepcopy(fast_payload)
+                fallback_payload = json.loads(json.dumps(fast_payload))
                 fallback_payload['status'] = 'degraded'
                 fallback_payload['degraded_reason'] = 'public_bundle_build_in_progress_fast_fallback'
                 cache_meta = dict(fallback_payload.get('cache') or {})
