@@ -1,0 +1,3 @@
+## 2026-05-15 - Disabled Button Styles
+**Learning:** Adding global disabled states in CSS for standard HTML elements (like `button:disabled`) ensures a baseline of accessible feedback across the entire application, preventing the need to manually add disabled classes to every component. Using `pointer-events: none` on disabled buttons prevents the `cursor: not-allowed` style from rendering, which removes an important visual cue for users; using `opacity` and `cursor: not-allowed` alone provides a much better experience.
+**Action:** Always prefer setting `opacity` and `cursor: not-allowed` without `pointer-events: none` when styling `:disabled` elements globally to retain mouse interaction feedback.
