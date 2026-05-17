@@ -966,10 +966,10 @@ class FederationAuthority:
             'registry_source': self.peer_registry.get('source', 'none'),
             'peer_count': len(trusted_peers),
             'all_peer_count': len(all_peers),
-            'trusted_peer_ids': list(self.peer_registry.get('trusted_peer_ids', [])),
+            'trusted_peer_ids': self.peer_registry.get('trusted_peer_ids', []),
             'peers': all_peers,
             'trusted_peers': trusted_peers,
-            'admitted_org_ids': list((admission_registry or {}).get('admitted_org_ids', [])),
+            'admitted_org_ids': (admission_registry or {}).get('admitted_org_ids', []),
             'replay_protection': self.replay_store.snapshot(),
             'signing': {
                 'algorithm': 'hmac_sha256',

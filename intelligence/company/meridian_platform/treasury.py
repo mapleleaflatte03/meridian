@@ -852,7 +852,7 @@ def _settlement_adapter_readiness_messages(contract):
         'host_not_supported': 'The current host does not advertise this adapter.',
         'verification_not_ready': 'The verification path is not ready on this host.',
     }
-    blockers = list((contract or {}).get('execution_blockers', []))
+    blockers = (contract or {}).get('execution_blockers', [])
     if not blockers:
         return ['Adapter is ready for execution on this host.']
     return [messages.get(blocker, f'Blocked by {blocker}.') for blocker in blockers]
