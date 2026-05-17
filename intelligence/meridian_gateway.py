@@ -4687,7 +4687,7 @@ def _manager_synthesis(
     manager_meta = _manager_exec_metadata(manager_defaults.get("model", ""))
     skill_names = [
         str(item.get("name") or "").strip()
-        for item in list((plan or {}).get("skills") or [])
+        for item in (plan or {}).get("skills") or []
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     ]
     fastpath_artifact, fastpath_warning = _manager_fastpath_artifact(goal, steps, skill_names)
@@ -8051,7 +8051,7 @@ def _build_memory_packet(
     _prune_memory_entries(state)
     entries = [
         dict(item)
-        for item in list((state.get("entries") or {}).values())
+        for item in (state.get("entries") or {}).values()
         if isinstance(item, dict) and str(item.get("content") or "").strip()
     ]
     if not entries:
@@ -8348,7 +8348,7 @@ def _build_trust_evidence_packet(
     state = _load_trust_evidence_state()
     entries = [
         dict(item)
-        for item in list((state.get("entries") or {}).values())
+        for item in (state.get("entries") or {}).values()
         if isinstance(item, dict) and str(item.get("content") or "").strip()
     ]
     if not entries:
@@ -9010,7 +9010,7 @@ def _build_questionnaire_state(
     evidence_state = _load_trust_evidence_state()
     evidence_entries = [
         dict(item)
-        for item in list((evidence_state.get("entries") or {}).values())
+        for item in (evidence_state.get("entries") or {}).values()
         if isinstance(item, dict) and str(item.get("content") or "").strip()
     ]
     questions = _extract_questionnaire_items(request_text)
@@ -9117,11 +9117,11 @@ def _render_questionnaire_answer_pack(questionnaire: dict[str, Any]) -> str:
 def _build_trust_assurance_summary(state: dict[str, Any] | None = None) -> dict[str, Any]:
     payload = state if isinstance(state, dict) else _load_trust_assurance_state()
     evidence_state = _load_trust_evidence_state()
-    queue_entries = [dict(item) for item in list((payload.get("approval_queue") or {}).values()) if isinstance(item, dict)]
-    questionnaires = [dict(item) for item in list((payload.get("questionnaires") or {}).values()) if isinstance(item, dict)]
+    queue_entries = [dict(item) for item in (payload.get("approval_queue") or {}).values() if isinstance(item, dict)]
+    questionnaires = [dict(item) for item in (payload.get("questionnaires") or {}).values() if isinstance(item, dict)]
     pending_queue = [item for item in queue_entries if bool(item.get("approval_required"))]
     evidence_counts = {"approved": 0, "draft": 0, "stale": 0, "revoked": 0}
-    for entry in list((evidence_state.get("entries") or {}).values()):
+    for entry in (evidence_state.get("entries") or {}).values():
         if not isinstance(entry, dict):
             continue
         status = _trust_evidence_effective_status(entry)
@@ -9196,7 +9196,7 @@ def _build_trust_ops_operator_snapshot(
     payload = state if isinstance(state, dict) else _load_trust_assurance_state()
     questionnaires_map = {
         str(item.get("questionnaire_id") or "").strip(): dict(item)
-        for item in list((payload.get("questionnaires") or {}).values())
+        for item in (payload.get("questionnaires") or {}).values()
         if isinstance(item, dict) and str(item.get("questionnaire_id") or "").strip()
     }
     normalized_questionnaire_id = str(questionnaire_id or "").strip()
@@ -9214,7 +9214,7 @@ def _build_trust_ops_operator_snapshot(
         "unresolved": 0,
         "draft": 0,
     }
-    for item in list((payload.get("approval_queue") or {}).values()):
+    for item in (payload.get("approval_queue") or {}).values():
         if not isinstance(item, dict):
             continue
         queue_id = str(item.get("queue_id") or "").strip()
@@ -13284,7 +13284,7 @@ def _salvage_user_artifact(request: str, skills_used: list[str]) -> str:
 def _manager_response_shape(goal: str, plan: dict[str, Any] | None = None) -> str:
     skill_names = {
         str(item.get("name") or "").strip().lower()
-        for item in list((plan or {}).get("skills") or [])
+        for item in (plan or {}).get("skills") or []
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     }
     if _request_wants_protocol_artifact(goal):
