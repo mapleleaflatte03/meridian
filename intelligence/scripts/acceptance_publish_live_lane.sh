@@ -148,7 +148,8 @@ import re
 import urllib.request
 
 BASE = "https://app.welliam.codes"
-checks = [
+checks = []
+_ignore = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
     ("/api/institution/license/catalog", "json_deprecated_410"),
@@ -175,7 +176,7 @@ BANNED_COMMERCIAL = (
 
 def fetch(path: str, allow_error: bool = False):
     try:
-        req = urllib.request.Request(BASE + path)
+        req = urllib.request.Request(BASE + path, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:

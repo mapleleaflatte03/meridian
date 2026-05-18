@@ -2948,7 +2948,7 @@ def _sender_execution_delivery_ref_for_court_notice(bound_org_id, sender_warrant
     commitment = None
     if claims.commitment_id:
         commitment = get_commitment(claims.commitment_id, org_id=bound_org_id)
-        for ref in reversed(list((commitment or {}).get('delivery_refs') or [])):
+        for ref in reversed(((commitment or {}).get('delivery_refs') or [])):
             ref = dict(ref or {})
             if (ref.get('message_type') or '').strip() != 'execution_request':
                 continue
@@ -5592,7 +5592,7 @@ def _maybe_restore_peer_for_case(case_record, actor_id, *, org_id, session_id=No
 def _sender_warrant_delivery_ref_for_settlement_notice(commitment, claims, *, payload=None):
     payload = payload if isinstance(payload, dict) else {}
     execution_envelope_id = (payload.get('envelope_id') or '').strip()
-    for ref in reversed(list((commitment or {}).get('delivery_refs') or [])):
+    for ref in reversed(((commitment or {}).get('delivery_refs') or [])):
         ref = dict(ref or {})
         if (ref.get('message_type') or '').strip() != 'execution_request':
             continue
