@@ -2816,7 +2816,7 @@ def _sender_execution_delivery_ref_for_court_notice(bound_org_id, sender_warrant
     commitment = None
     if claims.commitment_id:
         commitment = commitments.get_commitment(claims.commitment_id, org_id=bound_org_id)
-        for ref in reversed(list((commitment or {}).get('delivery_refs') or [])):
+        for ref in reversed(((commitment or {}).get('delivery_refs') or [])):
             ref = dict(ref or {})
             if (ref.get('message_type') or '').strip() != 'execution_request':
                 continue
