@@ -187,6 +187,7 @@ def _ensure_route_registry_bindings(policy: dict[str, Any]) -> dict[str, Any]:
     model_registry = dict(policy.get('model_registry') or {})
     routes: list[dict[str, Any]] = []
 
+    # Performance: Avoided unnecessary list() O(n) shallow copy.
     for route in policy.get('routes') or []:
         current = dict(route)
         provider_ref = str(current.get('provider_ref') or current.get('provider_profile') or '').strip()
@@ -273,6 +274,7 @@ def resolve_profile_defaults(policy: dict[str, Any], provider_profile: str) -> d
     provider_registry = dict(policy.get('provider_registry') or {})
     auth_profiles = dict(policy.get('auth_profiles') or {})
     primary_route_id = str(policy.get('primary_route_id') or '').strip()
+    # Performance: Avoided unnecessary list() O(n) shallow copy.
     routes = [dict(item) for item in policy.get('routes') or [] if isinstance(item, dict)]
     matched_routes = [
         route for route in routes
@@ -290,6 +292,7 @@ def resolve_profile_defaults(policy: dict[str, Any], provider_profile: str) -> d
     if provider_profile and isinstance(auth_profiles.get(provider_profile), dict):
         auth_profile_name = provider_profile
     elif preferred_route:
+        # Performance: Avoided unnecessary list() O(n) shallow copy.
         for candidate in preferred_route.get('auth_profile_order') or []:
             token = str(candidate or '').strip()
             if token and isinstance(auth_profiles.get(token), dict):
@@ -454,6 +457,7 @@ def _prune_unreferenced_entries(policy: dict[str, Any]) -> dict[str, Any]:
             used_provider_ids.add(provider_id)
         if model_id:
             used_model_ids.add(model_id)
+        # Performance: Avoided unnecessary list() O(n) shallow copy.
         for auth_name in route.get('auth_profile_order') or []:
             auth_name = str(auth_name or '').strip()
             if auth_name:
@@ -483,6 +487,7 @@ def _prune_unreferenced_entries(policy: dict[str, Any]) -> dict[str, Any]:
 def route_map(policy: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return {
         str(route.get('route_id') or '').strip(): route
+        # Performance: Avoided unnecessary list() O(n) shallow copy.
         for route in policy.get('routes') or []
         if str(route.get('route_id') or '').strip()
     }
@@ -499,6 +504,7 @@ def resolve_route_chain(policy: dict[str, Any]) -> list[dict[str, Any]]:
     if not primary:
         return []
     chain = [primary]
+    # Performance: Avoided unnecessary list() O(n) shallow copy.
     for route_id in primary.get('fallback_route_ids') or []:
         route = routes.get(str(route_id or '').strip())
         if route:
@@ -584,6 +590,7 @@ def update_route_health(
 ) -> dict[str, Any]:
     policy = load_policy(org_id)
     routes = []
+    # Performance: Avoided unnecessary list() O(n) shallow copy.
     for route in policy.get('routes') or []:
         current = dict(route)
         if str(current.get('route_id') or '') == str(route_id or ''):
