@@ -209,7 +209,8 @@ def _policy_route_to_plan(route: dict[str, Any], policy: dict[str, Any], *, mode
     auth_profiles = dict(policy.get("auth_profiles") or {})
     auth_profile_name = ""
     auth_profile: dict[str, Any] = {}
-    for item in list(route.get("auth_profile_order") or []):
+    # Performance: Avoided unnecessary list() O(n) shallow copy.
+    for item in route.get("auth_profile_order") or []:
         candidate = str(item or "").strip()
         if not candidate:
             continue

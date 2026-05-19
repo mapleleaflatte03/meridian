@@ -247,7 +247,8 @@ def _loom_runtime_agent_ids() -> set[str]:
     except Exception:
         return set()
     agent_ids: set[str] = set()
-    for record in list(payload.get('agents') or []):
+    # Performance: Avoided unnecessary list() O(n) shallow copy.
+    for record in payload.get('agents') or []:
         if not isinstance(record, dict):
             continue
         agent_id = str(record.get('agent_id') or '').strip().lower()
