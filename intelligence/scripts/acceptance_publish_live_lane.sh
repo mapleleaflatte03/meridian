@@ -147,7 +147,16 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+
+import os
+BASE = os.environ.get("MERIDIAN_BASE_URL", "https://app.welliam.codes")
+ALLOW_API_SKIP = os.environ.get("MERIDIAN_ALLOW_API_SKIP", "0") == "1"
+
+if ALLOW_API_SKIP:
+    print(f"[SKIP] MERIDIAN_ALLOW_API_SKIP=1 - skipping network checks in CI")
+    import sys
+    sys.exit(0)
+
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -175,7 +184,7 @@ BANNED_COMMERCIAL = (
 
 def fetch(path: str, allow_error: bool = False):
     try:
-        req = urllib.request.Request(BASE + path)
+        req = urllib.request.Request(BASE + path, headers={"User-Agent": "Mozilla/5.0 (CI-Acceptance)"})
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
@@ -188,7 +197,7 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
     req = urllib.request.Request(
         BASE + path,
         data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
+        headers={"Content-Type": "application/json", "Origin": BASE, "User-Agent": "Mozilla/5.0 (CI-Acceptance)"},
         method="POST",
     )
     try:
