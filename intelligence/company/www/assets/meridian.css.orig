@@ -2376,3 +2376,18 @@ select:disabled,
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Accessibility & Interactive States ── */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:disabled,
+input:disabled,
+select:disabled,
+.cta:disabled,
+.operator-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
