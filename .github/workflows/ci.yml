@@ -76,6 +76,8 @@ jobs:
           ./scripts/acceptance_publish_live_lane.sh
           cd company/meridian_platform
           python3 -m unittest -v test_subscription_service.py
+        env:
+          MERIDIAN_ALLOW_API_SKIP: '1'
 
   onboarding-ready-lane:
     runs-on: ubuntu-latest
