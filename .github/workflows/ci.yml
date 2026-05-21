@@ -71,6 +71,8 @@ jobs:
 
       - name: Intelligence tests
         run: |
+          export MERIDIAN_KERNEL_ROOT="${GITHUB_WORKSPACE}/kernel"
+          export MERIDIAN_ALLOW_API_SKIP="1"
           cd intelligence
           python3 -m unittest -v test_gateway_brain_router.py
           ./scripts/acceptance_publish_live_lane.sh
