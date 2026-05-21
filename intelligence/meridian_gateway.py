@@ -98,11 +98,18 @@ class MeridianThreadingHTTPServer(ThreadingHTTPServer):
 def _resolve_kernel_dir() -> Path:
     explicit_root = str(os.environ.get("MERIDIAN_KERNEL_ROOT") or "").strip()
     if explicit_root:
-        return Path(explicit_root) / "kernel"
-    for root in ("/opt/meridian-kernel", "/home/ubuntu/meridian/kernel"):
-        candidate = Path(root) / "kernel"
+        candidate = Path(explicit_root) / "kernel"
         if candidate.exists():
             return candidate
+        else:
+            return Path(explicit_root)
+    for root in ("/opt/meridian-kernel", "/home/ubuntu/meridian/kernel"):
+        try:
+            candidate = Path(root) / "kernel"
+            if candidate.exists():
+                return candidate
+        except PermissionError:
+            pass
     return Path("/opt/meridian-kernel/kernel")
 
 
