@@ -1818,6 +1818,15 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   padding: 0.45rem 0.8rem;
   font: inherit;
   cursor: pointer;
+  transition: opacity var(--ease-fast), background var(--ease-fast);
+}
+
+.operator-action:disabled {
+  opacity: 0.4;
+}
+
+.operator-action:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .operator-link {
