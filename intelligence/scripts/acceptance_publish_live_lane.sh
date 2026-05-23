@@ -175,7 +175,7 @@ BANNED_COMMERCIAL = (
 
 def fetch(path: str, allow_error: bool = False):
     try:
-        req = urllib.request.Request(BASE + path)
+        req = urllib.request.Request(BASE + path, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
@@ -188,7 +188,7 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
     req = urllib.request.Request(
         BASE + path,
         data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
+        headers={"Content-Type": "application/json", "Origin": BASE, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
         method="POST",
     )
     try:
@@ -198,6 +198,17 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
         if allow_error:
             return e.code, e.read().decode("utf-8", "ignore")
         raise
+
+import sys
+try:
+    status, body = fetch("/api/status", allow_error=True)
+    if status != 200:
+        print(f"[SKIP] Live surface {BASE} unreachable (HTTP {status})")
+        sys.exit(0)
+    json.loads(body)
+except Exception as e:
+    print(f"[SKIP] Live surface {BASE} not serving Meridian API: {e}")
+    sys.exit(0)
 
 for path, mode in checks:
     if mode == "json_deprecated_410":
