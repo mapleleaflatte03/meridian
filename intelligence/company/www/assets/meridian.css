@@ -2361,3 +2361,23 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   text-align: left;
 }
 .hero-install code { font-family: 'JetBrains Mono', monospace; color: inherit; }
+
+/* ── Accessibility: Disabled & Focus-Visible States ── */
+button:disabled,
+.cta:disabled,
+.operator-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:focus-visible,
+.cta:focus-visible,
+.operator-action:focus-visible,
+.operator-link:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
