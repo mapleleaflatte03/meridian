@@ -4687,7 +4687,7 @@ def _manager_synthesis(
     manager_meta = _manager_exec_metadata(manager_defaults.get("model", ""))
     skill_names = [
         str(item.get("name") or "").strip()
-        for item in list((plan or {}).get("skills") or [])
+        for item in ((plan or {}).get("skills") or [])
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     ]
     fastpath_artifact, fastpath_warning = _manager_fastpath_artifact(goal, steps, skill_names)
@@ -13284,7 +13284,7 @@ def _salvage_user_artifact(request: str, skills_used: list[str]) -> str:
 def _manager_response_shape(goal: str, plan: dict[str, Any] | None = None) -> str:
     skill_names = {
         str(item.get("name") or "").strip().lower()
-        for item in list((plan or {}).get("skills") or [])
+        for item in ((plan or {}).get("skills") or [])
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     }
     if _request_wants_protocol_artifact(goal):
@@ -13412,10 +13412,10 @@ def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) ->
     channel = str(channel or "").strip().lower()
     if channel == "messenger":
         messages: list[dict[str, Any]] = []
-        for entry in list(payload.get("entry") or []):
+        for entry in (payload.get("entry") or []):
             if not isinstance(entry, dict):
                 continue
-            for event in list(entry.get("messaging") or []):
+            for event in (entry.get("messaging") or []):
                 if not isinstance(event, dict):
                     continue
                 sender_id = str(dict(event.get("sender") or {}).get("id") or "").strip()
@@ -13427,14 +13427,14 @@ def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) ->
         return messages
     if channel == "whatsapp":
         messages = []
-        for entry in list(payload.get("entry") or []):
+        for entry in (payload.get("entry") or []):
             if not isinstance(entry, dict):
                 continue
-            for change in list(entry.get("changes") or []):
+            for change in (entry.get("changes") or []):
                 if not isinstance(change, dict):
                     continue
                 value = dict(change.get("value") or {})
-                for message in list(value.get("messages") or []):
+                for message in (value.get("messages") or []):
                     if not isinstance(message, dict):
                         continue
                     sender_id = str(message.get("from") or "").strip()
