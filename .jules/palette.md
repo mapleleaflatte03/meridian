@@ -1,3 +1,0 @@
-## 2024-05-26 - Add visual feedback for disabled states
-**Learning:** Missing visual feedback on disabled buttons degrades UX and accessibility. Combining `pointer-events: none;` with `cursor: not-allowed;` on `:disabled` states prevents the cursor style from rendering.
-**Action:** Add explicit `:disabled` states with `opacity: 0.5` and `cursor: not-allowed;` without `pointer-events: none;` so users get proper visual feedback.
