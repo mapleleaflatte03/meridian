@@ -761,7 +761,7 @@ def _loom_runtime_agent_ids() -> set[str]:
     except Exception:
         return set()
     agent_ids: set[str] = set()
-    for record in list(payload.get("agents") or []):
+    for record in payload.get("agents") or []:
         if not isinstance(record, dict):
             continue
         agent_id = str(record.get("agent_id") or "").strip().lower()
@@ -3853,7 +3853,7 @@ def _full_session_history_context(session_key: str, *, limit: int = 24) -> str:
     imported = imported_history_context(session_key, loom_root=LOOM_ROOT, limit=limit)
     live_doc = load_session_events(session_key, loom_root=LOOM_ROOT) or {}
     live_events = [
-        e for e in list(live_doc.get("events") or [])
+        e for e in live_doc.get("events") or []
         if e.get("history_type") in {"manager_plan", "manager_response", "worker_receipt"}
         and str(e.get("text") or "").strip()
     ]
@@ -3984,7 +3984,7 @@ def _run_specialist_step(
     verified_facts = plan.get("verified_facts")
     verified_facts_block = json.dumps(verified_facts, indent=2, ensure_ascii=False) if isinstance(verified_facts, dict) else "(none)"
     if isinstance(plan.get("skills"), list):
-        matched_skills = [dict(item) for item in list(plan.get("skills") or []) if isinstance(item, dict)]
+        matched_skills = [dict(item) for item in plan.get("skills") or [] if isinstance(item, dict)]
     else:
         matched_skills = TEAM_SKILLS.search(request, limit=2)
     skill_guidance_block = TEAM_SKILLS.guidance_block(matched_skills)
@@ -4687,7 +4687,7 @@ def _manager_synthesis(
     manager_meta = _manager_exec_metadata(manager_defaults.get("model", ""))
     skill_names = [
         str(item.get("name") or "").strip()
-        for item in list((plan or {}).get("skills") or [])
+        for item in (plan or {}).get("skills") or []
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     ]
     fastpath_artifact, fastpath_warning = _manager_fastpath_artifact(goal, steps, skill_names)
@@ -5115,12 +5115,12 @@ def _run_team_route(text: str, session_key: str, runtime: AgentRuntime) -> tuple
             "questionnaire_id": str(dict(questionnaire_outcome or {}).get("questionnaire", {}).get("questionnaire_id") or "").strip(),
             "questionnaire_items": [
                 dict(item)
-                for item in list(dict(questionnaire_outcome or {}).get("questionnaire", {}).get("questions") or [])
+                for item in dict(questionnaire_outcome or {}).get("questionnaire", {}).get("questions") or []
                 if isinstance(item, dict)
             ],
             "approval_queue_entries": [
                 dict(item)
-                for item in list(dict(questionnaire_outcome or {}).get("approval_queue_entries") or [])
+                for item in dict(questionnaire_outcome or {}).get("approval_queue_entries") or []
                 if isinstance(item, dict)
             ],
             "approval_gate_status": str(dict(questionnaire_outcome or {}).get("approval_gate_status") or "").strip(),
@@ -7382,7 +7382,7 @@ def _upsert_memory_entry(state: dict[str, Any], entry: dict[str, Any]) -> tuple[
     category = str(entry.get("category") or "").strip()
     source_skill_names = [
         str(item or "").strip().lower()
-        for item in list(entry.get("source_skill_names") or record.get("source_skill_names") or [])
+        for item in entry.get("source_skill_names") or record.get("source_skill_names") or []
         if str(item or "").strip()
     ]
     record["source_skill_names"] = source_skill_names
@@ -8333,7 +8333,7 @@ def _trust_evidence_packet_delivery_entries(trust_packet: dict[str, Any] | None)
 def _trust_evidence_packet_keys(trust_packet: dict[str, Any] | None) -> list[str]:
     return [
         str(item.get("key") or "").strip()
-        for item in list(dict(trust_packet or {}).get("entries") or [])
+        for item in dict(trust_packet or {}).get("entries") or []
         if isinstance(item, dict) and str(item.get("key") or "").strip()
     ]
 
@@ -8512,12 +8512,12 @@ def _upsert_trust_evidence_entry(state: dict[str, Any], entry: dict[str, Any]) -
     record["approval_status"] = str(entry.get("approval_status") or record.get("approval_status") or "draft").strip().lower()
     record["topic_tags"] = [
         str(tag).strip().lower()
-        for tag in list(entry.get("topic_tags") or record.get("topic_tags") or [])
+        for tag in entry.get("topic_tags") or record.get("topic_tags") or []
         if str(tag).strip()
     ]
     record["source_skill_names"] = [
         str(skill).strip().lower()
-        for skill in list(entry.get("source_skill_names") or record.get("source_skill_names") or [])
+        for skill in entry.get("source_skill_names") or record.get("source_skill_names") or []
         if str(skill).strip()
     ]
     record["source_session_key"] = str(entry.get("source_session_key") or record.get("source_session_key") or "").strip()
@@ -8835,7 +8835,7 @@ def _questionnaire_support_snapshot(
                         question_topics.intersection(
                             {
                                 str(tag).strip().lower()
-                                for tag in list(dict(entry).get("topic_tags") or [])
+                                for tag in dict(entry).get("topic_tags") or []
                                 if str(tag).strip()
                             }
                         )
@@ -8848,7 +8848,7 @@ def _questionnaire_support_snapshot(
                     and not question_topics.intersection(
                         {
                             str(tag).strip().lower()
-                            for tag in list(dict(entry).get("topic_tags") or [])
+                            for tag in dict(entry).get("topic_tags") or []
                             if str(tag).strip()
                         }
                     )
@@ -9670,7 +9670,7 @@ def _atlas_memory_research_block(
     request: str,
     skill_names: list[str] | None = None,
 ) -> str:
-    entries = [dict(item) for item in list(dict(memory_packet or {}).get("entries") or []) if isinstance(item, dict)]
+    entries = [dict(item) for item in dict(memory_packet or {}).get("entries") or [] if isinstance(item, dict)]
     if not entries:
         return ""
     lowered_skills = {str(item or "").strip().lower() for item in (skill_names or []) if str(item or "").strip()}
@@ -9713,7 +9713,7 @@ def _atlas_memory_research_block(
 def _memory_packet_keys(memory_packet: dict[str, Any] | None) -> list[str]:
     return [
         str(item.get("key") or "").strip()
-        for item in list(dict(memory_packet or {}).get("entries") or [])
+        for item in dict(memory_packet or {}).get("entries") or []
         if isinstance(item, dict) and str(item.get("key") or "").strip()
     ]
 
@@ -13284,7 +13284,7 @@ def _salvage_user_artifact(request: str, skills_used: list[str]) -> str:
 def _manager_response_shape(goal: str, plan: dict[str, Any] | None = None) -> str:
     skill_names = {
         str(item.get("name") or "").strip().lower()
-        for item in list((plan or {}).get("skills") or [])
+        for item in (plan or {}).get("skills") or []
         if isinstance(item, dict) and str(item.get("name") or "").strip()
     }
     if _request_wants_protocol_artifact(goal):
@@ -13412,10 +13412,10 @@ def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) ->
     channel = str(channel or "").strip().lower()
     if channel == "messenger":
         messages: list[dict[str, Any]] = []
-        for entry in list(payload.get("entry") or []):
+        for entry in payload.get("entry") or []:
             if not isinstance(entry, dict):
                 continue
-            for event in list(entry.get("messaging") or []):
+            for event in entry.get("messaging") or []:
                 if not isinstance(event, dict):
                     continue
                 sender_id = str(dict(event.get("sender") or {}).get("id") or "").strip()
@@ -13427,14 +13427,14 @@ def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) ->
         return messages
     if channel == "whatsapp":
         messages = []
-        for entry in list(payload.get("entry") or []):
+        for entry in payload.get("entry") or []:
             if not isinstance(entry, dict):
                 continue
-            for change in list(entry.get("changes") or []):
+            for change in entry.get("changes") or []:
                 if not isinstance(change, dict):
                     continue
                 value = dict(change.get("value") or {})
-                for message in list(value.get("messages") or []):
+                for message in value.get("messages") or []:
                     if not isinstance(message, dict):
                         continue
                     sender_id = str(message.get("from") or "").strip()

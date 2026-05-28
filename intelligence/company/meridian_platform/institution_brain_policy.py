@@ -187,7 +187,7 @@ def _ensure_route_registry_bindings(policy: dict[str, Any]) -> dict[str, Any]:
     model_registry = dict(policy.get('model_registry') or {})
     routes: list[dict[str, Any]] = []
 
-    for route in list(policy.get('routes') or []):
+    for route in policy.get('routes') or []:
         current = dict(route)
         provider_ref = str(current.get('provider_ref') or current.get('provider_profile') or '').strip()
         model_name = str(current.get('model') or '').strip()
@@ -584,7 +584,7 @@ def update_route_health(
 ) -> dict[str, Any]:
     policy = load_policy(org_id)
     routes = []
-    for route in list(policy.get('routes') or []):
+    for route in policy.get('routes') or []:
         current = dict(route)
         if str(current.get('route_id') or '') == str(route_id or ''):
             current['last_health'] = health
