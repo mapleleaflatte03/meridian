@@ -1,0 +1,3 @@
+## 2026-05-29 - Global Disabled State Issue
+**Learning:** The Meridian CSS design system completely omitted `:disabled` visual states for all buttons (`.cta`, `.operator-action`), leading to confusion when asynchronous JS actions temporarily disable buttons without visual feedback. Combining `opacity: 0.5` with `cursor: not-allowed` (and strictly avoiding `pointer-events: none`) safely provides this feedback system-wide while retaining correct cursor behavior.
+**Action:** Always verify that fundamental interactive states (like `:disabled`, `:focus`, `:hover`) exist at the global element/component level in the root CSS before relying on JS-driven class toggles or assuming native browser styling is sufficient.
