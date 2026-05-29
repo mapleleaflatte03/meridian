@@ -23,9 +23,10 @@ def _connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(db_path, timeout=max(0.05, timeout))
     conn.row_factory = sqlite3.Row
     conn.execute(f'PRAGMA busy_timeout={int(max(50.0, timeout * 1000.0))}')
-    configured_journal_mode = (
+    raw_journal_mode = (
         os.environ.get('MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE', 'WAL') or 'WAL'
     ).strip().upper()
+    configured_journal_mode = raw_journal_mode if raw_journal_mode in {'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL', 'OFF'} else 'WAL'
     if configured_journal_mode not in {'', 'DEFAULT', 'OFF'}:
         needs_init = configured_journal_mode != 'WAL' or db_path not in _JOURNAL_MODE_INITIALIZED
         if needs_init:
