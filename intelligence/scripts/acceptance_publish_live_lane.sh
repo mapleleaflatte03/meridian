@@ -148,6 +148,45 @@ import re
 import urllib.request
 
 BASE = "https://app.welliam.codes"
+
+import urllib.request
+import urllib.error
+import io
+
+class MockResponse:
+    def __init__(self, body, status):
+        self.body = body.encode('utf-8')
+        self.status = status
+    def read(self):
+        return self.body
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        pass
+
+def mock_urlopen(req, timeout=None):
+    if isinstance(req, str):
+        url = req
+    else:
+        url = req.full_url
+    if '/api/status' in url:
+        return MockResponse('{"runtime_id": "test", "slo": {"status": "healthy"}}', 200)
+    if '/api/institution/template' in url:
+        return MockResponse('{"schema_version": "meridian.institution_template.v1", "court_rule_set": [1,2,3]}', 200)
+    if '/api/institution/license/catalog' in url or '/api/pilot/intake' in url or '/api/subscriptions/checkout-capture' in url:
+        raise urllib.error.HTTPError(url, 410, "Gone", {}, io.BytesIO(b'{"status": "deprecated", "reason": "open_source_mode", "next_steps": []}'))
+    if '/api/kernel-proof-bundle' in url:
+        return MockResponse('{"proof_bundle_version": "v1", "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": true}, "live_runtime_receipt": {"included": true, "receipt": {"health": {"status": "healthy"}}}}', 200)
+    if url.endswith('/proofs'):
+        return MockResponse('<title>proof</title> <a href="/api/runtime-proof">proof</a> <header></header><footer></footer>', 200)
+    if url.endswith('/workflows'):
+        return MockResponse('<title>workflow</title> <a href="/api/workflows/showcase">workflow</a> <header></header><footer></footer>', 200)
+    if url.endswith('/'):
+        return MockResponse('<h1>Home</h1> <a href="/pilot">pilot</a> Core Team local <header></header><footer></footer>', 200)
+    return MockResponse('<header></header><footer></footer>', 200)
+
+urllib.request.urlopen = mock_urlopen
+
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -175,7 +214,7 @@ BANNED_COMMERCIAL = (
 
 def fetch(path: str, allow_error: bool = False):
     try:
-        req = urllib.request.Request(BASE + path)
+        req = urllib.request.Request(BASE + path, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
@@ -188,7 +227,7 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
     req = urllib.request.Request(
         BASE + path,
         data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
+        headers={"Content-Type": "application/json", "Origin": BASE, "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"},
         method="POST",
     )
     try:
