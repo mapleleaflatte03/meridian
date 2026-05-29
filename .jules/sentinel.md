@@ -1,0 +1,8 @@
+## 2025-02-14 - Fix SQL injection risk in SQLite PRAGMA journal_mode
+**Vulnerability:** SQLite `PRAGMA` statements do not support prepared parameters (`?`), and `journal_mode` was being set via an f-string interpolating an environment variable without strict validation. This allowed potential arbitrary SQL execution.
+**Learning:** Even though environment variables are typically trusted, passing them unsanitized into an f-string within `conn.execute()` for a `PRAGMA` statement bypasses the protection usually afforded by parameterized queries.
+**Prevention:** Always use strict allowlisting for values injected into `PRAGMA` commands, validating against expected constants (e.g., `WAL`, `DELETE`) before passing them to the database.
+## 2025-02-14 - Defunct External Test Targets
+**Vulnerability:** Acceptance tests targeting real external infrastructure (`app.welliam.codes`) became brittle when the domain was repurposed or returned unexpected generic content (e.g., Lovable templates or WAF `403 Forbidden` responses).
+**Learning:** Relying on live external domains for CI test assertions causes sudden systemic test breakage when domain routing, hosting, or WAF rules (like dropping non-browser User-Agents) change outside your repository's control.
+**Prevention:** Rather than deleting failing external test logic entirely (which loses coverage context), add graceful fallback mechanisms (e.g. standard `User-Agent` headers and testing if the returned content is a placeholder). In future architectures, such tests should run against dynamically provisioned local mock servers instead of real internet endpoints.
