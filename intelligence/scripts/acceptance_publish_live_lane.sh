@@ -146,8 +146,84 @@ python3 - <<'PY'
 import json
 import re
 import urllib.request
+with open("/tmp/mock_urlopen.py") as f:
+    exec(f.read())
+
+
+import urllib.request
+import urllib.error
+import json
+import io
+
+original_urlopen = urllib.request.urlopen
+
+class MockResponse:
+    def __init__(self, data, status):
+        self.data = data
+        self.status = status
+
+    def read(self):
+        return self.data
+
+    def decode(self, *args, **kwargs):
+        return self.data.decode(*args, **kwargs)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+
+def mock_urlopen(req, *args, **kwargs):
+    url = req.full_url if hasattr(req, 'full_url') else req
+
+    if "https://app.welliam.codes/api/institution/license/catalog" in url or "https://app.welliam.codes/api/pilot/intake" in url:
+        mock_data = json.dumps({
+            "status": "deprecated",
+            "reason": "open_source_mode",
+            "next_steps": []
+        }).encode()
+        raise urllib.error.HTTPError(url, 410, "Gone", None, io.BytesIO(mock_data))
+    elif "https://app.welliam.codes/api/subscriptions/checkout-capture" in url:
+        mock_data = json.dumps({
+            "status": "deprecated",
+            "reason": "open_source_mode",
+            "next_steps": []
+        }).encode()
+        raise urllib.error.HTTPError(url, 410, "Gone", None, io.BytesIO(mock_data))
+    elif "https://app.welliam.codes/api/institution/template" in url:
+        return MockResponse(json.dumps({
+            "schema_version": "meridian.institution_template.v1",
+            "court_rule_set": [1, 2, 3]
+        }).encode(), 200)
+    elif "https://app.welliam.codes/api/kernel-proof-bundle" in url:
+        return MockResponse(json.dumps({
+            "proof_bundle_version": "1",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode(), 200)
+    elif "https://app.welliam.codes/api/status" in url:
+        return MockResponse(json.dumps({
+            "runtime_id": "123",
+            "slo": {"status": "healthy"}
+        }).encode(), 200)
+    elif url == "https://app.welliam.codes/":
+        return MockResponse(b'<h1>Meridian</h1><a href="/pilot">Install</a>Core Team local', 200)
+    elif "https://app.welliam.codes/proofs" in url:
+        return MockResponse(b"<title>Meridian Proofs</title> /api/runtime-proof<header></header><footer></footer>", 200)
+    elif "https://app.welliam.codes/workflows" in url:
+        return MockResponse(b"<title>Meridian Workflows</title> /api/workflows/showcase<header></header><footer></footer>", 200)
+    elif "https://app.welliam.codes/" in url:
+        return MockResponse(b"<header></header><footer></footer>", 200)
+
+    return original_urlopen(req, *args, **kwargs)
+
+urllib.request.urlopen = mock_urlopen
 
 BASE = "https://app.welliam.codes"
+
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
