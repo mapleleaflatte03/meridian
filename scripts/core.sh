@@ -2063,7 +2063,7 @@ if transport == "cli_session":
         raise SystemExit(1)
 
 resolved_auth_env = str(target_defaults.get("auth_env") or "").strip()
-resolved_key_env_pool = [str(item).strip() for item in list(target_defaults.get("key_env_pool") or []) if str(item).strip()]
+resolved_key_env_pool = [str(item).strip() for item in target_defaults.get("key_env_pool") or [] if str(item).strip()]
 
 if transport == "http_json":
     if not endpoint:
@@ -2390,7 +2390,7 @@ import json, sys
 payload = json.loads(sys.argv[1] or "{}")
 print("[core] ingress quarantine")
 print(f"  moved_count:     {int(payload.get('moved_count') or 0)}")
-for item in list(payload.get("moved_files") or [])[:20]:
+for item in (payload.get("moved_files") or [])[:20]:
     detail = str(item.get("stale_reason") or "")
     if not detail:
         paths = list(item.get("stale_paths") or [])
