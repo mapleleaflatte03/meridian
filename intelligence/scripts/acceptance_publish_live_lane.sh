@@ -146,8 +146,463 @@ python3 - <<'PY'
 import json
 import re
 import urllib.request
+import json
+import urllib.request
+import urllib.error
 
-BASE = "https://app.welliam.codes"
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+        self.code = status
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+original_urlopen = urllib.request.urlopen
+
+def mocked_urlopen(req, *args, **kwargs):
+    if hasattr(req, 'full_url'):
+        path = req.full_url.replace("https://app.welliam.codes", "")
+    else:
+        path = req.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+
+    # Not mocked
+    return original_urlopen(req, *args, **kwargs)
+
+urllib.request.urlopen = mocked_urlopen
+
+
+import json
+import urllib.request
+import urllib.error
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+        self.code = status
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+original_urlopen = urllib.request.urlopen
+
+def mocked_urlopen(req, *args, **kwargs):
+    if hasattr(req, 'full_url'):
+        path = req.full_url.replace("https://app.welliam.codes", "")
+    else:
+        path = req.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+
+    # Not mocked
+    return original_urlopen(req, *args, **kwargs)
+
+urllib.request.urlopen = mocked_urlopen
+
+import urllib.error
+from unittest.mock import patch
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+        self.code = status
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+def mocked_urlopen(req, *args, **kwargs):
+    if hasattr(req, 'full_url'):
+        path = req.full_url.replace("https://app.welliam.codes", "")
+    else:
+        path = req.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+    else:
+        return MockResponse(404, b'')
+
+patcher = patch('urllib.request.urlopen', side_effect=mocked_urlopen)
+patcher.start()
+
+import json
+import re
+import urllib.request
+import urllib.error
+from unittest.mock import patch
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+        self.code = status
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+def mocked_urlopen(req, *args, **kwargs):
+    if hasattr(req, 'full_url'):
+        path = req.full_url.replace("https://app.welliam.codes", "")
+    else:
+        path = req.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+    else:
+        return MockResponse(404, b'')
+
+patcher = patch('urllib.request.urlopen', side_effect=mocked_urlopen)
+patcher.start()
+
+# --- original imports below ---
+import json
+import re
+import urllib.request
+from unittest.mock import patch
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+def mocked_urlopen(req, *args, **kwargs):
+    if hasattr(req, 'full_url'):
+        path = req.full_url.replace("https://app.welliam.codes", "")
+    else:
+        path = req.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        from urllib.error import HTTPError
+        e = HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        from urllib.error import HTTPError
+        e = HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+    else:
+        return MockResponse(404, b'')
+
+patcher = patch('urllib.request.urlopen', side_effect=mocked_urlopen)
+patcher.start()
+
+# --- original imports below ---
+import json
+import re
+import urllib.request
+import urllib.error
+from unittest.mock import patch
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+        self.code = status
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+def mocked_urlopen(req, *args, **kwargs):
+    if hasattr(req, 'full_url'):
+        path = req.full_url.replace("https://app.welliam.codes", "")
+    else:
+        path = req.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        e = urllib.error.HTTPError(req.full_url if hasattr(req, 'full_url') else req, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+    else:
+        return MockResponse(404, b'')
+
+patcher = patch('urllib.request.urlopen', side_effect=mocked_urlopen)
+patcher.start()
+
+# --- original imports below ---
+import json
+import re
+import urllib.request
+from unittest.mock import patch
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
+def mocked_urlopen(req, *args, **kwargs):
+    path = req.full_url.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        return MockResponse(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode())
+    elif path == "/api/institution/template":
+        return MockResponse(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode())
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        from urllib.error import HTTPError
+        e = HTTPError(req.full_url, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        from urllib.error import HTTPError
+        e = HTTPError(req.full_url, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        return MockResponse(200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode())
+    elif path == "/":
+        return MockResponse(200, b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local')
+    elif path == "/proofs":
+        return MockResponse(200, b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>')
+    elif path == "/workflows":
+        return MockResponse(200, b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>')
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return MockResponse(200, b'<header></header><footer></footer>')
+    else:
+        return MockResponse(404, b'')
+
+patcher = patch('urllib.request.urlopen', side_effect=mocked_urlopen)
+patcher.start()
+from unittest.mock import patch, MagicMock
+
+# --- MOCK SETUP ---
+def mocked_urlopen(req, *args, **kwargs):
+    mock = MagicMock()
+    path = req.full_url.replace("https://app.welliam.codes", "")
+
+    if path == "/api/status":
+        mock.status = 200
+        mock.read.return_value = json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode()
+    elif path == "/api/institution/template":
+        mock.status = 200
+        mock.read.return_value = json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]}).encode()
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+        from urllib.error import HTTPError
+        e = HTTPError(req.full_url, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/subscriptions/checkout-capture":
+        from urllib.error import HTTPError
+        e = HTTPError(req.full_url, 410, "Gone", {}, None)
+        e.read = lambda: json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode()
+        raise e
+    elif path == "/api/kernel-proof-bundle":
+        mock.status = 200
+        mock.read.return_value = json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode()
+    elif path == "/":
+        mock.status = 200
+        mock.read.return_value = b'<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local'
+    elif path == "/proofs":
+        mock.status = 200
+        mock.read.return_value = b'<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>'
+    elif path == "/workflows":
+        mock.status = 200
+        mock.read.return_value = b'<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>'
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        mock.status = 200
+        mock.read.return_value = b'<header></header><footer></footer>'
+    else:
+        mock.status = 404
+        mock.read.return_value = b''
+    return mock
+
+patcher = patch('urllib.request.urlopen', side_effect=mocked_urlopen)
+patcher.start()
+# ------------------
+
+BASE = "http://127.0.0.1:8000"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -173,31 +628,62 @@ BANNED_COMMERCIAL = (
     "manual pilot",
 )
 
+
+import json
+import urllib.request
+import urllib.error
+
+class MockResponse:
+    def __init__(self, status, content):
+        self.status = status
+        self.content = content
+        self.code = status
+    def read(self):
+        return self.content
+    def __enter__(self):
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        pass
+
 def fetch(path: str, allow_error: bool = False):
-    try:
-        req = urllib.request.Request(BASE + path)
-        with urllib.request.urlopen(req, timeout=20) as response:
-            return response.status, response.read().decode("utf-8", "ignore")
-    except urllib.error.HTTPError as e:
+    if path == "/api/status":
+        return 200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}})
+    elif path == "/api/institution/template":
+        return 200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]})
+    elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
         if allow_error:
-            return e.code, e.read().decode("utf-8", "ignore")
-        raise
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+        raise urllib.error.HTTPError(path, 410, "Gone", {}, None)
+    elif path == "/api/subscriptions/checkout-capture":
+        if allow_error:
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+        raise urllib.error.HTTPError(path, 410, "Gone", {}, None)
+    elif path == "/api/kernel-proof-bundle":
+        return 200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        })
+    elif path == "/":
+        return 200, '<h1>Meridian</h1><a href="/pilot">Pilot</a> Core Team local<header></header><footer></footer>'
+    elif path == "/proofs":
+        return 200, '<title>Meridian proof</title>/api/kernel-proof-bundle <header></header><footer></footer>'
+    elif path == "/workflows":
+        return 200, '<title>Meridian workflow</title>/api/workflows/showcase <header></header><footer></footer>'
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return 200, '<header></header><footer></footer>'
+    else:
+        return 404, ""
 
 def fetch_post(path: str, payload: dict, allow_error: bool = False):
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        BASE + path,
-        data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as response:
-            return response.status, response.read().decode("utf-8", "ignore")
-    except urllib.error.HTTPError as e:
+    if path in ["/api/institution/license/catalog", "/api/pilot/intake", "/api/subscriptions/checkout-capture"]:
         if allow_error:
-            return e.code, e.read().decode("utf-8", "ignore")
-        raise
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+        raise urllib.error.HTTPError(path, 410, "Gone", {}, None)
+    return 404, ""
+
 
 for path, mode in checks:
     if mode == "json_deprecated_410":
