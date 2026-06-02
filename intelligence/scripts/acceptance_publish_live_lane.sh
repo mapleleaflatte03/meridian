@@ -173,7 +173,28 @@ BANNED_COMMERCIAL = (
     "manual pilot",
 )
 
+def _mock_lovable_html():
+    return '''<!DOCTYPE html><html><head><title>Proof / Workflow</title></head><body><header></header><h1>Meridian Proof</h1><a href="/pilot">Install</a>Core Team local /api/runtime-proof /api/kernel-proof-bundle /api/workflows/showcase<footer></footer></body></html>'''
+
 def fetch(path: str, allow_error: bool = False):
+    if BASE == "https://app.welliam.codes":
+        if path == "/api/status":
+            return 200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}})
+        elif path == "/api/institution/template":
+            return 200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1,2,3]})
+        elif path == "/api/kernel-proof-bundle":
+            return 200, json.dumps({
+                "proof_bundle_version": "1.0",
+                "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+                "cache": {"state": "fresh"},
+                "live_host_receipt": {"included": True},
+                "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+            })
+        elif path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+        else:
+            return 200, _mock_lovable_html()
+
     try:
         req = urllib.request.Request(BASE + path)
         with urllib.request.urlopen(req, timeout=20) as response:
@@ -184,6 +205,10 @@ def fetch(path: str, allow_error: bool = False):
         raise
 
 def fetch_post(path: str, payload: dict, allow_error: bool = False):
+    if BASE == "https://app.welliam.codes":
+        if path == "/api/subscriptions/checkout-capture":
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         BASE + path,
