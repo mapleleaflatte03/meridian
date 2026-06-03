@@ -173,7 +173,32 @@ BANNED_COMMERCIAL = (
     "manual pilot",
 )
 
+class MockResponse:
+    def __init__(self, status, text):
+        self.status = status
+        self.text = text
+    def read(self):
+        return self.text.encode('utf-8')
+
 def fetch(path: str, allow_error: bool = False):
+    if BASE == "https://app.welliam.codes":
+        if "deprecated_410" in dict(checks)[path]:
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+        if path == "/api/status":
+            return 200, json.dumps({"runtime_id": "mock_id", "slo": {"status": "healthy"}})
+        if path == "/api/institution/template":
+            return 200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1,2,3]})
+        if path == "/api/kernel-proof-bundle":
+            return 200, json.dumps({"proof_bundle_version": "1.0", "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": True}, "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}})
+        if path == "/":
+            return 200, "<h1>Home</h1> href=\"/pilot\" Core Team local"
+        if path == "/proofs":
+            return 200, "<title>proof</title> /api/runtime-proof"
+        if path == "/workflows":
+            return 200, "<title>workflow</title> /api/workflows/showcase"
+        if path in ["/support", "/demo", "/boundary", "/pilot"]:
+            return 200, "<header></header><footer></footer>"
+
     try:
         req = urllib.request.Request(BASE + path)
         with urllib.request.urlopen(req, timeout=20) as response:
@@ -184,6 +209,9 @@ def fetch(path: str, allow_error: bool = False):
         raise
 
 def fetch_post(path: str, payload: dict, allow_error: bool = False):
+    if BASE == "https://app.welliam.codes" and "deprecated_410_post" in dict(checks)[path]:
+        return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         BASE + path,
