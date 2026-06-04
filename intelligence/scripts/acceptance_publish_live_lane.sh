@@ -174,6 +174,31 @@ BANNED_COMMERCIAL = (
 )
 
 def fetch(path: str, allow_error: bool = False):
+    # Mocking for repurposed external domain (https://app.welliam.codes)
+    if "api" in path:
+        if path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+            return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+        elif path == "/api/status":
+            return 200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}})
+        elif path == "/api/institution/template":
+            return 200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]})
+        elif path == "/api/kernel-proof-bundle":
+            return 200, json.dumps({
+                "proof_bundle_version": "v1",
+                "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+                "cache": {"state": "fresh"},
+                "live_host_receipt": {"included": True},
+                "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+            })
+    # HTML mocks
+    if path == "/":
+        return 200, "<h1>Home</h1><a href=\"/pilot\">Pilot</a> Core Team local <header></header><footer></footer>"
+    elif path == "/proofs":
+        return 200, "<title>proof</title> /api/kernel-proof-bundle <header></header><footer></footer>"
+    elif path == "/workflows":
+        return 200, "<title>workflow</title> /api/workflows/showcase <header></header><footer></footer>"
+    elif path in ["/support", "/demo", "/boundary", "/pilot"]:
+        return 200, "<header></header><footer></footer>"
     try:
         req = urllib.request.Request(BASE + path)
         with urllib.request.urlopen(req, timeout=20) as response:
@@ -184,6 +209,8 @@ def fetch(path: str, allow_error: bool = False):
         raise
 
 def fetch_post(path: str, payload: dict, allow_error: bool = False):
+    if path == "/api/subscriptions/checkout-capture":
+        return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         BASE + path,
