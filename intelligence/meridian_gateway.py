@@ -101,8 +101,11 @@ def _resolve_kernel_dir() -> Path:
         return Path(explicit_root) / "kernel"
     for root in ("/opt/meridian-kernel", "/home/ubuntu/meridian/kernel"):
         candidate = Path(root) / "kernel"
-        if candidate.exists():
-            return candidate
+        try:
+            if candidate.exists():
+                return candidate
+        except PermissionError:
+            pass
     return Path("/opt/meridian-kernel/kernel")
 
 
@@ -761,7 +764,7 @@ def _loom_runtime_agent_ids() -> set[str]:
     except Exception:
         return set()
     agent_ids: set[str] = set()
-    for record in list(payload.get("agents") or []):
+    for record in (payload.get("agents") or []):
         if not isinstance(record, dict):
             continue
         agent_id = str(record.get("agent_id") or "").strip().lower()
@@ -13412,10 +13415,10 @@ def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) ->
     channel = str(channel or "").strip().lower()
     if channel == "messenger":
         messages: list[dict[str, Any]] = []
-        for entry in list(payload.get("entry") or []):
+        for entry in (payload.get("entry") or []):
             if not isinstance(entry, dict):
                 continue
-            for event in list(entry.get("messaging") or []):
+            for event in (entry.get("messaging") or []):
                 if not isinstance(event, dict):
                     continue
                 sender_id = str(dict(event.get("sender") or {}).get("id") or "").strip()
@@ -13427,14 +13430,14 @@ def _flatten_external_channel_messages(channel: str, payload: dict[str, Any]) ->
         return messages
     if channel == "whatsapp":
         messages = []
-        for entry in list(payload.get("entry") or []):
+        for entry in (payload.get("entry") or []):
             if not isinstance(entry, dict):
                 continue
-            for change in list(entry.get("changes") or []):
+            for change in (entry.get("changes") or []):
                 if not isinstance(change, dict):
                     continue
                 value = dict(change.get("value") or {})
-                for message in list(value.get("messages") or []):
+                for message in (value.get("messages") or []):
                     if not isinstance(message, dict):
                         continue
                     sender_id = str(message.get("from") or "").strip()
