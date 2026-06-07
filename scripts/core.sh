@@ -2390,7 +2390,8 @@ import json, sys
 payload = json.loads(sys.argv[1] or "{}")
 print("[core] ingress quarantine")
 print(f"  moved_count:     {int(payload.get('moved_count') or 0)}")
-for item in list(payload.get("moved_files") or [])[:20]:
+# Bolt: Removed redundant list() wrapper before slicing to avoid unnecessary O(N) allocation
+for item in (payload.get("moved_files") or [])[:20]:
     detail = str(item.get("stale_reason") or "")
     if not detail:
         paths = list(item.get("stale_paths") or [])

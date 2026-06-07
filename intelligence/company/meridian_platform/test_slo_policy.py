@@ -20,7 +20,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-25T00:20:00Z', 'total_cost_usd': 1.25},
             'governance': {'proof_settle_latest_at': '2026-03-25T00:10:00Z', 'active_sanctions': 0},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
 
         self.assertEqual(evaluation['policy_name'], 'meridian_observability_slo_v1')
@@ -34,7 +34,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-24T22:00:00Z', 'total_cost_usd': 120.0},
             'governance': {'proof_settle_latest_at': '2026-03-24T22:00:00Z', 'active_sanctions': 0},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
 
         self.assertEqual(evaluation['status'], 'breached')
@@ -49,7 +49,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-25T00:20:00Z', 'total_cost_usd': 1.0},
             'governance': {'proof_settle_latest_at': '2026-03-25T00:10:00Z', 'active_sanctions': 0},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
         obj = next(o for o in evaluation['objectives'] if o['name'] == 'proof_settle_freshness')
         self.assertEqual(obj['status'], 'healthy')
@@ -60,7 +60,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-25T00:20:00Z', 'total_cost_usd': 1.0},
             'governance': {'proof_settle_latest_at': '2026-03-24T21:00:00Z', 'active_sanctions': 0},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
         obj = next(o for o in evaluation['objectives'] if o['name'] == 'proof_settle_freshness')
         self.assertEqual(obj['status'], 'warning')
@@ -71,7 +71,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-25T00:20:00Z', 'total_cost_usd': 1.0},
             'governance': {'proof_settle_latest_at': '2026-03-25T00:10:00Z', 'active_sanctions': 2},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
         obj = next(o for o in evaluation['objectives'] if o['name'] == 'governance_sanction_clean')
         self.assertEqual(obj['status'], 'breached')
@@ -84,7 +84,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-25T00:20:00Z', 'total_cost_usd': 1.0},
             'governance': {'proof_settle_latest_at': '2026-03-25T00:10:00Z', 'active_sanctions': 0},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
         obj = next(o for o in evaluation['objectives'] if o['name'] == 'governance_sanction_clean')
         self.assertEqual(obj['status'], 'healthy')
@@ -95,7 +95,7 @@ class SloPolicyTests(unittest.TestCase):
             'metering': {'latest_at': '2026-03-25T00:20:00Z', 'total_cost_usd': 1.0},
             'governance': {'proof_settle_latest_at': '2026-03-25T00:10:00Z', 'active_sanctions': 0},
         }
-        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)):
+        with mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)):
             evaluation = slo_policy.evaluate_observability(metrics)
         names = {o['name'] for o in evaluation['objectives']}
         self.assertEqual(names, {

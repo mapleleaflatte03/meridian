@@ -94,8 +94,8 @@ class StatusSurfaceTests(unittest.TestCase):
                 mock.patch.object(audit, 'AUDIT_FILE', audit_path),
                 mock.patch.object(metering, 'METERING_FILE', metering_path),
                 mock.patch.object(alerting, 'ALERT_LOG_FILE', alert_path),
-                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
-                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
+                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)),
+                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)),
                 mock.patch.object(alerting, 'record_slo_alerts', side_effect=AssertionError('should not record')),
             ):
                 snapshot = status_surface.observability_snapshot('org_founding', record_alerts=False)
@@ -182,8 +182,9 @@ class StatusSurfaceTests(unittest.TestCase):
                 mock.patch.object(alerting, 'ALERT_LOG_FILE', alert_path),
                 mock.patch.object(audit, '_now', return_value='2026-03-25T00:30:00Z'),
                 mock.patch.object(metering, '_now', return_value='2026-03-25T00:30:00Z'),
-                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
-                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
+                mock.patch.object(audit, '_ASYNC_DB_WRITE_ENABLED', False),
+                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)),
+                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)),
             ):
                 snapshot = status_surface.observability_snapshot('org_founding')
 
@@ -237,8 +238,8 @@ class StatusSurfaceTests(unittest.TestCase):
                 mock.patch.object(audit, 'AUDIT_FILE', audit_path),
                 mock.patch.object(metering, 'METERING_FILE', metering_path),
                 mock.patch.object(alerting, 'ALERT_LOG_FILE', alert_path),
-                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
-                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0)),
+                mock.patch.object(status_surface, '_utc_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)),
+                mock.patch.object(slo_policy, '_now', return_value=datetime.datetime(2026, 3, 25, 0, 30, 0, tzinfo=datetime.timezone.utc)),
             ):
                 snapshot = status_surface.observability_snapshot('org_founding')
                 metrics_text = status_surface.observability_metrics_text('org_founding')
