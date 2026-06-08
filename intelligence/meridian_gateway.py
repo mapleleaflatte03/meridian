@@ -12,6 +12,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import functools
 import os
 import queue
 import re
@@ -1705,6 +1706,7 @@ def _looks_like_meridian_council_query(text: str) -> bool:
     )
 
 
+@functools.lru_cache(maxsize=16)
 def _worker_is_restricted(agent_key: str) -> bool:
     specialist = next((agent for agent in TEAM_TOPOLOGY.specialists if agent.env_key == agent_key), None)
     if specialist is None:
