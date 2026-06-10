@@ -1,0 +1,3 @@
+## 2026-06-10 - Add Focus Visible Styles
+**Learning:** The Meridian site was completely lacking keyboard focus indicators across interactive elements like links and buttons. Adding a global `:focus-visible` outline drastically improves keyboard navigation accessibility while not affecting mouse users. Also, it's important not to add `border-radius` to the outline, as modern browsers natively curve the outline to match the element's shape, and setting it globally overrides specific element shapes.
+**Action:** Always check for `:focus-visible` styles early when assessing a new UI. If missing, implement a global, accessible outline rule for `a:focus-visible` and `button:focus-visible` using design system colors, avoiding explicit `border-radius` on the outline.

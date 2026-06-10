@@ -82,6 +82,7 @@ body::after {
   opacity: 0.5;
 }
 a { color: var(--accent); }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 [id] { scroll-margin-top: 88px; }
 ul { margin: 0.5rem 0 0.5rem 1.5rem; }
 li { padding: 0.2rem 0; }
