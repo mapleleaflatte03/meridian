@@ -26,6 +26,7 @@ def _git_init(path: Path, dirty: bool, archive_marker: bool) -> None:
         ["git", "-C", str(path), "init", "-q", "-b", "main"],
         check=True,
     )
+    subprocess.run(["git", "-C", str(path), "config", "--local", "core.hooksPath", ".git/hooks"], check=False)
     subprocess.run(
         ["git", "-C", str(path), "config", "user.email", "test@test"],
         check=True,
@@ -137,6 +138,7 @@ class TestVerifyCanonicalRepo(unittest.TestCase):
             "MERIDIAN_CANONICAL_PATH": str(self.canonical),
             "MERIDIAN_MIRROR_PATHS": str(self.mirror_clean),
         }
+        subprocess.run(["bash", str(MERIDIAN_ROOT / "scripts" / "install_mirror_locks.sh")], env=env, check=True, capture_output=True)
         result = _run(env, "--strict")
         self.assertEqual(result.returncode, 0)
 

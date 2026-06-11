@@ -147,7 +147,8 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+BASE = f"http://127.0.0.1:{os.environ.get('MERIDIAN_MOCK_PORT', '18777')}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
