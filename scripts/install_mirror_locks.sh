@@ -172,7 +172,7 @@ install_one() {
     # `git rev-parse --git-path hooks` returns a relative ".git/hooks"
     # that is only correct when resolved against the repo's own cwd.
     local git_dir_rel
-    git_dir_rel="$(git -C "$path" rev-parse --git-dir 2>/dev/null || echo ".git")"
+    git_dir_rel="$(git -C "$path" rev-parse --absolute-git-dir 2>/dev/null || echo ".git")"
     local git_dir
     case "$git_dir_rel" in
         /*) git_dir="$git_dir_rel" ;;
