@@ -1,0 +1,5 @@
+## 2024-05-30 - Removing `list()` wrappers around `.values()` and `.get() or []`
+
+**Learning:** Python's `list()` wrappers around dictionary `.values()` or default lists (`[]`) are often unnecessary if the code just iterates over them without needing indexing or a snapshot to mutate the underlying dict. However, memory states that `list()` wrappers around `dict.items()`, `dict.values()`, or `dict.keys()` when optimizing loops (e.g., in `kernel/` queue processors) should NOT be removed if the codebase intentionally uses `list()` to create a static copy, allowing safe mutation of the dictionary during iteration.
+
+**Action:** Before removing a `list()` wrapper around a dict view or a fallback list, verify if the loop modifies the underlying dictionary or requires indexing. If it only iterates, it is safe to remove the `list()` wrapper to avoid copying the entire sequence into memory, which improves performance. For simple lists like `(plan or {}).get("skills") or []`, the `list()` wrapper is always redundant and can be removed directly, as `get()` returns a list or the default list `[]`, and list iteration is fast.
