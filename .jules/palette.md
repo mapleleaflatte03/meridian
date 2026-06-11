@@ -1,0 +1,3 @@
+## 2026-04-18 - Concise announcements for icon-only navigation and native focus styles
+**Learning:** Explicitly setting an `aria-label` on parent `<a>` tags for icon-only links provides a more concise screen reader announcement than relying on verbose child image `alt` text. Also, global `:focus-visible` styles should omit `border-radius` to allow modern browsers to natively conform the outline to the element's existing border-radius.
+**Action:** Always add `aria-label` to parent navigation links when they contain complex logos, and rely on browser heuristics for focus outline shapes rather than forcing global square borders.
