@@ -942,8 +942,8 @@ def _subscription_delivery_topic(job):
     company = (job.get('company') or job.get('name') or '').strip()
     if company:
         parts.append(company)
-    parts.extend(_normalize_text_list(job.get('topics'))[:3])
-    parts.extend(_normalize_text_list(job.get('competitors'))[:2])
+    parts.extend((_normalize_text_list(job.get('topics')) or [])[:3])
+    parts.extend((_normalize_text_list(job.get('competitors')) or [])[:2])
     parts.append('AI market intelligence')
     topic = ' '.join(part for part in parts if part).strip()
     return topic or f"{(job.get('plan') or 'subscription').strip()} intelligence brief"
