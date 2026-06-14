@@ -6,6 +6,7 @@ from __future__ import annotations
 import concurrent.futures
 import copy
 import datetime
+import json
 import os
 import threading
 import time
@@ -477,11 +478,11 @@ def observability_snapshot(org_id, *, record_alerts=True):
             and fetched_at > 0
             and (now - fetched_at) <= ttl_seconds
         ):
-            return copy.deepcopy(payload)
+            return json.loads(json.dumps(payload))
         if not isinstance(payload, dict):
             pass  # cold start — fall through to synchronous build below
         elif refresh_future and not refresh_future.done():
-            return copy.deepcopy(payload)
+            return json.loads(json.dumps(payload))
         else:
             if not (refresh_future and not refresh_future.done()):
                 refresh_future = OBSERVABILITY_SNAPSHOT_EXECUTOR.submit(
@@ -490,7 +491,7 @@ def observability_snapshot(org_id, *, record_alerts=True):
                     record_alerts=record_alerts,
                 )
                 cached_entry['refresh_future'] = refresh_future
-            return copy.deepcopy(payload)
+            return json.loads(json.dumps(payload))
 
     if not isinstance(payload, dict):
         snapshot = _build_observability_snapshot(org_id, record_alerts=record_alerts)
@@ -500,7 +501,7 @@ def observability_snapshot(org_id, *, record_alerts=True):
                 cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
                 OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
             cached_entry['fetched_at'] = time.time()
-            cached_entry['payload'] = copy.deepcopy(snapshot)
+            cached_entry['payload'] = json.loads(json.dumps(snapshot))
             cached_entry['refresh_future'] = None
         return snapshot
     try:
@@ -603,7 +604,7 @@ def observability_snapshot(org_id, *, record_alerts=True):
             cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
             OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
         cached_entry['fetched_at'] = time.time()
-        cached_entry['payload'] = copy.deepcopy(snapshot)
+        cached_entry['payload'] = json.loads(json.dumps(snapshot))
         cached_entry['refresh_future'] = None
     return snapshot
 
