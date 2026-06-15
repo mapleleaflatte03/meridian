@@ -120,10 +120,6 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --site "https://app.welliam.codes" >/tmp/meridian_publish_mock_live.json
 
 python3 - <<'PY'
-import os
-if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1":
-    print("[SKIP] API checks skipped via MERIDIAN_ALLOW_API_SKIP=1")
-    exit(0)
 import json
 from pathlib import Path
 payload = json.loads(Path("/tmp/meridian_publish_mock_live.json").read_text(encoding="utf-8"))
