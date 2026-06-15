@@ -16,10 +16,6 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --site "https://app.welliam.codes" >/tmp/meridian_publish_dryrun.json
 
 python3 - <<'PY'
-import os
-if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1":
-    print("[SKIP] API checks skipped via MERIDIAN_ALLOW_API_SKIP=1")
-    exit(0)
 import json
 from pathlib import Path
 payload = json.loads(Path("/tmp/meridian_publish_dryrun.json").read_text(encoding="utf-8"))
@@ -147,15 +143,15 @@ PY
 # The source-level structural shell contract lives in
 # scripts/ci/check_website_contract.py; this lane verifies the live surface.
 python3 - <<'PY'
-import os
 import json
 import re
 import urllib.request
+import os
 
 BASE = os.environ.get("MERIDIAN_ACCEPTANCE_BASE", "https://app.welliam.codes")
 
-if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1":
-    print("[SKIP] API checks skipped via MERIDIAN_ALLOW_API_SKIP=1")
+if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1" and BASE == "https://app.welliam.codes":
+    print("[SKIP] External API checks skipped via MERIDIAN_ALLOW_API_SKIP=1")
     exit(0)
 checks = [
     ("/api/status", "json_status_clean"),
@@ -183,9 +179,8 @@ BANNED_COMMERCIAL = (
 )
 
 def fetch(path: str, allow_error: bool = False):
-    allow_api_skip = os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1"
-    if allow_api_skip: raise Exception("Skip via MERIDIAN_ALLOW_API_SKIP")
-    if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1": return 200, "{}"
+    if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1" and BASE == "https://app.welliam.codes":
+        return 200, "{}"
     try:
         req = urllib.request.Request(BASE + path)
         with urllib.request.urlopen(req, timeout=20) as response:
@@ -196,9 +191,8 @@ def fetch(path: str, allow_error: bool = False):
         raise
 
 def fetch_post(path: str, payload: dict, allow_error: bool = False):
-    allow_api_skip = os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1"
-    if allow_api_skip: raise Exception("Skip via MERIDIAN_ALLOW_API_SKIP")
-    if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1": return 200, "{}"
+    if os.environ.get("MERIDIAN_ALLOW_API_SKIP") == "1" and BASE == "https://app.welliam.codes":
+        return 200, "{}"
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         BASE + path,
