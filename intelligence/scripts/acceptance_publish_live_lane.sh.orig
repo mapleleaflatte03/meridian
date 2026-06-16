@@ -173,8 +173,6 @@ BANNED_COMMERCIAL = (
     "manual pilot",
 )
 
-import sys; sys.exit(0)
-
 def fetch(path: str, allow_error: bool = False):
     try:
         req = urllib.request.Request(
