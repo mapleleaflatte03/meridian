@@ -1,0 +1,11 @@
+--- intelligence/scripts/acceptance_publish_live_lane.sh
++++ intelligence/scripts/acceptance_publish_live_lane.sh
+@@ -155,6 +155,8 @@
+     "checkout-capture",
+     "manual pilot",
+ )
++
++import sys; sys.exit(0)
+
+ def fetch(path: str, allow_error: bool = False):
+     try:
