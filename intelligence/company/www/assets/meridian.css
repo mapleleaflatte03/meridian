@@ -42,6 +42,11 @@
 /* ── Reset ── */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+:focus-visible {
+  outline: 2px solid rgba(135,216,255,0.45);
+  outline-offset: 2px;
+}
+
 /* ── Base ── */
 html {
   scroll-padding-top: calc(var(--header-h) + 14px);
