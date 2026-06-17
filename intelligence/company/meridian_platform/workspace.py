@@ -156,6 +156,7 @@ import argparse
 import base64
 import concurrent.futures
 import copy
+import json
 import datetime
 import hashlib
 import hmac
@@ -861,7 +862,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
         with _public_kernel_proof_cache_lock:
             _public_kernel_proof_cache[cache_key] = {
                 'cached_at_epoch': time.time(),
-                'payload': copy.deepcopy(cached_payload),
+                'payload_json': json.dumps(cached_payload),
             }
             _public_kernel_proof_last_error.pop(cache_key, None)
         return cached_payload
@@ -887,7 +888,11 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
             return future
 
     with _public_kernel_proof_cache_lock:
-        cache_entry = copy.deepcopy(_public_kernel_proof_cache.get(cache_key))
+        cache_entry_raw = _public_kernel_proof_cache.get(cache_key)
+        if cache_entry_raw:
+            cache_entry = {'cached_at_epoch': cache_entry_raw.get('cached_at_epoch'), 'payload': json.loads(cache_entry_raw.get('payload_json')) if cache_entry_raw.get('payload_json') else None}
+        else:
+            cache_entry = None
         last_error = _public_kernel_proof_last_error.get(cache_key)
 
     if cache_entry:
@@ -929,7 +934,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
                     base_url=normalized_base,
                     run_reference_proofs=False,
                 )
-                fallback_payload = copy.deepcopy(fast_payload)
+                fallback_payload = json.loads(json.dumps(fast_payload))
                 fallback_payload['status'] = 'degraded'
                 fallback_payload['degraded_reason'] = 'public_bundle_build_in_progress_fast_fallback'
                 cache_meta = dict(fallback_payload.get('cache') or {})
