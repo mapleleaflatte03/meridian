@@ -302,6 +302,11 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      if (!selectedCount) {
+        button.setAttribute('title', 'Select items first');
+      } else {
+        button.removeAttribute('title');
+      }
     });
   }
 
