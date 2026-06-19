@@ -168,17 +168,15 @@ install_one() {
     fi
     render_lock_md "$subpath" > "$path/MIRROR_LOCK.md"
     render_lock_json "$path" "$subpath" > "$path/MIRROR_LOCK.json"
-    # Always compute hooks dir as absolute path relative to the mirror.
-    # `git rev-parse --git-path hooks` returns a relative ".git/hooks"
-    # that is only correct when resolved against the repo's own cwd.
+    # Ignore core.hooksPath settings (like /dev/null) by forcing the config
+    # override to default .git/hooks to ensure the hook gets installed in the local repo.
     local git_dir_rel
-    git_dir_rel="$(git -C "$path" rev-parse --git-dir 2>/dev/null || echo ".git")"
-    local git_dir
+    git_dir_rel="$(git -C "$path" -c core.hooksPath=.git/hooks rev-parse --git-path hooks 2>/dev/null || echo ".git/hooks")"
+    local hooks_dir
     case "$git_dir_rel" in
-        /*) git_dir="$git_dir_rel" ;;
-        *)  git_dir="$path/$git_dir_rel" ;;
+        /*) hooks_dir="$git_dir_rel" ;;
+        *)  hooks_dir="$path/$git_dir_rel" ;;
     esac
-    local hooks_dir="$git_dir/hooks"
     mkdir -p "$hooks_dir"
     render_pre_commit_hook "$subpath" > "$hooks_dir/pre-commit"
     chmod +x "$hooks_dir/pre-commit"
