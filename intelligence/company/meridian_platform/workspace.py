@@ -887,7 +887,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
             return future
 
     with _public_kernel_proof_cache_lock:
-        cache_entry = copy.deepcopy(_public_kernel_proof_cache.get(cache_key))
+        cache_entry = _public_kernel_proof_cache.get(cache_key)
         last_error = _public_kernel_proof_last_error.get(cache_key)
 
     if cache_entry:
