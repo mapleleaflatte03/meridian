@@ -1,0 +1,3 @@
+## 2024-03-24 - Unnecessary deepcopy in Cache Read
+**Learning:** The public kernel proof cache in `workspace.py` was using `copy.deepcopy()` to fetch from the cache before conditionally checking its age and creating a shallow copy of the payload to mutate a top-level `cache` key. This caused significant performance overhead on hot paths, as the cache entry itself wasn't mutated.
+**Action:** Avoid `copy.deepcopy()` when extracting values from dictionaries if the dictionary itself doesn't need to be mutated, or if a simple shallow copy (`dict()`) provides sufficient isolation for the required mutations.
