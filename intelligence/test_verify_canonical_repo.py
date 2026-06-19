@@ -20,10 +20,14 @@ MERIDIAN_ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = MERIDIAN_ROOT / "scripts" / "verify_canonical_repo.sh"
 
 
-def _git_init(path: Path, dirty: bool, archive_marker: bool) -> None:
+def _git_init(path: Path, dirty: bool, archive_marker: bool, locked: bool = False) -> None:
     path.mkdir(parents=True, exist_ok=True)
     subprocess.run(
         ["git", "-C", str(path), "init", "-q", "-b", "main"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(path), "config", "core.hooksPath", ".git/hooks"],
         check=True,
     )
     subprocess.run(
@@ -49,6 +53,10 @@ def _git_init(path: Path, dirty: bool, archive_marker: bool) -> None:
     )
     if dirty:
         (path / "extra.txt").write_text("uncommitted", encoding="utf-8")
+    if locked:
+        env = os.environ.copy()
+        env["MERIDIAN_MIRROR_PATHS"] = f"{path}:unknown"
+        subprocess.run(["bash", str(SCRIPT.parent / "install_mirror_locks.sh")], env=env, check=True, capture_output=True)
 
 
 def _run(env_overrides: dict, *args, expect_rc: int | None = None):
@@ -76,7 +84,7 @@ class TestVerifyCanonicalRepo(unittest.TestCase):
         self.mirror_dirty = self.tmp / "mirror_dirty"
         self.missing = self.tmp / "missing_path"
         _git_init(self.canonical, dirty=False, archive_marker=False)
-        _git_init(self.mirror_clean, dirty=False, archive_marker=True)
+        _git_init(self.mirror_clean, dirty=False, archive_marker=True, locked=True)
         _git_init(self.mirror_dirty, dirty=True, archive_marker=True)
 
     def tearDown(self):

@@ -29,6 +29,7 @@ def _init_fake_mirror(base: Path) -> Path:
     """Create a tiny empty git repo that looks like an archived mirror."""
     base.mkdir(parents=True, exist_ok=True)
     subprocess.run(["git", "init", "-q"], cwd=base, check=True)
+    subprocess.run(["git", "-C", str(base), "config", "core.hooksPath", ".git/hooks"], check=True)
     subprocess.run(
         ["git", "-C", str(base), "config", "user.email", "test@example.com"],
         check=True,
