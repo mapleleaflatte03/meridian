@@ -1,0 +1,3 @@
+## 2026-06-20 - Aria-label addition for icon-only brand links
+**Learning:** Icon-only links like `<a class="brand" href="/">` with only image contents are technically functional, but screen readers may rely on verbose `alt` text or image filenames if `aria-hidden="true"` is improperly structured around images, creating noisy navigation announcements. The brand logo contains images but no immediate readable text.
+**Action:** Adding a concise `aria-label="Meridian Home"` on the parent link overrides potentially messy child alt-text and ensures a clean, predictable navigation announcement for screen reader users. This should be applied to all instances of the home brand link across pages.
