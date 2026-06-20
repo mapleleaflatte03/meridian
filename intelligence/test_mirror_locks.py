@@ -105,6 +105,8 @@ class TestInstallMirrorLocksScript(unittest.TestCase):
                 env=env, check=True, capture_output=True,
             )
             # An empty commit should be refused by the hook.
+            # Make sure we use an explicitly set hook path config in case global config bypasses it
+            subprocess.run(["git", "-C", str(mirror), "config", "core.hooksPath", ".git/hooks"], check=True)
             proc = subprocess.run(
                 ["git", "-C", str(mirror), "commit",
                  "--allow-empty", "-m", "should be blocked"],
@@ -125,6 +127,7 @@ class TestInstallMirrorLocksScript(unittest.TestCase):
                 env=env, check=True, capture_output=True,
             )
             # With the override set, the commit must succeed.
+            subprocess.run(["git", "-C", str(mirror), "config", "core.hooksPath", ".git/hooks"], check=True)
             env2 = os.environ.copy()
             env2["MERIDIAN_MIRROR_ALLOW_COMMIT"] = "1"
             env2["GIT_AUTHOR_NAME"] = "test"

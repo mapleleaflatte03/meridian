@@ -182,6 +182,8 @@ install_one() {
     mkdir -p "$hooks_dir"
     render_pre_commit_hook "$subpath" > "$hooks_dir/pre-commit"
     chmod +x "$hooks_dir/pre-commit"
+    # Ensure git respects the hooks dir
+    git -C "$path" config core.hooksPath .git/hooks
     say "  wrote MIRROR_LOCK.md MIRROR_LOCK.json $hooks_dir/pre-commit"
 }
 
