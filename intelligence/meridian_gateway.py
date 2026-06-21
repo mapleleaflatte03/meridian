@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import base64
-import ast
 import concurrent.futures
 import contextlib
 import datetime as dt
@@ -12282,10 +12281,7 @@ def _extract_json_value(text: str) -> Any:
         try:
             parsed = json.loads(candidate)
         except json.JSONDecodeError:
-            try:
-                parsed = ast.literal_eval(candidate)
-            except Exception:
-                continue
+            continue
         if isinstance(parsed, (dict, list)):
             return parsed
     return None
