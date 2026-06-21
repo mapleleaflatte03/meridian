@@ -1,0 +1,3 @@
+## 2026-05-01 - Avoid json cache serialization on live data structures
+**Learning:** While `json.dumps()` and `json.loads()` are faster for deep cloning than `copy.deepcopy()`, blindly applying this optimization to in-memory cache dumps containing live, unconstrained Python objects (like `datetime`) causes fatal serialization crashes `TypeError: Object of type datetime is not JSON serializable`. Furthermore, `json.loads` silently coerces native types like `tuple` to `list`, introducing subtle type bugs down the line.
+**Action:** Only use JSON parsing for deep cloning when the structure is statically guaranteed to consist only of JSON primitives, or fallback to the slower but semantically safe `copy.deepcopy()` to preserve correct program behavior.
