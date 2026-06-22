@@ -1,0 +1,3 @@
+## 2024-06-22 - Explicit Labels for Brand Icons
+**Learning:** While icon-only links containing images with descriptive `alt` attributes are technically accessible, explicitly setting an `aria-label` on the parent `<a>` tag is a UX best practice to provide a concise navigation announcement (e.g., 'Meridian Home') and override potentially verbose image `alt` text.
+**Action:** Always add an explicit `aria-label` to brand home links, even if child images have `alt` text.
