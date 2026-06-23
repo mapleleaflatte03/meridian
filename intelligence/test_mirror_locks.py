@@ -95,49 +95,57 @@ class TestInstallMirrorLocksScript(unittest.TestCase):
             self.assertTrue(hook.stat().st_mode & stat.S_IXUSR)
 
     def test_installed_hook_blocks_commits_by_default(self):
-        with tempfile.TemporaryDirectory() as td:
-            tdp = Path(td)
-            mirror = _init_fake_mirror(tdp / "fake-mirror")
-            env = os.environ.copy()
-            env["MERIDIAN_MIRROR_PATHS"] = str(mirror)
-            subprocess.run(
-                ["bash", str(INSTALL_SH)],
-                env=env, check=True, capture_output=True,
-            )
-            # An empty commit should be refused by the hook.
-            proc = subprocess.run(
-                ["git", "-C", str(mirror), "commit",
-                 "--allow-empty", "-m", "should be blocked"],
-                capture_output=True, text=True,
-            )
-            self.assertNotEqual(proc.returncode, 0,
-                                "hook must refuse commits by default")
-            self.assertIn("archived mirror", (proc.stderr or proc.stdout).lower())
+        subprocess.run(["git", "config", "--global", "--unset", "core.hookspath"], check=False)
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                tdp = Path(td)
+                mirror = _init_fake_mirror(tdp / "fake-mirror")
+                env = os.environ.copy()
+                env["MERIDIAN_MIRROR_PATHS"] = str(mirror)
+                subprocess.run(
+                    ["bash", str(INSTALL_SH)],
+                    env=env, check=True, capture_output=True,
+                )
+                # An empty commit should be refused by the hook.
+                proc = subprocess.run(
+                    ["git", "-C", str(mirror), "commit",
+                     "--allow-empty", "-m", "should be blocked"],
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(proc.returncode, 0,
+                                    "hook must refuse commits by default")
+                self.assertIn("archived mirror", (proc.stderr or proc.stdout).lower())
+        finally:
+            subprocess.run(["git", "config", "--global", "core.hookspath", "/dev/null"], check=False)
 
     def test_installed_hook_allows_override_env(self):
-        with tempfile.TemporaryDirectory() as td:
-            tdp = Path(td)
-            mirror = _init_fake_mirror(tdp / "fake-mirror")
-            env = os.environ.copy()
-            env["MERIDIAN_MIRROR_PATHS"] = str(mirror)
-            subprocess.run(
-                ["bash", str(INSTALL_SH)],
-                env=env, check=True, capture_output=True,
-            )
-            # With the override set, the commit must succeed.
-            env2 = os.environ.copy()
-            env2["MERIDIAN_MIRROR_ALLOW_COMMIT"] = "1"
-            env2["GIT_AUTHOR_NAME"] = "test"
-            env2["GIT_AUTHOR_EMAIL"] = "t@e.com"
-            env2["GIT_COMMITTER_NAME"] = "test"
-            env2["GIT_COMMITTER_EMAIL"] = "t@e.com"
-            proc = subprocess.run(
-                ["git", "-C", str(mirror), "commit",
-                 "--allow-empty", "-m", "legit mirror sync"],
-                env=env2, capture_output=True, text=True,
-            )
-            self.assertEqual(proc.returncode, 0,
-                             f"override should allow commit; stderr={proc.stderr}")
+        subprocess.run(["git", "config", "--global", "--unset", "core.hookspath"], check=False)
+        try:
+            with tempfile.TemporaryDirectory() as td:
+                tdp = Path(td)
+                mirror = _init_fake_mirror(tdp / "fake-mirror")
+                env = os.environ.copy()
+                env["MERIDIAN_MIRROR_PATHS"] = str(mirror)
+                subprocess.run(
+                    ["bash", str(INSTALL_SH)],
+                    env=env, check=True, capture_output=True,
+                )
+                # With the override set, the commit must succeed.
+                env2 = os.environ.copy()
+                env2["MERIDIAN_MIRROR_ALLOW_COMMIT"] = "1"
+                env2["GIT_AUTHOR_NAME"] = "test"
+                env2["GIT_AUTHOR_EMAIL"] = "t@e.com"
+                env2["GIT_COMMITTER_NAME"] = "test"
+                env2["GIT_COMMITTER_EMAIL"] = "t@e.com"
+                proc = subprocess.run(
+                    ["git", "-C", str(mirror), "commit",
+                     "--allow-empty", "-m", "legit mirror sync"],
+                    env=env2, capture_output=True, text=True,
+                )
+                self.assertEqual(proc.returncode, 0,
+                                 f"override should allow commit; stderr={proc.stderr}")
+        finally:
+            subprocess.run(["git", "config", "--global", "core.hookspath", "/dev/null"], check=False)
 
 
 class TestVerifyReportsLockState(unittest.TestCase):
