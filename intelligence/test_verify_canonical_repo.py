@@ -137,8 +137,19 @@ class TestVerifyCanonicalRepo(unittest.TestCase):
             "MERIDIAN_CANONICAL_PATH": str(self.canonical),
             "MERIDIAN_MIRROR_PATHS": str(self.mirror_clean),
         }
+        # Make sure git hooks path is unset locally to fallback to default
+        subprocess.run(
+            ["git", "-C", str(self.mirror_clean), "config", "--unset", "core.hooksPath"],
+            check=False,
+        )
+        subprocess.run(
+            ["bash", str(MERIDIAN_ROOT / "scripts" / "install_mirror_locks.sh")],
+            env={**os.environ.copy(), **env},
+            check=True,
+            capture_output=True,
+        )
         result = _run(env, "--strict")
-        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.returncode, 0, f"result.returncode={result.returncode}, stderr={result.stderr}")
 
     def test_unknown_arg_rejected(self):
         result = _run(self._env(), "--bogus")
