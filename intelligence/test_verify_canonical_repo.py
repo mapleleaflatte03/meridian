@@ -137,6 +137,12 @@ class TestVerifyCanonicalRepo(unittest.TestCase):
             "MERIDIAN_CANONICAL_PATH": str(self.canonical),
             "MERIDIAN_MIRROR_PATHS": str(self.mirror_clean),
         }
+        subprocess.run(
+            ["bash", str(MERIDIAN_ROOT / "scripts" / "install_mirror_locks.sh")],
+            env={**os.environ.copy(), **env},
+            check=True,
+            capture_output=True,
+        )
         result = _run(env, "--strict")
         self.assertEqual(result.returncode, 0)
 

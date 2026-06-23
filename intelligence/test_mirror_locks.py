@@ -37,6 +37,15 @@ def _init_fake_mirror(base: Path) -> Path:
         ["git", "-C", str(base), "config", "user.name", "test"],
         check=True,
     )
+    # Ensure global core.hooksPath=/dev/null doesn't disable our local hook
+    subprocess.run(
+        ["git", "-C", str(base), "config", "--unset", "core.hooksPath"],
+        check=False,
+    )
+    subprocess.run(
+        ["git", "-C", str(base), "config", "core.hooksPath", ".git/hooks"],
+        check=True,
+    )
     # Create an initial commit so `git log` has something to report.
     (base / "README.md").write_text("# fake mirror\n")
     subprocess.run(["git", "-C", str(base), "add", "README.md"], check=True)
