@@ -28,6 +28,18 @@ import alerting
 
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE = os.path.dirname(os.path.dirname(PLATFORM_DIR))
+
+
+def _fast_deepcopy(d):
+    """Fast recursive copy for dicts/lists/tuples."""
+    if type(d) is dict:
+        return {k: _fast_deepcopy(v) for k, v in d.items()}
+    elif type(d) is list:
+        return [_fast_deepcopy(x) for x in d]
+    elif type(d) is tuple:
+        return tuple(_fast_deepcopy(x) for x in d)
+    return d
+
 OBSERVABILITY_SNAPSHOT_CACHE_TTL_SECONDS = float(
     os.environ.get('MERIDIAN_OBSERVABILITY_SNAPSHOT_CACHE_TTL_SECONDS', '5')
 )
@@ -477,11 +489,11 @@ def observability_snapshot(org_id, *, record_alerts=True):
             and fetched_at > 0
             and (now - fetched_at) <= ttl_seconds
         ):
-            return copy.deepcopy(payload)
+            return _fast_deepcopy(payload)
         if not isinstance(payload, dict):
             pass  # cold start — fall through to synchronous build below
         elif refresh_future and not refresh_future.done():
-            return copy.deepcopy(payload)
+            return _fast_deepcopy(payload)
         else:
             if not (refresh_future and not refresh_future.done()):
                 refresh_future = OBSERVABILITY_SNAPSHOT_EXECUTOR.submit(
@@ -490,7 +502,7 @@ def observability_snapshot(org_id, *, record_alerts=True):
                     record_alerts=record_alerts,
                 )
                 cached_entry['refresh_future'] = refresh_future
-            return copy.deepcopy(payload)
+            return _fast_deepcopy(payload)
 
     if not isinstance(payload, dict):
         snapshot = _build_observability_snapshot(org_id, record_alerts=record_alerts)
@@ -500,7 +512,7 @@ def observability_snapshot(org_id, *, record_alerts=True):
                 cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
                 OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
             cached_entry['fetched_at'] = time.time()
-            cached_entry['payload'] = copy.deepcopy(snapshot)
+            cached_entry['payload'] = _fast_deepcopy(snapshot)
             cached_entry['refresh_future'] = None
         return snapshot
     try:
@@ -603,7 +615,7 @@ def observability_snapshot(org_id, *, record_alerts=True):
             cached_entry = {'fetched_at': 0.0, 'payload': None, 'refresh_future': None}
             OBSERVABILITY_SNAPSHOT_CACHE[cache_key] = cached_entry
         cached_entry['fetched_at'] = time.time()
-        cached_entry['payload'] = copy.deepcopy(snapshot)
+        cached_entry['payload'] = _fast_deepcopy(snapshot)
         cached_entry['refresh_future'] = None
     return snapshot
 
