@@ -226,6 +226,17 @@ FEDERATION_HTTP_TIMEOUT_SECONDS = max(
 )
 
 
+def _fast_deepcopy(obj):
+    if isinstance(obj, dict):
+        return {k: _fast_deepcopy(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_fast_deepcopy(v) for v in obj]
+    elif isinstance(obj, (str, int, float, bool, type(None))):
+        return obj
+    import copy
+    return copy.deepcopy(obj)
+
+
 def _resolve_kernel_root():
     explicit = (os.environ.get('MERIDIAN_KERNEL_ROOT') or '').strip()
     if explicit:
@@ -786,7 +797,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
     now = time.time()
 
     def _decorate_payload(payload, *, cache_state):
-        enriched = copy.deepcopy(payload)
+        enriched = _fast_deepcopy(payload)
         generated_from = dict(enriched.get('generated_from') or {})
         generated_from.update({
             'kernel_root': KERNEL_ROOT,
@@ -861,7 +872,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
         with _public_kernel_proof_cache_lock:
             _public_kernel_proof_cache[cache_key] = {
                 'cached_at_epoch': time.time(),
-                'payload': copy.deepcopy(cached_payload),
+                'payload': _fast_deepcopy(cached_payload),
             }
             _public_kernel_proof_last_error.pop(cache_key, None)
         return cached_payload
@@ -887,7 +898,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
             return future
 
     with _public_kernel_proof_cache_lock:
-        cache_entry = copy.deepcopy(_public_kernel_proof_cache.get(cache_key))
+        cache_entry = _fast_deepcopy(_public_kernel_proof_cache.get(cache_key))
         last_error = _public_kernel_proof_last_error.get(cache_key)
 
     if cache_entry:
@@ -929,7 +940,7 @@ def _kernel_public_proof_bundle(*, base_url=None, run_reference_proofs=None):
                     base_url=normalized_base,
                     run_reference_proofs=False,
                 )
-                fallback_payload = copy.deepcopy(fast_payload)
+                fallback_payload = _fast_deepcopy(fast_payload)
                 fallback_payload['status'] = 'degraded'
                 fallback_payload['degraded_reason'] = 'public_bundle_build_in_progress_fast_fallback'
                 cache_meta = dict(fallback_payload.get('cache') or {})
@@ -1984,7 +1995,7 @@ def _control_plane_notice_validation_peer_registry(bound_org_id, envelope):
     source_peer = registry.get('peers', {}).get(source_host_id)
     if not source_peer or getattr(source_peer, 'trust_state', '') != 'suspended':
         return None
-    registry = copy.deepcopy(registry)
+    registry = _fast_deepcopy(registry)
     registry['peers'][source_host_id].trust_state = 'trusted'
     return registry
 
@@ -2142,9 +2153,9 @@ def _run_federation_dispatch(bound_org_id, dispatch_id, *, actor_id, note='', se
     )
     delivery_snapshot = {
         'message_type': (delivery.get('claims') or {}).get('message_type', ''),
-        'claims': copy.deepcopy(delivery.get('claims') or {}),
-        'receipt': copy.deepcopy(delivery.get('receipt') or {}),
-        'response_processing': copy.deepcopy(response_processing),
+        'claims': _fast_deepcopy(delivery.get('claims') or {}),
+        'receipt': _fast_deepcopy(delivery.get('receipt') or {}),
+        'response_processing': _fast_deepcopy(response_processing),
     }
     updated_dispatch = kernel_mark_handoff_dispatch_record_dispatched(
         bound_org_id,
