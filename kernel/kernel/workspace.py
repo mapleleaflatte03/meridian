@@ -567,17 +567,6 @@ except ImportError:
     pass
 
 
-def _fast_deepcopy(obj):
-    if isinstance(obj, dict):
-        return {k: _fast_deepcopy(v) for k, v in obj.items()}
-    elif isinstance(obj, list):
-        return [_fast_deepcopy(v) for v in obj]
-    elif isinstance(obj, (str, int, float, bool, type(None))):
-        return obj
-    import copy
-    return copy.deepcopy(obj)
-
-
 def _now():
     return datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 
@@ -994,7 +983,7 @@ def _control_plane_notice_validation_peer_registry(bound_org_id, envelope):
     source_peer = registry.get('peers', {}).get(source_host_id)
     if not source_peer or getattr(source_peer, 'trust_state', '') != 'suspended':
         return None
-    registry = _fast_deepcopy(registry)
+    registry = copy.deepcopy(registry)
     registry['peers'][source_host_id].trust_state = 'trusted'
     return registry
 
@@ -4667,9 +4656,9 @@ def _run_remote_federation_dispatch(bound_org_id, dispatch_id, *, actor_id, note
     )
     delivery_snapshot = {
         'message_type': (delivery.get('claims') or {}).get('message_type', ''),
-        'claims': _fast_deepcopy(delivery.get('claims') or {}),
-        'receipt': _fast_deepcopy(delivery.get('receipt') or {}),
-        'response_processing': _fast_deepcopy(response_processing),
+        'claims': copy.deepcopy(delivery.get('claims') or {}),
+        'receipt': copy.deepcopy(delivery.get('receipt') or {}),
+        'response_processing': copy.deepcopy(response_processing),
     }
     updated_dispatch = mark_handoff_dispatch_record_dispatched(
         bound_org_id,

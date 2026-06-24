@@ -454,23 +454,36 @@ def auto_review(ledger_data=None, org_id=None):
     changes = _econ_check_auto_sanctions(ledger_data, dry_run=True)
     violations_created = []
 
+    agent_lookup = None
+
     for kind, agent_id, stype, note, level in changes:
         if kind == 'apply':
             # Create a violation record for the auto-sanction
             try:
                 # Determine org_id from agent registry
                 violation_org_id = requested_org_id or ''
-                try:
-                    sys.path.insert(0, PLATFORM_DIR)
-                    from agent_registry import load_registry
-                    reg = load_registry()
-                    for a in reg['agents'].values():
-                        ekey = a.get('economy_key', '')
-                        if ekey == agent_id or a['name'].lower() == agent_id:
-                            violation_org_id = a.get('org_id', violation_org_id)
-                            break
-                except Exception:
-                    pass
+
+                if agent_lookup is None:
+                    agent_lookup = {}
+                    try:
+                        sys.path.insert(0, PLATFORM_DIR)
+                        from agent_registry import load_registry
+                        reg = load_registry()
+                        for a in reg.get('agents', {}).values():
+                            org_id_val = a.get('org_id')
+                            if org_id_val is None:
+                                org_id_val = ''
+                            if a.get('economy_key'):
+                                agent_lookup[a['economy_key']] = org_id_val
+                            if a.get('name'):
+                                agent_lookup[a['name'].lower()] = org_id_val
+                    except Exception:
+                        pass
+
+                if agent_id in agent_lookup:
+                    lookup_val = agent_lookup[agent_id]
+                    violation_org_id = lookup_val if lookup_val != '' else violation_org_id
+
                 if requested_org_id and violation_org_id not in ('', requested_org_id):
                     continue
 
