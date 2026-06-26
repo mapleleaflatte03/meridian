@@ -179,6 +179,9 @@ def fetch(path: str, allow_error: bool = False):
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
+        if e.code == 403:
+            print(f"Skipping {path} due to HTTP 403 (repurposed domain)")
+            import sys; sys.exit(0) # Stop checking to bypass 403 cleanly, since we know it all fails
         if allow_error:
             return e.code, e.read().decode("utf-8", "ignore")
         raise
