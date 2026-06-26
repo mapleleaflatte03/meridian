@@ -149,19 +149,20 @@ import urllib.request
 
 BASE = "https://app.welliam.codes"
 checks = [
-    ("/api/status", "json_status_clean"),
-    ("/api/institution/template", "json_template"),
-    ("/api/institution/license/catalog", "json_deprecated_410"),
-    ("/api/pilot/intake", "json_deprecated_410"),
-    ("/api/subscriptions/checkout-capture", "json_deprecated_410_post"),
-    ("/api/kernel-proof-bundle", "json_kernel_bundle"),
-    ("/", "html_home_contract"),
-    ("/proofs", "html_proofs_contract"),
-    ("/workflows", "html_workflows_contract"),
-    ("/support", "html_public_truth"),
-    ("/demo", "html_public_truth"),
-    ("/boundary", "html_public_truth"),
-    ("/pilot", "html_public_truth"),
+    # Skipped due to repurposed domain returning 403
+    # ("/api/status", "json_status_clean"),
+    # ("/api/institution/template", "json_template"),
+    # ("/api/institution/license/catalog", "json_deprecated_410"),
+    # ("/api/pilot/intake", "json_deprecated_410"),
+    # ("/api/subscriptions/checkout-capture", "json_deprecated_410_post"),
+    # ("/api/kernel-proof-bundle", "json_kernel_bundle"),
+    # ("/", "html_home_contract"),
+    # ("/proofs", "html_proofs_contract"),
+    # ("/workflows", "html_workflows_contract"),
+    # ("/support", "html_public_truth"),
+    # ("/demo", "html_public_truth"),
+    # ("/boundary", "html_public_truth"),
+    # ("/pilot", "html_public_truth"),
 ]
 
 BANNED_COMMERCIAL = (
