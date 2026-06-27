@@ -509,7 +509,9 @@ def cancel_active(telegram_id, *, org_id=None, actor=''):
 def subscription_summary(org_id=None):
     payload = load_subscriptions(org_id)
     rows = list(payload.get('subscribers', {}).values())
-    all_subs = [sub for records in rows for sub in records]
+    all_subs = []
+    for records in rows:
+        all_subs.extend(records)
     active = [sub for sub in all_subs if sub.get('status') == 'active']
     verified = [
         sub for sub in active

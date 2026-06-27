@@ -2267,7 +2267,9 @@ def loom_delivery_run_snapshot(org_id=None, *, limit=50):
 def subscription_summary(org_id=None):
     payload = load_subscriptions(org_id)
     rows = list(payload.get('subscribers', {}).values())
-    all_subs = [sub for records in rows for sub in records]
+    all_subs = []
+    for records in rows:
+        all_subs.extend(records)
     active = [sub for sub in all_subs if sub.get('status') == 'active']
     draft_subscriptions = list(payload.get('draft_subscriptions', {}).values())
     loom_delivery_jobs = list(payload.get('loom_delivery_jobs', {}).values())
