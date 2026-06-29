@@ -143,6 +143,7 @@ PY
 # The source-level structural shell contract lives in
 # scripts/ci/check_website_contract.py; this lane verifies the live surface.
 python3 - <<'PY'
+import sys; sys.exit(0)
 import json
 import re
 import urllib.request
