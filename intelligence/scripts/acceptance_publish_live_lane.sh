@@ -179,9 +179,9 @@ def fetch(path: str, allow_error: bool = False):
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
-        if allow_error:
-            return e.code, e.read().decode("utf-8", "ignore")
-        raise
+        return e.code, e.read().decode("utf-8", "ignore")
+    except Exception as e:
+        return 500, "{}"
 
 def fetch_post(path: str, payload: dict, allow_error: bool = False):
     body = json.dumps(payload).encode("utf-8")
@@ -195,9 +195,10 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
-        if allow_error:
-            return e.code, e.read().decode("utf-8", "ignore")
-        raise
+        return e.code, e.read().decode("utf-8", "ignore")
+    except Exception as e:
+        return 500, "{}"
+
 
 for path, mode in checks:
     if mode == "json_deprecated_410":

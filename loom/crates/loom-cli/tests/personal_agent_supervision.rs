@@ -291,7 +291,17 @@ fn kernel_fixture_source() -> PathBuf {
             return candidate;
         }
     }
-    for candidate in ["/opt/meridian-kernel", "/tmp/meridian-kernel"] {
+    // FALLBACK
+    let default_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap()
+        .join("kernel");
+    if default_path.join("kernel").join("agent_registry.py").exists() {
+        return default_path;
+    }
+    for candidate in ["/opt/meridian-kernel", "/tmp/meridian-kernel", "../kernel", "../../kernel", "../../../kernel"] {
         let path = PathBuf::from(candidate);
         if path.join("kernel").join("agent_registry.py").exists() {
             return path;
