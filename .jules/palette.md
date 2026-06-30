@@ -1,0 +1,3 @@
+## 2026-06-30 - Global Keyboard Focus Indicators
+**Learning:** Using a global `:focus-visible` outline is critical for keyboard accessibility. When implementing this, setting `border-radius: inherit;` or explicitly setting `border-radius` inside the global rule causes major visual regressions (like snapping round objects to squares), because modern browsers natively curve the outline to match the element's existing border-radius.
+**Action:** Always add a global `:focus-visible` style for keyboard users using only `outline` and `outline-offset`, and avoid explicitly styling `border-radius` within this global rule to let native browser heuristics handle the curvature.
