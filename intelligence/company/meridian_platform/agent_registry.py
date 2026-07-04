@@ -346,6 +346,12 @@ def sync_from_economy():
     data = load_registry()
     synced = 0
 
+    ledger_agents_by_name = {
+        la.get('name', '').lower(): la
+        for la in ledger.get('agents', {}).values()
+        if 'name' in la
+    }
+
     for agent in data['agents'].values():
         # Match by economy_key first, then by name
         ledger_agent = None
@@ -354,10 +360,7 @@ def sync_from_economy():
             ledger_agent = ledger['agents'][ekey]
         else:
             agent_name = agent['name'].lower()
-            for lk, la in ledger.get('agents', {}).items():
-                if la.get('name', '').lower() == agent_name:
-                    ledger_agent = la
-                    break
+            ledger_agent = ledger_agents_by_name.get(agent_name)
 
         if ledger_agent:
             agent['reputation_units'] = ledger_agent.get('reputation_units', agent['reputation_units'])
