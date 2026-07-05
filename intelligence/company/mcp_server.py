@@ -395,16 +395,13 @@ def _specialist_llm_result(loom_result: dict, *, preferred_key: str) -> tuple[st
     output_text = str(host_response.get('output_text') or '').strip()
     payload = _extract_json_object(output_text) if output_text else None
     if isinstance(payload, dict):
-        fallback_keys = [preferred_key, 'result']
         if preferred_key == 'result':
-            fallback_keys.extend(['research', 'verification'])
+            fallback_keys = ('result', 'research', 'verification')
         elif preferred_key == 'verification':
-            fallback_keys.extend(['result', 'response'])
-        seen = set()
+            fallback_keys = ('verification', 'result', 'response')
+        else:
+            fallback_keys = tuple(dict.fromkeys([preferred_key, 'result']))
         for key in fallback_keys:
-            if key in seen:
-                continue
-            seen.add(key)
             value = str(payload.get(key) or '').strip()
             if value:
                 return value, output_text
@@ -419,17 +416,13 @@ def _specialist_llm_result(loom_result: dict, *, preferred_key: str) -> tuple[st
                     normalized.append(text.strip())
             if normalized:
                 return '\n\n'.join(normalized), output_text
-    fallback_keys = [preferred_key]
     if preferred_key == 'result':
-        fallback_keys.extend(['research', 'result'])
+        deduped_keys = ('result', 'research', 'response', 'message', 'text', 'output_text')
     elif preferred_key == 'verification':
-        fallback_keys.extend(['verification', 'result'])
-    fallback_keys.extend(['response', 'message', 'text', 'output_text'])
-    deduped_keys: list[str] = []
-    for key in fallback_keys:
-        if key not in deduped_keys:
-            deduped_keys.append(key)
-    return output_text or _extract_loom_content(worker_result, tuple(deduped_keys)), output_text
+        deduped_keys = ('verification', 'result', 'response', 'message', 'text', 'output_text')
+    else:
+        deduped_keys = tuple(dict.fromkeys([preferred_key, 'response', 'message', 'text', 'output_text']))
+    return output_text or _extract_loom_content(worker_result, deduped_keys), output_text
 
 
 def _specialist_llm_json(raw_output: str) -> dict[str, Any]:
