@@ -1,0 +1,3 @@
+## 2026-07-05 - O(N) Hash Map Key Deduplication
+**Learning:** Using a list and an `if key not in seen` loop or `if key not in deduped_keys: deduped_keys.append(key)` for key deduplication scales poorly (`O(N^2)` for list lookups). In `mcp_server.py`, replacing these custom implementations with `dict.fromkeys()` or returning direct pre-computed tuples drastically improves performance for key deduplication and avoids unnecessary set manipulations.
+**Action:** Always prefer `tuple(dict.fromkeys(keys))` or hardcoded tuples for removing duplicates from small lists over manual loops, as it's cleaner and significantly faster.
