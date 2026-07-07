@@ -1,0 +1,3 @@
+## 2026-07-07 - Implement Global Keyboard Focus Indicators
+**Learning:** The public-facing site lacked a unified `:focus-visible` state across most interactive elements (buttons, links), relying only on localized inputs. This violates fundamental keyboard navigation principles and WCAG accessibility standards, alienating users who navigate without a mouse.
+**Action:** When adding global focus styles to a design system, always implement `:focus-visible` at the root stylesheet rather than relying on individual component implementation, ensuring immediate accessibility out-of-the-box for all new and existing elements while retaining native cursor behavior.
