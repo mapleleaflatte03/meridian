@@ -1,0 +1,3 @@
+## 2026-07-07 - Replace O(N²) list lookups with O(1) set lookups in loop deduplication
+**Learning:** Using `if item not in seen_list:` inside a loop where `seen_list` is an array causes an O(N²) time complexity penalty, which can become a severe performance bottleneck during large data fetches or iterations in backend code (e.g., in `blocking_cases`).
+**Action:** Always initialize a `set()` (e.g., `seen = set()`) and use `seen.add(item)` to ensure O(1) lookup times and O(N) overall complexity for deduplication. Convert the set back to a list at the end if an ordered array return type is expected.
