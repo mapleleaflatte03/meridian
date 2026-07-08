@@ -99,6 +99,10 @@ def _resolve_kernel_dir() -> Path:
     explicit_root = str(os.environ.get("MERIDIAN_KERNEL_ROOT") or "").strip()
     if explicit_root:
         return Path(explicit_root) / "kernel"
+    # Local fallback for tests
+    local_candidate = Path(__file__).parent.parent / "kernel" / "kernel"
+    if local_candidate.exists():
+        return local_candidate
     for root in ("/opt/meridian-kernel", "/home/ubuntu/meridian/kernel"):
         candidate = Path(root) / "kernel"
         if candidate.exists():
