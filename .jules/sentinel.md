@@ -1,0 +1,4 @@
+## 2026-07-13 - SQLite PRAGMA Injection Vulnerability
+**Vulnerability:** A SQL injection vulnerability existed in `observability_store.py` where an unvalidated environment variable (`MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE`) was directly interpolated into a `PRAGMA journal_mode=` statement using an f-string. This allowed arbitrary SQL execution when a SQLite connection was opened.
+**Learning:** PRAGMA statements do not support parameter binding (`?`) in SQLite, making them common blind spots for developers who expect standard parameterization to handle all inputs. Environment variables can still be a vector for SQL injection if their contents are dynamically evaluated as query syntax.
+**Prevention:** Dynamic configuration values passed to PRAGMA statements must be validated against a strict allowlist of known-good options before being interpolated into the query string.
