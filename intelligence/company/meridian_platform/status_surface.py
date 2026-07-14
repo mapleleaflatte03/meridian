@@ -53,10 +53,10 @@ def _age_seconds(dt_value):
     if not isinstance(dt_value, datetime.datetime):
         return None
     now = _utc_now()
-    if dt_value.tzinfo is None:
-        dt_value = dt_value.replace(tzinfo=datetime.timezone.utc)
-    if now.tzinfo is None:
-        now = now.replace(tzinfo=datetime.timezone.utc)
+    if dt_value.tzinfo is None and now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+    elif dt_value.tzinfo is not None and now.tzinfo is None:
+        dt_value = dt_value.replace(tzinfo=None)
     delta = now - dt_value
     return max(int(delta.total_seconds()), 0)
 
