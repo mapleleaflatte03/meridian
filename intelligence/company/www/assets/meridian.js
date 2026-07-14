@@ -1744,18 +1744,18 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
   function renderInstitutionCard(inst, showRole) {
     var planColors = { free: '#888', starter: '#4CAF50', pro: '#2196F3', enterprise: '#FF9800' };
     var planColor = planColors[inst.plan] || '#888';
-    var roleTag = showRole && inst.role ? '<span style="display:inline-block;padding:2px 8px;background:rgba(76,175,80,0.2);border-radius:3px;font-size:0.75rem;color:#4CAF50;">' + inst.role + '</span>' : '';
+    var roleTag = showRole && inst.role ? '<span style="display:inline-block;padding:2px 8px;background:rgba(76,175,80,0.2);border-radius:3px;font-size:0.75rem;color:#4CAF50;">' + escapeHtml(inst.role) + '</span>' : '';
     return '<div style="padding:1rem;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">' +
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">' +
-        '<strong style="font-size:1rem;">' + (inst.name || 'Unnamed') + '</strong>' +
+        '<strong style="font-size:1rem;">' + escapeHtml(inst.name || 'Unnamed') + '</strong>' +
         roleTag +
       '</div>' +
       '<div style="display:flex;gap:0.75rem;font-size:0.8rem;opacity:0.7;">' +
-        '<span style="color:' + planColor + ';">' + (inst.plan || 'free') + '</span>' +
-        '<span>' + (inst.member_count || 0) + ' members</span>' +
-        '<span>' + (inst.lifecycle_state || 'active') + '</span>' +
+        '<span style="color:' + planColor + ';">' + escapeHtml(inst.plan || 'free') + '</span>' +
+        '<span>' + escapeHtml(inst.member_count || 0) + ' members</span>' +
+        '<span>' + escapeHtml(inst.lifecycle_state || 'active') + '</span>' +
       '</div>' +
-      '<div style="margin-top:0.5rem;font-size:0.75rem;opacity:0.5;">/' + (inst.slug || inst.id || '') + '</div>' +
+      '<div style="margin-top:0.5rem;font-size:0.75rem;opacity:0.5;">/' + escapeHtml(inst.slug || inst.id || '') + '</div>' +
     '</div>';
   }
 
@@ -1811,11 +1811,11 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
           } else {
             listEl.innerHTML = offerings.map(function (o) {
               return '<div style="padding:1rem;background:rgba(255,255,255,0.05);border-radius:8px;border:1px solid rgba(255,255,255,0.1);">' +
-                '<strong>' + (o.capability || 'Unnamed') + '</strong>' +
-                '<div style="font-size:0.85rem;margin-top:0.5rem;opacity:0.8;">' + (o.description || '') + '</div>' +
+                '<strong>' + escapeHtml(o.capability || 'Unnamed') + '</strong>' +
+                '<div style="font-size:0.85rem;margin-top:0.5rem;opacity:0.8;">' + escapeHtml(o.description || '') + '</div>' +
                 '<div style="display:flex;gap:1rem;margin-top:0.5rem;font-size:0.8rem;">' +
-                  '<span style="color:#4CAF50;">$' + (o.price_usd_per_run || 0).toFixed(2) + '/run</span>' +
-                  '<span style="opacity:0.6;">' + (o.institution_name || o.org_id || '') + '</span>' +
+                  '<span style="color:#4CAF50;">$' + escapeHtml((o.price_usd_per_run || 0).toFixed(2)) + '/run</span>' +
+                  '<span style="opacity:0.6;">' + escapeHtml(o.institution_name || o.org_id || '') + '</span>' +
                 '</div>' +
               '</div>';
             }).join('');

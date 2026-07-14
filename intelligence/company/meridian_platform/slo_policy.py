@@ -75,7 +75,12 @@ def _eval_freshness(name: str, latest_at: str, warning_after_seconds: int, breac
             'breach_after_seconds': breach_after_seconds,
             'message': 'No timestamp available for freshness evaluation',
         }
-    age_seconds = max(int((_now() - parsed).total_seconds()), 0)
+    now = _now()
+    if parsed.tzinfo is None and now.tzinfo is not None:
+        now = now.replace(tzinfo=None)
+    elif parsed.tzinfo is not None and now.tzinfo is None:
+        parsed = parsed.replace(tzinfo=None)
+    age_seconds = max(int((now - parsed).total_seconds()), 0)
     if age_seconds >= breach_after_seconds:
         status = 'breached'
     elif age_seconds >= warning_after_seconds:
