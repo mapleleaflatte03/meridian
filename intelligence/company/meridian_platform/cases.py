@@ -230,20 +230,24 @@ def peer_can_be_thawed(peer_host_id, org_id=None, *, claim_types=None):
 
 
 def blocking_commitment_ids(org_id=None):
-    seen = []
+    # Performance Optimization: Use a set instead of a list for O(1) inclusion checks
+    # Reduces time complexity of deduplication from O(N^2) to O(N)
+    seen = set()
     for row in blocking_cases(org_id):
         commitment_id = (row.get('linked_commitment_id') or '').strip()
-        if commitment_id and commitment_id not in seen:
-            seen.append(commitment_id)
+        if commitment_id:
+            seen.add(commitment_id)
     return sorted(seen)
 
 
 def blocked_peer_host_ids(org_id=None):
-    seen = []
+    # Performance Optimization: Use a set instead of a list for O(1) inclusion checks
+    # Reduces time complexity of deduplication from O(N^2) to O(N)
+    seen = set()
     for row in blocking_cases(org_id):
         peer_host_id = (row.get('target_host_id') or '').strip()
-        if peer_host_id and case_requires_peer_block(row) and peer_host_id not in seen:
-            seen.append(peer_host_id)
+        if peer_host_id and case_requires_peer_block(row):
+            seen.add(peer_host_id)
     return sorted(seen)
 
 
