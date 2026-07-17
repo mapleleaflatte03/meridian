@@ -92,7 +92,7 @@
         <span>Remember in this browser</span>
       </label>
       <button type="submit" class="cta">Unlock queue</button>
-      <button type="button" class="cta cta-outline" data-trust-ops-clear-token>Clear token</button>
+      <button type="button" class="cta cta-outline" aria-label="Clear operator token" data-trust-ops-clear-token>Clear token</button>
     </form>
     <p class="operator-status" data-trust-ops-auth-status>Operator token required.</p>
   </div>
@@ -122,7 +122,7 @@
         <input type="checkbox" name="include_cleared" value="true">
         <span>Include cleared items</span>
       </label>
-      <button type="submit" class="cta cta-outline">Refresh queue</button>
+      <button type="submit" class="cta cta-outline" aria-label="Refresh Trust Ops queue">Refresh queue</button>
     </form>
     <p class="operator-status" data-trust-ops-status>Trust Ops sync initialized.</p>
   </div>
@@ -135,10 +135,10 @@
       </label>
       <strong class="operator-selected-count" data-trust-ops-selected-count>0 selected</strong>
       <div class="operator-actions">
-        <button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>
-        <button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>
-        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>
-        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>
+        <button type="button" class="operator-action" data-bulk-decision="approve" aria-label="Bulk approve selected items" disabled>approve</button>
+        <button type="button" class="operator-action" data-bulk-decision="stale" aria-label="Mark selected items as stale" disabled>stale</button>
+        <button type="button" class="operator-action" data-bulk-decision="revoke" aria-label="Bulk revoke selected items" disabled>revoke</button>
+        <button type="button" class="operator-action" data-bulk-decision="unresolved" aria-label="Mark selected items as unresolved" disabled>unresolved</button>
       </div>
     </div>
   </div>
