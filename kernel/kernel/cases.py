@@ -309,20 +309,24 @@ def blocking_peer_case(peer_host_id, org_id=None, *, claim_types=None):
 
 
 def blocking_commitment_ids(org_id=None):
-    seen = []
+    # Performance Optimization: using a set for `seen` ensures O(1) lookups
+    # rather than O(N) when checking inclusion inside the loop.
+    seen = set()
     for row in blocking_cases(org_id):
         commitment_id = (row.get('linked_commitment_id') or '').strip()
         if commitment_id and commitment_id not in seen:
-            seen.append(commitment_id)
+            seen.add(commitment_id)
     return sorted(seen)
 
 
 def blocked_peer_host_ids(org_id=None):
-    seen = []
+    # Performance Optimization: using a set for `seen` ensures O(1) lookups
+    # rather than O(N) when checking inclusion inside the loop.
+    seen = set()
     for row in blocking_cases(org_id):
         peer_host_id = (row.get('target_host_id') or '').strip()
         if peer_host_id and case_requires_peer_block(row) and peer_host_id not in seen:
-            seen.append(peer_host_id)
+            seen.add(peer_host_id)
     return sorted(seen)
 
 
