@@ -46,15 +46,32 @@ def preferred_loom_bin(runtime_env: Optional[dict] = None) -> str:
     """Discover the Loom binary path."""
     env = runtime_env or os.environ
     explicit = (env.get("MERIDIAN_LOOM_BIN") or "").strip()
-    if explicit and os.path.exists(explicit):
-        return explicit
+    try:
+        if explicit and os.path.exists(explicit) and os.access(explicit, os.X_OK):
+            return explicit
+    except PermissionError:
+        pass
     for candidate in _DEFAULT_LOOM_BINS:
-        if os.path.exists(candidate):
-            return candidate
+        try:
+            if os.path.exists(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+        except PermissionError:
+            pass
     which = shutil.which("loom")
-    if which:
-        return which
-    return _DEFAULT_LOOM_BINS[0]
+    try:
+        if which and os.access(which, os.X_OK):
+            return which
+    except PermissionError:
+        pass
+
+    local_build = os.path.join(os.environ.get("MERIDIAN_ROOT", "/app"), "loom", "target", "debug", "loom")
+    try:
+        if os.path.exists(local_build) and os.access(local_build, os.X_OK):
+            return local_build
+    except PermissionError:
+        pass
+
+    return "loom" # Instead of hardcoding absolute path, fallback to assuming it's in PATH to avoid PermissionError on hardcoded path
 
 
 def preferred_loom_root(runtime_env: Optional[dict] = None) -> str:
