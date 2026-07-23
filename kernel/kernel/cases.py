@@ -309,6 +309,8 @@ def blocking_peer_case(peer_host_id, org_id=None, *, claim_types=None):
 
 
 def blocking_commitment_ids(org_id=None):
+    # Optimization: Use a set for O(1) membership lookups instead of a list (O(N)),
+    # reducing overall time complexity from O(N^2) to O(N) when deduplicating IDs.
     seen = set()
     for row in blocking_cases(org_id):
         commitment_id = (row.get('linked_commitment_id') or '').strip()
@@ -318,6 +320,8 @@ def blocking_commitment_ids(org_id=None):
 
 
 def blocked_peer_host_ids(org_id=None):
+    # Optimization: Use a set for O(1) membership lookups instead of a list (O(N)),
+    # reducing overall time complexity from O(N^2) to O(N) when deduplicating IDs.
     seen = set()
     for row in blocking_cases(org_id):
         peer_host_id = (row.get('target_host_id') or '').strip()
