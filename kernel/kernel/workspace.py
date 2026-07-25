@@ -8642,7 +8642,10 @@ def main():
     inst_ctx = _resolve_workspace_context()
     org_id, org, context_source = inst_ctx.org_id, inst_ctx.org, inst_ctx.context_source
 
-    server = HTTPServer(('127.0.0.1', args.port), WorkspaceHandler)
+    import socketserver
+    class ReusableTCPServer(HTTPServer):
+        allow_reuse_address = True
+    server = ReusableTCPServer(('127.0.0.1', args.port), WorkspaceHandler)
     print(f'Governed Workspace running at http://127.0.0.1:{args.port}')
     print(f'Dashboard: http://127.0.0.1:{args.port}/')
     print(f'API:       http://127.0.0.1:{args.port}/api/status')

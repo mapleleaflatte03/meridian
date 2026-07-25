@@ -225,18 +225,22 @@ def _string_map(payload: Any) -> dict[str, Any]:
 
 def _coerce_aliases(values: Any) -> tuple[str, ...]:
     aliases: list[str] = []
+    seen = set()
     for raw in values or []:
         value = str(raw or "").strip()
-        if value and value not in aliases:
+        if value and value not in seen:
+            seen.add(value)
             aliases.append(value)
     return tuple(aliases)
 
 
 def _coerce_scopes(values: Any) -> tuple[str, ...]:
     scopes: list[str] = []
+    seen = set()
     for raw in values or []:
         value = str(raw or "").strip()
-        if value and value not in scopes:
+        if value and value not in seen:
+            seen.add(value)
             scopes.append(value)
     return tuple(scopes)
 
@@ -262,8 +266,10 @@ def _team_role_payload(
     merged = dict(_string_map(preset_payload))
     merged.update(_string_map(override_payload))
     aliases = list(_coerce_aliases(preset_payload.get("aliases")))
+    seen = set(aliases)
     for item in _coerce_aliases(override_payload.get("aliases")):
-        if item not in aliases:
+        if item not in seen:
+            seen.add(item)
             aliases.append(item)
     merged["aliases"] = tuple(aliases)
     merged["scopes"] = _coerce_scopes(merged.get("scopes"))

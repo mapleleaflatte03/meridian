@@ -158,9 +158,11 @@ def _normalize_host_id(host_id, *, field_name='host_id'):
 
 def _normalize_peer_org_ids(admitted_org_ids):
     normalized = []
+    seen = set()
     for org_id in admitted_org_ids or []:
         org_id = (org_id or '').strip()
-        if org_id and org_id not in normalized:
+        if org_id and org_id not in seen:
+            seen.add(org_id)
             normalized.append(org_id)
     return normalized
 
