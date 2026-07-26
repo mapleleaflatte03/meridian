@@ -235,7 +235,7 @@ def blocking_commitment_ids(org_id=None):
         commitment_id = (row.get('linked_commitment_id') or '').strip()
         if commitment_id and commitment_id not in seen:
             seen.add(commitment_id)
-    return sorted(seen)
+    return sorted(list(seen))
 
 
 def blocked_peer_host_ids(org_id=None):
@@ -244,7 +244,7 @@ def blocked_peer_host_ids(org_id=None):
         peer_host_id = (row.get('target_host_id') or '').strip()
         if peer_host_id and case_requires_peer_block(row) and peer_host_id not in seen:
             seen.add(peer_host_id)
-    return sorted(seen)
+    return sorted(list(seen))
 
 
 def _commitment_counterparty_binding(commitment_record):
