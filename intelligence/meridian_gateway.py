@@ -100,12 +100,18 @@ def _resolve_kernel_dir() -> Path:
     if explicit_root:
         return Path(explicit_root) / "kernel"
     current_repo_kernel = Path(__file__).resolve().parent.parent / "kernel" / "kernel"
-    if current_repo_kernel.exists():
-        return current_repo_kernel
+    try:
+        if current_repo_kernel.exists():
+            return current_repo_kernel
+    except PermissionError:
+        pass
     for root in ("/opt/meridian-kernel", "/home/ubuntu/meridian/kernel"):
         candidate = Path(root) / "kernel"
-        if candidate.exists():
-            return candidate
+        try:
+            if candidate.exists():
+                return candidate
+        except PermissionError:
+            pass
     return Path("/opt/meridian-kernel/kernel")
 
 
