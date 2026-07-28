@@ -336,7 +336,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         '<td data-label="State"><span class="' + badgeClass(bucket) + '">' + escapeHtml(bucket) + '</span><div class="operator-meta">Gate: ' + escapeHtml(item.approval_gate_status || 'unknown') + '</div></td>' +
         '<td data-label="Evidence"><code>' + escapeHtml(item.evidence_key || 'none') + '</code><div class="operator-meta">Status: ' + escapeHtml(item.evidence_status || 'none') + '</div></td>' +
         '<td data-label="Owner"><strong>' + escapeHtml(item.origin_agent || 'main') + '</strong>' + reviewMeta + '</td>' +
-        '<td data-label="Questionnaire"><button type="button" class="operator-link" data-select-questionnaire="' + escapeHtml(item.questionnaire_id) + '">' + escapeHtml(item.questionnaire_id) + '</button><div class="operator-meta">' + escapeHtml(item.source_session_key || '') + '</div></td>' +
+        '<td data-label="Questionnaire"><button type="button" class="operator-link" aria-label="Select questionnaire ' + escapeHtml(item.questionnaire_id) + '" data-select-questionnaire="' + escapeHtml(item.questionnaire_id) + '">' + escapeHtml(item.questionnaire_id) + '</button><div class="operator-meta">' + escapeHtml(item.source_session_key || '') + '</div></td>' +
         '<td data-label="Action"><div class="operator-actions">' + actionButtons + '</div></td>' +
       '</tr>';
     }).join('');
