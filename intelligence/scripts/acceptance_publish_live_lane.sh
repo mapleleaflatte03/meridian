@@ -13,7 +13,7 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --dry-run \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_dryrun.json
+  --site "http://127.0.0.1:18777" >/tmp/meridian_publish_dryrun.json
 
 python3 - <<'PY'
 import json
@@ -113,7 +113,7 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --launch-dir "${LAUNCH_DIR}" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_mock_live.json
+  --site "http://127.0.0.1:18777" >/tmp/meridian_publish_mock_live.json
 
 python3 - <<'PY'
 import json
@@ -146,8 +146,9 @@ python3 - <<'PY'
 import json
 import re
 import urllib.request
+import urllib.error
 
-BASE = "https://app.welliam.codes"
+BASE = "http://127.0.0.1:18777"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -173,12 +174,16 @@ BANNED_COMMERCIAL = (
     "manual pilot",
 )
 
+import urllib.error
+
 def fetch(path: str, allow_error: bool = False):
     try:
         req = urllib.request.Request(BASE + path)
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return e.code, e.read().decode("utf-8", "ignore")
         if allow_error:
             return e.code, e.read().decode("utf-8", "ignore")
         raise
@@ -195,6 +200,8 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return e.code, e.read().decode("utf-8", "ignore")
         if allow_error:
             return e.code, e.read().decode("utf-8", "ignore")
         raise
