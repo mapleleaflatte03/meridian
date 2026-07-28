@@ -290,6 +290,9 @@ fn kernel_fixture_source() -> PathBuf {
         if candidate.join("kernel").join("agent_registry.py").exists() {
             return candidate;
         }
+        if candidate.join("kernel").join("kernel").join("agent_registry.py").exists() {
+            return candidate.join("kernel");
+        }
     }
     for candidate in ["/opt/meridian-kernel", "/tmp/meridian-kernel"] {
         let path = PathBuf::from(candidate);
