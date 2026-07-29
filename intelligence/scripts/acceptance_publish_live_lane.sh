@@ -175,7 +175,7 @@ BANNED_COMMERCIAL = (
 
 def fetch(path: str, allow_error: bool = False):
     try:
-        req = urllib.request.Request(BASE + path)
+        req = urllib.request.Request(BASE + path, headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
@@ -188,7 +188,7 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
     req = urllib.request.Request(
         BASE + path,
         data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
+        headers={"Content-Type": "application/json", "Origin": BASE, "User-Agent": "Mozilla/5.0", "Accept": "application/json"},
         method="POST",
     )
     try:
