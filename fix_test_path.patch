@@ -1,0 +1,18 @@
+--- loom/crates/loom-cli/tests/personal_agent_supervision.rs
++++ loom/crates/loom-cli/tests/personal_agent_supervision.rs
+@@ -287,13 +287,13 @@
+ fn kernel_fixture_source() -> PathBuf {
+     if let Ok(value) = std::env::var("MERIDIAN_TEST_KERNEL_PATH") {
+         let candidate = PathBuf::from(value.trim());
+-        if candidate.join("kernel").join("agent_registry.py").exists() {
++        if candidate.join("kernel").join("kernel").join("agent_registry.py").exists() || candidate.join("kernel").join("agent_registry.py").exists() {
+             return candidate;
+         }
+     }
+     for path in [PathBuf::from("../../kernel"), PathBuf::from("../kernel")] {
+         if path.exists() {
+-            if path.join("kernel").join("agent_registry.py").exists() {
++            if path.join("kernel").join("kernel").join("agent_registry.py").exists() || path.join("kernel").join("agent_registry.py").exists() {
+                 return path;
+             }
+         }

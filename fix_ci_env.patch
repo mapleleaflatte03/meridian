@@ -1,0 +1,18 @@
+--- .github/workflows/ci.yml
++++ .github/workflows/ci.yml
+@@ -10,13 +10,6 @@
+     runs-on: ubuntu-latest
+     outputs:
+       loom: ${{ steps.filter.outputs.loom }}
+       kernel: ${{ steps.filter.outputs.kernel }}
+       intelligence: ${{ steps.filter.outputs.intelligence }}
+       bootstrap: ${{ steps.filter.outputs.bootstrap }}
+@@ -46,7 +39,7 @@
+           workspaces: loom
+       - name: Test loom workspace
+         run: |
+-          export MERIDIAN_TEST_KERNEL_PATH="${GITHUB_WORKSPACE}/kernel"
++          export MERIDIAN_TEST_KERNEL_PATH="${GITHUB_WORKSPACE}/kernel/kernel"
+           cargo test --workspace
+
+   python-kernel-intelligence:
