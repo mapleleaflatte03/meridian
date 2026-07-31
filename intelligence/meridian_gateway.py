@@ -5753,13 +5753,20 @@ class SkillRegistry:
             skill_path = skill_dir / "SKILL.md"
             skill_path.write_text(content, encoding="utf-8")
             if SKILL_VALIDATOR.exists():
-                completed = subprocess.run(
-                    ["python3", str(SKILL_VALIDATOR), str(skill_dir)],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if completed.returncode != 0:
+                try:
+                    completed = subprocess.run(
+                        ["python3", str(SKILL_VALIDATOR), str(skill_dir)],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                        check=False,
+                    )
+                    if completed.returncode != 0:
+                        print(f"Skill validation failed: {completed.stderr or completed.stdout}", file=sys.stderr)
+                        shutil.rmtree(skill_dir, ignore_errors=True)
+                        return None
+                except subprocess.TimeoutExpired:
+                    print("Skill validation timed out after 30 seconds", file=sys.stderr)
                     shutil.rmtree(skill_dir, ignore_errors=True)
                     return None
             self.load()
