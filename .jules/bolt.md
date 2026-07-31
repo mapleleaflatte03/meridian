@@ -1,0 +1,3 @@
+## 2024-04-21 - O(N^2) in error formatting
+**Learning:** Generating the list of duplicate org IDs in `build_federated_bundle` uses a list comprehension with `.count(o)` on every element: `[o for o in org_ids if org_ids.count(o) > 1]`. This does an O(N) search for each of N elements, resulting in O(N^2) complexity, which gets extremely slow for large inputs even in an error handling path. A better approach is using `collections.Counter` or iterating via a set/dict to identify duplicates in O(N) time.
+**Action:** When finding duplicates in a list, always use `collections.Counter` or a hash map rather than nested searches like `list.count()` inside a list comprehension, even for error messages.
