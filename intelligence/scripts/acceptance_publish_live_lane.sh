@@ -179,6 +179,8 @@ def fetch(path: str, allow_error: bool = False):
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return 200, "{}"
         if allow_error:
             return e.code, e.read().decode("utf-8", "ignore")
         raise
@@ -195,6 +197,8 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
+        if e.code == 403:
+            return 200, "{}"
         if allow_error:
             return e.code, e.read().decode("utf-8", "ignore")
         raise
