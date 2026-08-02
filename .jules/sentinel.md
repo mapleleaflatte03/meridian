@@ -1,0 +1,4 @@
+## 2024-08-02 - Prevent SQL Injection via unparameterized PRAGMA statement
+**Vulnerability:** SQLite `PRAGMA` statements were being executed with unsanitized dynamic string concatenation (using Python `f-strings` and values from environment variables) in `intelligence/company/meridian_platform/observability_store.py`.
+**Learning:** `PRAGMA` commands do not support parameterized query execution (`?`). Passing environment variables directly into strings used for SQLite statements allows environment-based SQL injection, even if Python `sqlite3.connect.execute()` usually prevents multiple statements, as this may allow tampering with internal SQLite settings depending on the driver's strictness.
+**Prevention:** Strictly validate any dynamically sourced `PRAGMA` value against an explicit, bounded allowlist (e.g. `{'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL', 'OFF'}`) before execution.
