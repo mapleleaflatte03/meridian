@@ -18,6 +18,11 @@
 <meta name="twitter:description" content="Operator surface for Meridian Trust Ops approval queue and questionnaire state.">
 <meta name="twitter:image" content="https://app.welliam.codes/assets/logo_banner_1200x630.jpg">
 <link rel="stylesheet" href="/assets/meridian.css?v=20260418-oss12">
+
+  <style>
+    .operator-action-wrapper:has(button:disabled) { cursor: not-allowed; }
+    .operator-action:disabled { pointer-events: none; }
+  </style>
 </head>
 <body class="page-trust-ops">
 
@@ -135,10 +140,10 @@
       </label>
       <strong class="operator-selected-count" data-trust-ops-selected-count>0 selected</strong>
       <div class="operator-actions">
-        <button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>
-        <button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>
-        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>
-        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to approve"><button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button></span>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to mark stale"><button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button></span>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to revoke"><button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button></span>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to mark unresolved"><button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button></span>
       </div>
     </div>
   </div>

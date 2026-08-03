@@ -1,0 +1,3 @@
+## 2024-08-03 - Native title attribute behavior on disabled elements
+**Learning:** Native HTML `title` attributes (and mouse events in general) do not fire on elements with the `disabled` attribute in most modern browsers. Using a title directly on `<button disabled>` for a tooltip will not work for users.
+**Action:** When adding tooltips to explain *why* an element is disabled (which is a good UX pattern), wrap the disabled element in a `<span>` (or `<div>`) with `tabindex="0"` (for keyboard accessibility) and apply the `title` attribute to the wrapper. Set the wrapper to `cursor: not-allowed;` and the button to `pointer-events: none;` to ensure the hover state functions properly.
