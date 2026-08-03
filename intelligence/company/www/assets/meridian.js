@@ -300,7 +300,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       var queueId = safeText(checkbox.getAttribute('data-queue-select')).trim();
       checkbox.checked = selectedQueueIds.has(queueId);
     });
-Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
+    Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       var isDisabled = !selectedCount;
       button.disabled = isDisabled;
       var wrapper = button.closest('.operator-action-wrapper');
