@@ -300,8 +300,21 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       var queueId = safeText(checkbox.getAttribute('data-queue-select')).trim();
       checkbox.checked = selectedQueueIds.has(queueId);
     });
-    Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
-      button.disabled = !selectedCount;
+Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
+      var isDisabled = !selectedCount;
+      button.disabled = isDisabled;
+      var wrapper = button.closest('.operator-action-wrapper');
+      if (wrapper) {
+        if (isDisabled) {
+          wrapper.setAttribute('tabindex', '0');
+          wrapper.style.cursor = 'not-allowed';
+          button.style.pointerEvents = 'none';
+        } else {
+          wrapper.removeAttribute('tabindex');
+          wrapper.style.cursor = '';
+          button.style.pointerEvents = '';
+        }
+      }
     });
   }
 
