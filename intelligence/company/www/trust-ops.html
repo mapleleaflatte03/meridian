@@ -135,10 +135,10 @@
       </label>
       <strong class="operator-selected-count" data-trust-ops-selected-count>0 selected</strong>
       <div class="operator-actions">
-        <button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>
-        <button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>
-        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>
-        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to approve"><button type="button" class="operator-action" data-bulk-decision="approve" disabled style="pointer-events:none;">approve</button></span>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to mark stale"><button type="button" class="operator-action" data-bulk-decision="stale" disabled style="pointer-events:none;">stale</button></span>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to revoke"><button type="button" class="operator-action" data-bulk-decision="revoke" disabled style="pointer-events:none;">revoke</button></span>
+        <span class="operator-action-wrapper" tabindex="0" title="Select visible items to mark unresolved"><button type="button" class="operator-action" data-bulk-decision="unresolved" disabled style="pointer-events:none;">unresolved</button></span>
       </div>
     </div>
   </div>

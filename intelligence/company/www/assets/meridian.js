@@ -301,7 +301,25 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       checkbox.checked = selectedQueueIds.has(queueId);
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
-      button.disabled = !selectedCount;
+      var isDisabled = !selectedCount;
+      button.disabled = isDisabled;
+      var wrapper = button.closest('.operator-action-wrapper');
+      if (wrapper) {
+        if (!wrapper.hasAttribute('data-disabled-title')) {
+          wrapper.setAttribute('data-disabled-title', wrapper.getAttribute('title') || '');
+        }
+        if (isDisabled) {
+          wrapper.setAttribute('tabindex', '0');
+          wrapper.style.cursor = 'not-allowed';
+          wrapper.setAttribute('title', wrapper.getAttribute('data-disabled-title'));
+          button.style.pointerEvents = 'none';
+        } else {
+          wrapper.removeAttribute('tabindex');
+          wrapper.style.cursor = '';
+          wrapper.removeAttribute('title');
+          button.style.pointerEvents = '';
+        }
+      }
     });
   }
 
