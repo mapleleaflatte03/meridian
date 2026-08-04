@@ -1069,23 +1069,15 @@ def _recent_telegram_delivery_duplicate(recipient: str, text: str) -> dict[str, 
         cutoff_ms = now_ms - TELEGRAM_OUTBOUND_DEDUP_WINDOW_SECONDS * 1000
     delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
     matches: list[dict[str, Any]] = []
-
-    candidates = []
     try:
-        for entry in os.scandir(delivery_dir):
-            if entry.is_file() and entry.name.endswith(".json"):
-                candidates.append((entry.path, entry.stat().st_mtime))
+        candidates = sorted(delivery_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)
     except Exception:
-        pass
-
-    candidates.sort(key=lambda x: x[1], reverse=True)
-
-    for path, mtime in candidates:
-        if mtime * 1000 < cutoff_ms:
+        candidates = []
+    for path in candidates:
+        if path.stat().st_mtime * 1000 < cutoff_ms:
             break
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                payload = json.loads(f.read())
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
         if str(payload.get("channel_id") or "").strip() != "telegram":
@@ -1194,23 +1186,15 @@ def _recent_external_channel_delivery_duplicate(channel: str, recipient: str, te
     cutoff_ms = int(time.time() * 1000) - EXTERNAL_CHANNEL_OUTBOUND_DEDUP_WINDOW_SECONDS * 1000
     delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
     matches: list[dict[str, Any]] = []
-
-    candidates = []
     try:
-        for entry in os.scandir(delivery_dir):
-            if entry.is_file() and entry.name.endswith(".json"):
-                candidates.append((entry.path, entry.stat().st_mtime))
+        candidates = sorted(delivery_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True)
     except Exception:
-        pass
-
-    candidates.sort(key=lambda x: x[1], reverse=True)
-
-    for path, mtime in candidates:
-        if mtime * 1000 < cutoff_ms:
+        candidates = []
+    for path in candidates:
+        if path.stat().st_mtime * 1000 < cutoff_ms:
             break
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                payload = json.loads(f.read())
+            payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
             continue
         if str(payload.get("channel_id") or "").strip() != str(channel or "").strip():
