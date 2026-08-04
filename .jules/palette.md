@@ -1,0 +1,3 @@
+## 2026-08-04 - Native tooltips on disabled buttons
+**Learning:** Browsers do not consistently show `title` tooltips on disabled buttons because they do not trigger pointer events (mouse/hover/focus). When operators encountered the disabled bulk action buttons in the Trust Ops queue, they had no context on *why* they were disabled.
+**Action:** Always use an inline wrapper (e.g., `<span>`) with the `title` attribute for disabled buttons to provide context. Furthermore, this wrapper needs `tabindex="0"` while disabled so keyboard users can read the tooltip, and you must dynamically remove `tabindex` and `title` when the button is enabled to prevent confusing double tab-stops and redundant tooltips.
