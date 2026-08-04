@@ -1,0 +1,4 @@
+## 2024-05-24 - SQL Injection in SQLite PRAGMA journal_mode
+**Vulnerability:** SQL injection vulnerability via the `MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE` environment variable because the value was directly interpolated into a `PRAGMA journal_mode={value}` SQL query execution without an explicit allowlist.
+**Learning:** `PRAGMA` statements in sqlite3 do not support parameterized queries (`?`). They often require dynamic string interpolation from user-provided inputs like environment variables.
+**Prevention:** Always use strict explicit allowlists when dynamically generating SQL strings for `PRAGMA` variables, ensuring no unvalidated external input can execute arbitrary SQL. Include historical fallbacks like `''` and `'DEFAULT'` in the allowlist to prevent unintended errors in parsing logic later on.
