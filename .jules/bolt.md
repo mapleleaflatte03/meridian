@@ -1,0 +1,3 @@
+## 2024-05-18 - Optimize O(N) file parsing in delivery loops
+**Learning:** Checking for recent file duplicates via `Path.glob` combined with sorting and parsing all matching JSON files is extremely inefficient when dealing with thousands of files, as every file's payload is read and parsed into memory before the cutoff check.
+**Action:** Optimize directory scans by filtering and sorting on file modification times (`mtime`) using `os.scandir` or `Path.stat()`, and break the loop early once the files evaluated are older than the deduplication cutoff window, preventing unnecessary file I/O and JSON parsing operations.
