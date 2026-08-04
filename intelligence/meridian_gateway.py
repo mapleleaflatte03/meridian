@@ -1069,7 +1069,16 @@ def _recent_telegram_delivery_duplicate(recipient: str, text: str) -> dict[str, 
         cutoff_ms = now_ms - TELEGRAM_OUTBOUND_DEDUP_WINDOW_SECONDS * 1000
     delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
     matches: list[dict[str, Any]] = []
-    for path in sorted(delivery_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+    candidates: list[tuple[Path, float]] = []
+    for path in delivery_dir.glob("*.json"):
+        try:
+            candidates.append((path, path.stat().st_mtime))
+        except OSError:
+            pass
+    candidates.sort(key=lambda item: item[1], reverse=True)
+    for path, mtime in candidates:
+        if mtime * 1000 < cutoff_ms:
+            break
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
@@ -1180,7 +1189,16 @@ def _recent_external_channel_delivery_duplicate(channel: str, recipient: str, te
     cutoff_ms = int(time.time() * 1000) - EXTERNAL_CHANNEL_OUTBOUND_DEDUP_WINDOW_SECONDS * 1000
     delivery_dir = Path(LOOM_ROOT) / "state" / "channels" / "delivery"
     matches: list[dict[str, Any]] = []
-    for path in sorted(delivery_dir.glob("*.json"), key=lambda item: item.stat().st_mtime, reverse=True):
+    candidates: list[tuple[Path, float]] = []
+    for path in delivery_dir.glob("*.json"):
+        try:
+            candidates.append((path, path.stat().st_mtime))
+        except OSError:
+            pass
+    candidates.sort(key=lambda item: item[1], reverse=True)
+    for path, mtime in candidates:
+        if mtime * 1000 < cutoff_ms:
+            break
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except Exception:
