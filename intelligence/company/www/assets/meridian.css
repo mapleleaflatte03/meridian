@@ -2361,3 +2361,17 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   text-align: left;
 }
 .hero-install code { font-family: 'JetBrains Mono', monospace; color: inherit; }
+
+
+.bulk-action-wrapper {
+  display: inline-flex;
+}
+
+.bulk-action-wrapper:focus-visible {
+  outline: none;
+}
+
+.bulk-action-wrapper:focus-visible .operator-action:disabled {
+  outline: 2px solid rgba(135,216,255,0.45);
+  box-shadow: 0 0 0 4px rgba(135,216,255,0.08);
+}
