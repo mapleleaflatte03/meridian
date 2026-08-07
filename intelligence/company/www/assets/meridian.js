@@ -302,6 +302,15 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      if (button.parentElement && button.parentElement.hasAttribute('data-tooltip-wrapper')) {
+        if (button.disabled) {
+          button.parentElement.setAttribute('tabindex', '0');
+          button.parentElement.setAttribute('title', 'Select items to enable action');
+        } else {
+          button.parentElement.removeAttribute('tabindex');
+          button.parentElement.removeAttribute('title');
+        }
+      }
     });
   }
 
