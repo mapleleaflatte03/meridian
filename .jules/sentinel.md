@@ -1,0 +1,4 @@
+## 2024-05-24 - Prevent SQL Injection via SQLite PRAGMA Statements
+**Vulnerability:** The SQLite PRAGMA `journal_mode` query directly interpolated an environment variable without strict validation. `PRAGMA` statements do not support parameterized queries (`?`), allowing potential SQL injection or unexpected application states if a malicious or malformed environment variable was read.
+**Learning:** SQLite's `PRAGMA` statements are vulnerable to injection if dynamically generated from unvalidated external inputs (like environment variables), because standard parameterization is not supported for them.
+**Prevention:** When dynamically setting `PRAGMA` values, strictly validate the input against an explicit allowlist of acceptable values before execution. Include historically permitted fallback or bypass values (e.g., `''` or `'DEFAULT'`) in the allowlist to avoid unintended logical regressions.
