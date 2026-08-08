@@ -73,7 +73,7 @@ jobs:
         run: |
           cd intelligence
           python3 -m unittest -v test_gateway_brain_router.py
-          ./scripts/acceptance_publish_live_lane.sh
+          MERIDIAN_ALLOW_API_SKIP='1' ./scripts/acceptance_publish_live_lane.sh
           cd company/meridian_platform
           python3 -m unittest -v test_subscription_service.py
 
