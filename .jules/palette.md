@@ -1,0 +1,3 @@
+## 2026-08-08 - Tooltips on dynamically disabled buttons
+**Learning:** Native `title` attributes do not display on disabled buttons because they don't capture pointer events. A wrapper element (like a span) is needed. However, if the button's disabled state is toggled dynamically by JavaScript, you must also dynamically remove the `tabindex` and `title` attributes from the wrapper when the button is enabled. Otherwise, keyboard users will encounter confusing double tab stops (one on the wrapper, one on the enabled button).
+**Action:** Always wrap disabled buttons for tooltips, but actively manage the wrapper's `tabindex` and `title` via JS alongside the button's `disabled` property.
