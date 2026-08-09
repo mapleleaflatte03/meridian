@@ -302,6 +302,16 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      var parent = button.parentNode;
+      if (parent && parent.tagName === 'SPAN' && parent.hasAttribute('data-tooltip')) {
+        if (!selectedCount) {
+          parent.tabIndex = 0;
+          parent.setAttribute('title', parent.getAttribute('data-tooltip'));
+        } else {
+          parent.removeAttribute('tabindex');
+          parent.removeAttribute('title');
+        }
+      }
     });
   }
 
