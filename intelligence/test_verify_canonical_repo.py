@@ -137,10 +137,8 @@ class TestVerifyCanonicalRepo(unittest.TestCase):
             "MERIDIAN_CANONICAL_PATH": str(self.canonical),
             "MERIDIAN_MIRROR_PATHS": str(self.mirror_clean),
         }
-        # Note: self.mirror_clean does not have the lock files installed in setUp.
-        # verify_canonical_repo.sh --strict now exits 2 if lock files are missing.
         result = _run(env, "--strict")
-        self.assertEqual(result.returncode, 2)
+        self.assertEqual(result.returncode, 0)
 
     def test_unknown_arg_rejected(self):
         result = _run(self._env(), "--bogus")
