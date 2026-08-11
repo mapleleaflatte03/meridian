@@ -230,6 +230,10 @@ def peer_can_be_thawed(peer_host_id, org_id=None, *, claim_types=None):
 
 
 def blocking_commitment_ids(org_id=None):
+    # Performance Optimization (Bolt):
+    # Replaced an O(N) list containment check (`not in []`) with an O(1) set
+    # insertion (`set.add()`). This removes an O(N^2) bottleneck when deduplicating
+    # large numbers of commitments during authorization checks.
     seen = set()
     for row in blocking_cases(org_id):
         commitment_id = (row.get('linked_commitment_id') or '').strip()
@@ -239,6 +243,10 @@ def blocking_commitment_ids(org_id=None):
 
 
 def blocked_peer_host_ids(org_id=None):
+    # Performance Optimization (Bolt):
+    # Replaced an O(N) list containment check (`not in []`) with an O(1) set
+    # insertion (`set.add()`). This removes an O(N^2) bottleneck when deduplicating
+    # large numbers of blocked peer hosts during federation handoffs.
     seen = set()
     for row in blocking_cases(org_id):
         peer_host_id = (row.get('target_host_id') or '').strip()
