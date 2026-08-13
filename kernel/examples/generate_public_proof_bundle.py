@@ -421,9 +421,16 @@ def build_federated_bundle(institution_receipts, federation_context):
 
     org_ids = [r['org_id'] for r in institution_receipts]
     if len(org_ids) != len(set(org_ids)):
+        seen = set()
+        duplicates = set()
+        for o in org_ids:
+            if o in seen:
+                duplicates.add(o)
+            else:
+                seen.add(o)
         raise ValueError(
             f'Duplicate org_ids in institution_receipts: '
-            f'{[o for o in org_ids if org_ids.count(o) > 1]}'
+            f'{list(duplicates)}'
         )
 
     # Normalize receipt hashes
