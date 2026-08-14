@@ -1,0 +1,3 @@
+## 2024-08-14 - Removed Unnecessary list() Casts in Queue Normalization
+**Learning:** In Python 3, `.items()` returns a view object, not a list. While iterating and updating a dict's *values* doesn't strictly require casting the view to a list, we were doing `list(dict.items())` during queue store normalization which forces O(n) memory allocation and slows down iteration over large records. Python allows modifying values of a dict while iterating over `.items()`, it just prohibits modifying the dict's structure (adding/removing keys).
+**Action:** Removed redundant `list()` casts when iterating over queue records during normalization. This prevents O(n) memory copying, significantly improving normalization speed as queues grow.
