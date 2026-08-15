@@ -157,6 +157,7 @@ import base64
 import concurrent.futures
 import copy
 import datetime
+import functools
 import hashlib
 import hmac
 import json
@@ -712,6 +713,7 @@ ROLE_RANK = {
 MUTATION_ROLE_REQUIREMENTS = WORKSPACE_MUTATION_ROLE_REQUIREMENTS
 
 
+@functools.lru_cache(maxsize=1)
 def _load_workspace_credentials():
     env_user = os.environ.get('MERIDIAN_WORKSPACE_USER')
     env_password = os.environ.get('MERIDIAN_WORKSPACE_PASS')

@@ -1,0 +1,3 @@
+## 2026-08-15 - Caching File Reads in Auth
+**Learning:** `_load_workspace_credentials()` was reading credentials from the disk using `os.path.exists()` and `open()` inside a request loop for every request that needed basic auth (called by `_is_authorized()`). This is extremely inefficient and adds significant I/O overhead to every request that uses basic auth.
+**Action:** Adding `@functools.lru_cache(maxsize=1)` prevents this continuous disk I/O, dramatically speeding up authenticated request latency. We should watch for other functions that read static files frequently and cache them if they don't change dynamically.
