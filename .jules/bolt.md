@@ -1,0 +1,3 @@
+## 2026-08-15 - Caching File Reads with Test Friendliness
+**Learning:** `_load_workspace_credentials()` was reading credentials from the disk inside a request loop for every request that needed basic auth. We tried adding `@functools.lru_cache(maxsize=1)`, but that caused CI test failures because the test suite dynamically changes file contents or mocks out behavior.
+**Action:** Instead of `lru_cache`, we used a custom cache object `_workspace_credentials_cache` keyed by file modification time (`os.stat(f).st_mtime`). This safely caches the parsing without breaking unit tests when the file is mocked or changes dynamically.

@@ -712,6 +712,13 @@ ROLE_RANK = {
 MUTATION_ROLE_REQUIREMENTS = WORKSPACE_MUTATION_ROLE_REQUIREMENTS
 
 
+
+# Bolt Optimization: Cache the credentials parsing using the file modification time to prevent continuous disk I/O on every request
+_workspace_credentials_cache = {
+    'last_mtime': -1,
+    'credentials': (None, None, None, None)
+}
+
 def _load_workspace_credentials():
     env_user = os.environ.get('MERIDIAN_WORKSPACE_USER')
     env_password = os.environ.get('MERIDIAN_WORKSPACE_PASS')
@@ -721,6 +728,11 @@ def _load_workspace_credentials():
         return env_user, env_password, env_org_id, env_user_id
     if not os.path.exists(WORKSPACE_CREDENTIALS_FILE):
         return None, None, None, None
+
+    mtime = os.stat(WORKSPACE_CREDENTIALS_FILE).st_mtime
+    if _workspace_credentials_cache['last_mtime'] == mtime:
+        return _workspace_credentials_cache['credentials']
+
     user = None
     password = None
     org_id = None
@@ -736,6 +748,8 @@ def _load_workspace_credentials():
                 org_id = line.split(':', 1)[1].strip() or None
             elif line.startswith('user_id:'):
                 user_id = line.split(':', 1)[1].strip() or None
+    _workspace_credentials_cache['last_mtime'] = mtime
+    _workspace_credentials_cache['credentials'] = (user, password, org_id, user_id)
     return user, password, org_id, user_id
 
 
