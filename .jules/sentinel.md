@@ -1,0 +1,4 @@
+## 2024-08-15 - SQLite PRAGMA Injection Vulnerability via Env Var
+**Vulnerability:** SQL injection vector in dynamically generated PRAGMA queries. Specifically, `os.environ.get('MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE')` was being interpolated directly into `conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')` without sufficient validation (only checked against empty, default, or off).
+**Learning:** `sqlite3.Connection.execute()` does not allow parameterized queries (like `?`) for `PRAGMA` statements. Relying on negative validation (checking what it is *not*) allows malicious or malformed strings to be passed to the database engine.
+**Prevention:** Always use a strict allowlist of explicit, acceptable values (e.g., `'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL', '', 'DEFAULT', 'OFF'`) when dynamically constructing PRAGMA queries from externally controlled inputs.
