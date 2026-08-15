@@ -1809,6 +1809,19 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   gap: 0.45rem;
 }
 
+*:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.operator-tooltip-wrapper {
+  display: inline-block;
+}
+.operator-tooltip-wrapper[tabindex="0"] {
+  cursor: not-allowed;
+}
+
+.operator-action:disabled {
+  opacity: 0.5;
+}
+
 .operator-action,
 .operator-link {
   border: 1px solid rgba(255,255,255,0.12);
