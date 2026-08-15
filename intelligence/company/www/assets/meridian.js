@@ -302,6 +302,16 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      var wrapper = button.closest('.operator-tooltip-wrapper');
+      if (wrapper) {
+        if (button.disabled) {
+          wrapper.setAttribute('tabindex', '0');
+          wrapper.setAttribute('title', 'Select at least one item to perform this action');
+        } else {
+          wrapper.removeAttribute('tabindex');
+          wrapper.removeAttribute('title');
+        }
+      }
     });
   }
 
