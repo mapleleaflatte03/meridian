@@ -1,0 +1,3 @@
+## 2026-08-18 - Tooltips for disabled buttons
+**Learning:** Disabled buttons do not trigger hover events or show titles in some contexts. To ensure users understand why an action is disabled, wrap the disabled button in an inline-block element (like a `span`) that has the `title` attribute. When dynamically enabling/disabling the button in JS, make sure to add/remove the `title` and `tabindex` on the wrapper, not just the button.
+**Action:** Always wrap disabled buttons in a container with a `title` (or tooltip mechanism) when adding explanatory text for the disabled state, and manage the wrapper's attributes during state transitions.
