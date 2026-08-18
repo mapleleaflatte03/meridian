@@ -4122,6 +4122,38 @@ def _enforce_request_context(parsed_url, headers, bound_org_id):
     return request_context
 
 
+
+def _summarize_decisions(decisions):
+    counts = {'local': 0, 'remote': 0, 'blocked': 0}
+    for item in decisions:
+        rk = item.get('route_kind')
+        if rk in counts:
+            counts[rk] += 1
+    return {
+        'total': len(decisions),
+        'local': counts['local'],
+        'remote': counts['remote'],
+        'blocked': counts['blocked'],
+    }
+
+
+def _summarize_handoffs(handoff_candidates):
+    counts = {'local': 0, 'remote': 0, 'blocked': 0, 'remote_previewed': 0}
+    for item in handoff_candidates:
+        rk = item.get('route_kind')
+        if rk in counts:
+            counts[rk] += 1
+        if item.get('handoff_state') == 'previewed':
+            counts['remote_previewed'] += 1
+    return {
+        'total': len(handoff_candidates),
+        'local': counts['local'],
+        'remote': counts['remote'],
+        'blocked': counts['blocked'],
+        'remote_previewed': counts['remote_previewed'],
+    }
+
+
 def _unique_nonempty_org_ids(*groups):
     seen = set()
     ordered = []
@@ -4355,12 +4387,7 @@ def _routing_planner_snapshot(bound_org_id, *, requested_org_ids=None, host_iden
         'host_id': getattr(host_identity, 'host_id', '') if host_identity else '',
         'host_federation_enabled': bool(getattr(host_identity, 'federation_enabled', False)),
         'requested_org_ids': candidates,
-        'summary': {
-            'total': len(decisions),
-            'local': len([item for item in decisions if item['route_kind'] == 'local']),
-            'remote': len([item for item in decisions if item['route_kind'] == 'remote']),
-            'blocked': len([item for item in decisions if item['route_kind'] == 'blocked']),
-        },
+        'summary': _summarize_decisions(decisions),
         'decisions': decisions,
     }
 
@@ -4823,13 +4850,7 @@ def _routing_handoff_preview_snapshot(bound_org_id, *, requested_org_ids=None,
         'host_id': getattr(host_identity, 'host_id', '') if host_identity else '',
         'generated_at': generated_at,
         'routing_planner': routing_planner,
-        'summary': {
-            'total': len(handoff_candidates),
-            'local': len([item for item in handoff_candidates if item['route_kind'] == 'local']),
-            'remote': len([item for item in handoff_candidates if item['route_kind'] == 'remote']),
-            'blocked': len([item for item in handoff_candidates if item['route_kind'] == 'blocked']),
-            'remote_previewed': len([item for item in handoff_candidates if item['handoff_state'] == 'previewed']),
-        },
+        'summary': _summarize_handoffs(handoff_candidates),
         'handoff_candidates': handoff_candidates,
     }
 
