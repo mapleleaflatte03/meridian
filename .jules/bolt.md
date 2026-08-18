@@ -1,0 +1,3 @@
+## 2024-05-24 - Optimize Workspace Summaries
+**Learning:** Found multiple instances where list comprehensions were used repeatedly inside `len(...)` to count occurrences of different statuses within the same list of dictionaries (e.g., in `kernel/kernel/workspace.py`). This led to O(K*N) complexity (where K is the number of statuses to count, N is the length of the list), parsing the list multiple times.
+**Action:** Replace multiple O(N) list comprehensions with a single pass O(N) loop that uses a dictionary to keep running counts of all required keys. This reduces list traversals from K down to 1.
