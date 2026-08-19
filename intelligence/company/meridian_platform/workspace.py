@@ -722,16 +722,21 @@ def _load_workspace_credentials():
     if env_user and env_password:
         return env_user, env_password, env_org_id, env_user_id
 
-    # Optimization: Cache the file contents based on modification time (mtime).
-    # This prevents expensive I/O operations from repeated reads on high-throughput paths,
-    # while still allowing test suites to modify the file dynamically and immediately see changes.
+    # Optimization: Cache the file contents to prevent redundant disk I/O on high-throughput paths.
+    # We use mtime for cache invalidation. To ensure compatibility with test suites that mock
+    # builtins.open without creating real files, we handle OSErrors gracefully.
     try:
         mtime = os.stat(WORKSPACE_CREDENTIALS_FILE).st_mtime
+        cache_key = (WORKSPACE_CREDENTIALS_FILE, mtime)
+        cached = _CREDENTIALS_CACHE.get('state')
+        if cached and cached[0] == cache_key:
+            return cached[1]
     except OSError:
-        return None, None, None, None
-
-    if _CREDENTIALS_CACHE.get('mtime') == mtime:
-        return _CREDENTIALS_CACHE['data']
+        # Fallback to legacy check to support test mocks that patch os.path.exists
+        # without supporting os.stat.
+        if not os.path.exists(WORKSPACE_CREDENTIALS_FILE):
+            return None, None, None, None
+        cache_key = None
 
     user = None
     password = None
@@ -749,8 +754,9 @@ def _load_workspace_credentials():
             elif line.startswith('user_id:'):
                 user_id = line.split(':', 1)[1].strip() or None
 
-    _CREDENTIALS_CACHE['mtime'] = mtime
-    _CREDENTIALS_CACHE['data'] = (user, password, org_id, user_id)
+    if cache_key:
+        _CREDENTIALS_CACHE['state'] = (cache_key, (user, password, org_id, user_id))
+
     return user, password, org_id, user_id
 
 
