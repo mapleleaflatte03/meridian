@@ -712,6 +712,8 @@ ROLE_RANK = {
 MUTATION_ROLE_REQUIREMENTS = WORKSPACE_MUTATION_ROLE_REQUIREMENTS
 
 
+_CREDENTIALS_CACHE = {}
+
 def _load_workspace_credentials():
     env_user = os.environ.get('MERIDIAN_WORKSPACE_USER')
     env_password = os.environ.get('MERIDIAN_WORKSPACE_PASS')
@@ -719,8 +721,18 @@ def _load_workspace_credentials():
     env_user_id = (os.environ.get('MERIDIAN_WORKSPACE_USER_ID') or '').strip() or None
     if env_user and env_password:
         return env_user, env_password, env_org_id, env_user_id
-    if not os.path.exists(WORKSPACE_CREDENTIALS_FILE):
+
+    # Optimization: Cache the file contents based on modification time (mtime).
+    # This prevents expensive I/O operations from repeated reads on high-throughput paths,
+    # while still allowing test suites to modify the file dynamically and immediately see changes.
+    try:
+        mtime = os.stat(WORKSPACE_CREDENTIALS_FILE).st_mtime
+    except OSError:
         return None, None, None, None
+
+    if _CREDENTIALS_CACHE.get('mtime') == mtime:
+        return _CREDENTIALS_CACHE['data']
+
     user = None
     password = None
     org_id = None
@@ -736,6 +748,9 @@ def _load_workspace_credentials():
                 org_id = line.split(':', 1)[1].strip() or None
             elif line.startswith('user_id:'):
                 user_id = line.split(':', 1)[1].strip() or None
+
+    _CREDENTIALS_CACHE['mtime'] = mtime
+    _CREDENTIALS_CACHE['data'] = (user, password, org_id, user_id)
     return user, password, org_id, user_id
 
 
