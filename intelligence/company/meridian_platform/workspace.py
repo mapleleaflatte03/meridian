@@ -712,6 +712,8 @@ ROLE_RANK = {
 MUTATION_ROLE_REQUIREMENTS = WORKSPACE_MUTATION_ROLE_REQUIREMENTS
 
 
+_CREDENTIALS_CACHE = {}
+
 def _load_workspace_credentials():
     env_user = os.environ.get('MERIDIAN_WORKSPACE_USER')
     env_password = os.environ.get('MERIDIAN_WORKSPACE_PASS')
@@ -719,8 +721,23 @@ def _load_workspace_credentials():
     env_user_id = (os.environ.get('MERIDIAN_WORKSPACE_USER_ID') or '').strip() or None
     if env_user and env_password:
         return env_user, env_password, env_org_id, env_user_id
-    if not os.path.exists(WORKSPACE_CREDENTIALS_FILE):
-        return None, None, None, None
+
+    # Optimization: Cache the file contents to prevent redundant disk I/O on high-throughput paths.
+    # We use mtime for cache invalidation. To ensure compatibility with test suites that mock
+    # builtins.open without creating real files, we handle OSErrors gracefully.
+    try:
+        mtime = os.stat(WORKSPACE_CREDENTIALS_FILE).st_mtime
+        cache_key = (WORKSPACE_CREDENTIALS_FILE, mtime)
+        cached = _CREDENTIALS_CACHE.get('state')
+        if cached and cached[0] == cache_key:
+            return cached[1]
+    except OSError:
+        # Fallback to legacy check to support test mocks that patch os.path.exists
+        # without supporting os.stat.
+        if not os.path.exists(WORKSPACE_CREDENTIALS_FILE):
+            return None, None, None, None
+        cache_key = None
+
     user = None
     password = None
     org_id = None
@@ -736,6 +753,10 @@ def _load_workspace_credentials():
                 org_id = line.split(':', 1)[1].strip() or None
             elif line.startswith('user_id:'):
                 user_id = line.split(':', 1)[1].strip() or None
+
+    if cache_key:
+        _CREDENTIALS_CACHE['state'] = (cache_key, (user, password, org_id, user_id))
+
     return user, password, org_id, user_id
 
 
