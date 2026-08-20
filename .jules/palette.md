@@ -1,0 +1,3 @@
+## 2026-08-20 - Adding focus-visible and tooltips to disabled buttons
+**Learning:** Found missing focus states across interactive elements and missing tooltips on dynamically disabled bulk-action buttons in trust-ops.html. Adding `title` attributes directly to disabled buttons works well for native tooltip display on hover without requiring complex JS-managed tooltip wrappers that can introduce tab-index accessibility bugs.
+**Action:** When improving keyboard accessibility globally, use `:focus-visible` pseudo-class to avoid focus rings on mouse clicks, but ensure clear visibility for keyboard navigation. Always verify disabled states communicate *why* they are disabled to the user.
