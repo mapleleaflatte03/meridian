@@ -26,6 +26,10 @@ def _connect(db_path: str) -> sqlite3.Connection:
     configured_journal_mode = (
         os.environ.get('MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE', 'WAL') or 'WAL'
     ).strip().upper()
+
+    if configured_journal_mode not in {'WAL', 'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'OFF', '', 'DEFAULT'}:
+        configured_journal_mode = 'WAL'
+
     if configured_journal_mode not in {'', 'DEFAULT', 'OFF'}:
         needs_init = configured_journal_mode != 'WAL' or db_path not in _JOURNAL_MODE_INITIALIZED
         if needs_init:
