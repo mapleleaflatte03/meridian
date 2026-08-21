@@ -47,27 +47,10 @@ def load_jobs():
         return json.load(f).get('jobs', [])
 
 
-# Cache JSON parsing for scheduler logs by tracking file modification time.
-# Storing the results avoids redundant I/O and JSON decoding in tight loops.
-_RUN_ENTRIES_CACHE = {}
-
-
 def load_run_entries(job_id):
     path = os.path.join(RUNS_DIR, f'{job_id}.jsonl')
-
-    # Check modification time to serve from cache if untouched
-    try:
-        mtime = os.stat(path).st_mtime
-        cached = _RUN_ENTRIES_CACHE.get(path)
-        if cached and cached[0] == mtime:
-            # Return fresh dicts to prevent callers from mutating our cache
-            return [dict(e) for e in cached[1]]
-    except OSError:
-        mtime = None
-
     if not os.path.exists(path):
         return []
-
     entries = []
     with open(path) as f:
         for raw in f:
@@ -78,14 +61,7 @@ def load_run_entries(job_id):
                 entries.append(json.loads(raw))
             except json.JSONDecodeError:
                 continue
-
-    if mtime is not None:
-        # Unbounded caches can leak; enforce a hard limit to protect long-running processes
-        if len(_RUN_ENTRIES_CACHE) > 1000:
-            _RUN_ENTRIES_CACHE.clear()
-        _RUN_ENTRIES_CACHE[path] = (mtime, entries)
-
-    return [dict(e) for e in entries]
+    return entries
 
 
 def latest_run_entry(job_id):
@@ -95,41 +71,28 @@ def latest_run_entry(job_id):
     return max(entries, key=lambda entry: entry.get('ts', 0))
 
 
-# Cache JSON parsing for recurring logs by tracking file modification time.
-_RECURRING_RUN_CACHE = {}
-
-
 def load_recurring_run_entries(*job_keys):
     if not os.path.isdir(RECURRING_RUNS_DIR):
         return []
-    keys = {str(key) for key in job_keys if key}
-    entries = []
-    for name in os.listdir(RECURRING_RUNS_DIR):
-        if not name.endswith('.json'):
-            continue
-        path = os.path.join(RECURRING_RUNS_DIR, name)
-        try:
-            # Check modification time to serve from cache if untouched
-            try:
-                mtime = os.stat(path).st_mtime
-            except OSError:
-                mtime = None
 
-            cached = _RECURRING_RUN_CACHE.get(path)
-            if mtime is not None and cached and cached[0] == mtime:
-                entry = dict(cached[1]) # Return fresh dict to prevent caller mutation
-            else:
-                with open(path) as f:
+    keys = {str(key) for key in job_keys if key}
+
+    entries = []
+    # ⚡ Bolt: Use os.scandir instead of os.listdir for faster directory traversal.
+    # os.scandir returns an iterator of DirEntry objects, which cache file attributes
+    # and name properties, avoiding the overhead of creating a large list in memory
+    # for directories with many files.
+    with os.scandir(RECURRING_RUNS_DIR) as dir_entries:
+        for entry_dir in dir_entries:
+            if not entry_dir.is_file() or not entry_dir.name.endswith('.json'):
+                continue
+            try:
+                with open(entry_dir.path) as f:
                     entry = json.load(f)
-                if mtime is not None:
-                    # Unbounded caches can leak; enforce a hard limit
-                    if len(_RECURRING_RUN_CACHE) > 1000:
-                        _RECURRING_RUN_CACHE.clear()
-                    _RECURRING_RUN_CACHE[path] = (mtime, dict(entry))
-        except (OSError, json.JSONDecodeError):
-            continue
-        if str(entry.get('job_id') or '') in keys or str(entry.get('capability_name') or '') in keys:
-            entries.append(dict(entry))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(entry.get('job_id') or '') in keys or str(entry.get('capability_name') or '') in keys:
+                entries.append(entry)
     return entries
 
 
