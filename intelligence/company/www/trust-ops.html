@@ -94,7 +94,7 @@
       <button type="submit" class="cta">Unlock queue</button>
       <button type="button" class="cta cta-outline" data-trust-ops-clear-token>Clear token</button>
     </form>
-    <p class="operator-status" data-trust-ops-auth-status>Operator token required.</p>
+    <p class="operator-status" data-trust-ops-auth-status role="status" aria-live="polite">Operator token required.</p>
   </div>
 
   <div class="operator-toolbar card mb-lg">
@@ -124,7 +124,7 @@
       </label>
       <button type="submit" class="cta cta-outline">Refresh queue</button>
     </form>
-    <p class="operator-status" data-trust-ops-status>Trust Ops sync initialized.</p>
+    <p class="operator-status" data-trust-ops-status role="status" aria-live="polite">Trust Ops sync initialized.</p>
   </div>
 
   <div class="card operator-bulk mb-lg" data-trust-ops-bulk-bar hidden>
@@ -135,10 +135,10 @@
       </label>
       <strong class="operator-selected-count" data-trust-ops-selected-count>0 selected</strong>
       <div class="operator-actions">
-        <button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>
-        <button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>
-        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>
-        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>
+        <button type="button" class="operator-action" data-bulk-decision="approve" disabled title="Select at least one item">approve</button>
+        <button type="button" class="operator-action" data-bulk-decision="stale" disabled title="Select at least one item">stale</button>
+        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled title="Select at least one item">revoke</button>
+        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled title="Select at least one item">unresolved</button>
       </div>
     </div>
   </div>
