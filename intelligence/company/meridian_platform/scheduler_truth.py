@@ -76,17 +76,20 @@ def load_recurring_run_entries(*job_keys):
         return []
     keys = {str(key) for key in job_keys if key}
     entries = []
-    for name in os.listdir(RECURRING_RUNS_DIR):
-        if not name.endswith('.json'):
-            continue
-        path = os.path.join(RECURRING_RUNS_DIR, name)
-        try:
-            with open(path) as f:
-                entry = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if str(entry.get('job_id') or '') in keys or str(entry.get('capability_name') or '') in keys:
-            entries.append(entry)
+    # Optimization: os.scandir is faster than os.listdir for directory traversal.
+    # It caches file attributes reducing syscalls for operations like is_file().
+    with os.scandir(RECURRING_RUNS_DIR) as it:
+        for entry_it in it:
+            if not entry_it.name.endswith('.json') or not entry_it.is_file():
+                continue
+            path = entry_it.path
+            try:
+                with open(path) as f:
+                    entry = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(entry.get('job_id') or '') in keys or str(entry.get('capability_name') or '') in keys:
+                entries.append(entry)
     return entries
 
 
