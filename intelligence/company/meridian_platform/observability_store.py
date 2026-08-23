@@ -26,6 +26,12 @@ def _connect(db_path: str) -> sqlite3.Connection:
     configured_journal_mode = (
         os.environ.get('MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE', 'WAL') or 'WAL'
     ).strip().upper()
+
+    # 🛡️ Sentinel: Enforce strict allowlist to prevent SQL injection in PRAGMA query
+    _ALLOWED_JOURNAL_MODES = {'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL', 'OFF', '', 'DEFAULT'}
+    if configured_journal_mode not in _ALLOWED_JOURNAL_MODES:
+        configured_journal_mode = 'WAL'
+
     if configured_journal_mode not in {'', 'DEFAULT', 'OFF'}:
         needs_init = configured_journal_mode != 'WAL' or db_path not in _JOURNAL_MODE_INITIALIZED
         if needs_init:
