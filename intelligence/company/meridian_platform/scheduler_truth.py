@@ -76,17 +76,22 @@ def load_recurring_run_entries(*job_keys):
         return []
     keys = {str(key) for key in job_keys if key}
     entries = []
-    for name in os.listdir(RECURRING_RUNS_DIR):
-        if not name.endswith('.json'):
-            continue
-        path = os.path.join(RECURRING_RUNS_DIR, name)
-        try:
-            with open(path) as f:
-                entry = json.load(f)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if str(entry.get('job_id') or '') in keys or str(entry.get('capability_name') or '') in keys:
-            entries.append(entry)
+    # ⚡ Bolt: Performance optimization
+    # Replaced os.listdir() with os.scandir() and context manager
+    # Impact: Avoids redundant string operations and stat calls for filtering files
+    with os.scandir(RECURRING_RUNS_DIR) as it:
+        for scan_entry in it:
+            if not scan_entry.name.endswith('.json') or not scan_entry.is_file():
+                continue
+            name = scan_entry.name
+            path = scan_entry.path
+            try:
+                with open(path) as f:
+                    entry = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            if str(entry.get('job_id') or '') in keys or str(entry.get('capability_name') or '') in keys:
+                entries.append(entry)
     return entries
 
 
