@@ -28,7 +28,7 @@ def _connect(db_path: str) -> sqlite3.Connection:
     ).strip().upper()
     if configured_journal_mode not in {'', 'DEFAULT', 'OFF'}:
         needs_init = configured_journal_mode != 'WAL' or db_path not in _JOURNAL_MODE_INITIALIZED
-        if needs_init:
+        if needs_init and configured_journal_mode in {'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL'}:
             try:
                 conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')
                 if configured_journal_mode == 'WAL':
