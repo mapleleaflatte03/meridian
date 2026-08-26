@@ -301,7 +301,14 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       checkbox.checked = selectedQueueIds.has(queueId);
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
+      var decision = button.getAttribute('data-bulk-decision');
       button.disabled = !selectedCount;
+      if (button.disabled) {
+        var action = decision === 'stale' ? 'mark stale' : (decision === 'unresolved' ? 'mark unresolved' : decision);
+        button.setAttribute('title', 'Select items to ' + action);
+      } else {
+        button.removeAttribute('title');
+      }
     });
   }
 
@@ -1653,6 +1660,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     startDemoHustleButton.addEventListener('click', async function () {
       setAll('[data-hustle-action-status]', 'Requesting budget and court clearance...');
       startDemoHustleButton.disabled = true;
+      startDemoHustleButton.setAttribute('title', 'Hustle in progress...');
       try {
         var response = await fetch('/api/agent/hustle', { method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1682,6 +1690,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         setAll('[data-hustle-action-status]', 'Error: ' + err.message);
       } finally {
         startDemoHustleButton.disabled = false;
+        startDemoHustleButton.removeAttribute('title');
       }
     });
   }
