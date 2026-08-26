@@ -1,0 +1,3 @@
+## 2026-08-26 - Disabled Buttons Tooltips
+**Learning:** In the Trust Ops queue surface, bulk action buttons (`approve`, `stale`, `revoke`, `unresolved`) are disabled by default until an item is selected. When JS disables a button dynamically, it can be beneficial to set an informative `title` attribute so the user knows *why* the button is disabled or *what* it will do when enabled, compensating for the lack of clickability.
+**Action:** Always pair `button.disabled = true` with a corresponding `button.setAttribute('title', 'Reason...')` update in JS, and remove it when re-enabled. Additionally, set the default `title` attribute in the HTML.
