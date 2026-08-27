@@ -635,9 +635,12 @@ def list_capsules():
     """Return org_ids with real capsule directories plus the legacy aliased org."""
     dirs = []
     if os.path.isdir(CAPSULES_DIR):
+        # ⚡ Bolt Optimization: Use os.scandir() instead of os.listdir() + os.path.isdir()
+        # This avoids building a full list of names in memory and avoids extra stat() calls
+        # for directories with many files, reducing I/O overhead.
         dirs = [
-            d for d in os.listdir(CAPSULES_DIR)
-            if os.path.isdir(os.path.join(CAPSULES_DIR, d))
+            scan_entry.name for scan_entry in os.scandir(CAPSULES_DIR)
+            if scan_entry.is_dir()
         ]
     ids = set(dirs)
     ids.update(_CAPSULE_ALIASES.keys())
