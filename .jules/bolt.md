@@ -1,0 +1,3 @@
+## 2024-08-28 - os.scandir resource management
+**Learning:** While replacing `os.listdir()` with `os.scandir()` is a great optimization, `os.scandir()` returns an iterator that holds an open file descriptor to the directory. If it is not explicitly closed (or fully exhausted), it can lead to resource leaks and trigger `ResourceWarning`s, which can cause strict CI environments or linters to fail.
+**Action:** Always wrap `os.scandir()` in a `with` context manager (`with os.scandir(path) as it:`) to ensure the directory file descriptor is reliably closed, even if an exception occurs or the iterator is only partially consumed.
