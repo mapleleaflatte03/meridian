@@ -1,0 +1,3 @@
+## 2024-08-28 - Optimize directory traversal with os.scandir
+**Learning:** Replacing `os.listdir()` and `os.path.isdir()` with `os.scandir()` and `e.is_dir()` is a highly effective, safe, and standard performance optimization in Python. `os.scandir()` returns an iterator of `os.DirEntry` objects, which caches file attributes (like `is_file()` or `name`) and avoids the overhead of making separate `stat` system calls for every item in a directory, which is especially noticeable for directories with many files.
+**Action:** Default to using `os.scandir()` instead of `os.listdir()` combined with `os.path.*` checks when traversing directories and filtering by file attributes.
