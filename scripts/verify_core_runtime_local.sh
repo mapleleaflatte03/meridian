@@ -1051,8 +1051,10 @@ details = {
     "session_resume_context_count": _extract_int(r"total_files:\s+(\d+)", sections["session_resume_context_files"]),
     "session_reuse_queue_count": _extract_int(r"total_files:\s+(\d+)", sections["session_reuse_files"]),
     "session_reuse_context_count": _extract_int(r"total_files:\s+(\d+)", sections["session_reuse_context_files"]),
-    "ingress_pending_count": len([name for name in os.listdir("runtime/default/run/ingress/requests") if name.endswith(".json")]) if os.path.isdir("runtime/default/run/ingress/requests") else 0,
-    "ingress_quarantine_count": len([name for name in os.listdir("runtime/default/run/ingress/quarantine") if name.endswith(".json")]) if os.path.isdir("runtime/default/run/ingress/quarantine") else 0,
+    # ⚡ Bolt: Replace os.listdir with os.scandir for performance
+    # Note: We can iterate and filter directly on the DirEntry objects
+    "ingress_pending_count": sum(1 for d in os.scandir("runtime/default/run/ingress/requests") if d.name.endswith(".json")) if os.path.isdir("runtime/default/run/ingress/requests") else 0,
+    "ingress_quarantine_count": sum(1 for d in os.scandir("runtime/default/run/ingress/quarantine") if d.name.endswith(".json")) if os.path.isdir("runtime/default/run/ingress/quarantine") else 0,
 }
 
 lane_truth = {
