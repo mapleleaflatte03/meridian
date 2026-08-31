@@ -302,6 +302,20 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      var spanWrapper = button.parentElement;
+      if (spanWrapper && spanWrapper.tagName === 'SPAN') {
+        if (!selectedCount) {
+          spanWrapper.setAttribute('title', 'Select items to enable bulk actions');
+          spanWrapper.style.cursor = 'not-allowed';
+          spanWrapper.setAttribute('tabindex', '0');
+          button.style.pointerEvents = 'none';
+        } else {
+          spanWrapper.removeAttribute('title');
+          spanWrapper.style.cursor = 'auto';
+          spanWrapper.removeAttribute('tabindex');
+          button.style.pointerEvents = 'auto';
+        }
+      }
     });
   }
 
