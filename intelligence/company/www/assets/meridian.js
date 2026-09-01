@@ -302,6 +302,16 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      button.style.pointerEvents = !selectedCount ? 'none' : 'auto';
+      if (button.parentElement && button.parentElement.tagName === 'SPAN') {
+        if (!selectedCount) {
+          button.parentElement.setAttribute('title', 'Select items to enable action');
+          button.parentElement.style.cursor = 'not-allowed';
+        } else {
+          button.parentElement.removeAttribute('title');
+          button.parentElement.style.cursor = 'default';
+        }
+      }
     });
   }
 
