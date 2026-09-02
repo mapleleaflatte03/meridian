@@ -302,6 +302,10 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      button.style.pointerEvents = selectedCount ? '' : 'none';
+      if (button.parentElement && button.parentElement.tagName === 'SPAN') {
+        button.parentElement.style.cursor = selectedCount ? '' : 'not-allowed';
+      }
     });
   }
 
