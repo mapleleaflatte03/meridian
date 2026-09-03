@@ -310,8 +310,8 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         button.style.pointerEvents = 'none';
       } else {
         wrapper.title = '';
-        wrapper.style.cursor = 'default';
-        button.style.pointerEvents = 'auto';
+        wrapper.style.cursor = '';
+        button.style.pointerEvents = '';
       }
     });
   }
