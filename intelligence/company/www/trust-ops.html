@@ -135,10 +135,18 @@
       </label>
       <strong class="operator-selected-count" data-trust-ops-selected-count>0 selected</strong>
       <div class="operator-actions">
-        <button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>
-        <button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>
-        <button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>
-        <button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>
+        <span title="Select items to perform bulk actions" style="cursor: not-allowed;">
+          <button type="button" class="operator-action" data-bulk-decision="approve" style="pointer-events: none;" disabled>approve</button>
+        </span>
+        <span title="Select items to perform bulk actions" style="cursor: not-allowed;">
+          <button type="button" class="operator-action" data-bulk-decision="stale" style="pointer-events: none;" disabled>stale</button>
+        </span>
+        <span title="Select items to perform bulk actions" style="cursor: not-allowed;">
+          <button type="button" class="operator-action" data-bulk-decision="revoke" style="pointer-events: none;" disabled>revoke</button>
+        </span>
+        <span title="Select items to perform bulk actions" style="cursor: not-allowed;">
+          <button type="button" class="operator-action" data-bulk-decision="unresolved" style="pointer-events: none;" disabled>unresolved</button>
+        </span>
       </div>
     </div>
   </div>
