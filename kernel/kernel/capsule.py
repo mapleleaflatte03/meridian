@@ -633,12 +633,15 @@ def ensure_federation_inbox_aliases(org_id=None):
 
 def list_capsules():
     """Return org_ids with real capsule directories plus the legacy aliased org."""
+    # ⚡ Bolt: Use os.scandir() instead of os.listdir() to avoid stat() calls per entry,
+    # reducing memory and IO overhead when iterating through capsule directories.
     dirs = []
     if os.path.isdir(CAPSULES_DIR):
-        dirs = [
-            d for d in os.listdir(CAPSULES_DIR)
-            if os.path.isdir(os.path.join(CAPSULES_DIR, d))
-        ]
+        with os.scandir(CAPSULES_DIR) as it:
+            dirs = [
+                scan_entry.name for scan_entry in it
+                if scan_entry.is_dir()
+            ]
     ids = set(dirs)
     ids.update(_CAPSULE_ALIASES.keys())
     ids.update(_legacy_alias_candidates())
