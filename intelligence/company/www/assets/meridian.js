@@ -301,7 +301,25 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       checkbox.checked = selectedQueueIds.has(queueId);
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
-      button.disabled = !selectedCount;
+      var disabled = !selectedCount;
+      button.disabled = disabled;
+      var wrapper = button.parentElement;
+      if (wrapper && wrapper.tagName.toLowerCase() === 'span') {
+        if (disabled) {
+          button.style.pointerEvents = 'none';
+          wrapper.style.cursor = 'not-allowed';
+          var action = button.getAttribute('data-bulk-decision');
+          if (action === 'approve') wrapper.title = 'Select items to approve';
+          else if (action === 'stale') wrapper.title = 'Select items to mark stale';
+          else if (action === 'revoke') wrapper.title = 'Select items to revoke';
+          else if (action === 'unresolved') wrapper.title = 'Select items to mark unresolved';
+          else wrapper.title = 'Select items to perform action';
+        } else {
+          button.style.pointerEvents = 'auto';
+          wrapper.style.cursor = 'auto';
+          wrapper.removeAttribute('title');
+        }
+      }
     });
   }
 
