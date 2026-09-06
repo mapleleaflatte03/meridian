@@ -30,7 +30,8 @@ def _connect(db_path: str) -> sqlite3.Connection:
         needs_init = configured_journal_mode != 'WAL' or db_path not in _JOURNAL_MODE_INITIALIZED
         if needs_init:
             try:
-                conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')
+                if configured_journal_mode in {'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL', 'OFF'}:
+                    conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')
                 if configured_journal_mode == 'WAL':
                     _JOURNAL_MODE_INITIALIZED.add(db_path)
             except sqlite3.OperationalError:
