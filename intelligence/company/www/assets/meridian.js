@@ -301,7 +301,21 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       checkbox.checked = selectedQueueIds.has(queueId);
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
-      button.disabled = !selectedCount;
+      var isDisabled = !selectedCount;
+      button.disabled = isDisabled;
+      if (isDisabled) {
+        button.style.pointerEvents = 'none';
+        if (button.parentElement && button.parentElement.classList.contains('operator-action-wrapper')) {
+          button.parentElement.title = 'Select items to perform this action';
+          button.parentElement.style.cursor = 'not-allowed';
+        }
+      } else {
+        button.style.pointerEvents = 'auto';
+        if (button.parentElement && button.parentElement.classList.contains('operator-action-wrapper')) {
+          button.parentElement.title = '';
+          button.parentElement.style.cursor = 'default';
+        }
+      }
     });
   }
 

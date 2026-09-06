@@ -1,0 +1,3 @@
+## 2026-09-06 - Add tooltips explaining disabled states for bulk actions
+**Learning:** For disabled HTML elements, tooltips won't appear because pointer events are blocked. Wrapping them in a span, setting `pointer-events: none` on the button, and restoring `pointer-events: auto` upon re-enabling them is a pattern to follow for providing contextual help for disabled states.
+**Action:** When making tooltips for disabled elements, explicitly manage the `pointer-events` on the child element in JavaScript when re-enabling, and remove the tooltip string from the parent to avoid confusion when active.
