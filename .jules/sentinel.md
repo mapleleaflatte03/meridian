@@ -1,0 +1,4 @@
+## 2024-05-18 - Prevent SQL Injection via SQLite PRAGMA journal_mode
+**Vulnerability:** SQL injection vulnerability in `observability_store.py`. `conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')` used an unparameterized string containing user-controlled input (`configured_journal_mode` read from `os.environ.get('MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE')`).
+**Learning:** Python's `sqlite3` module does not support parameterized queries for `PRAGMA` statements. While `PRAGMA busy_timeout` was cast to an `int` implicitly validating it, `PRAGMA journal_mode` took a string that could have allowed SQL injection via external environment variables.
+**Prevention:** Always use a strict allowlist (e.g., `{'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'WAL', 'OFF'}`) to validate inputs dynamically injected into SQLite `PRAGMA` statements.
