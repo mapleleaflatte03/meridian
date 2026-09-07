@@ -302,6 +302,18 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      var wrapper = button.closest('[data-bulk-decision-wrapper]');
+      if (wrapper) {
+        if (!selectedCount) {
+          wrapper.setAttribute('title', 'Select items to apply action');
+          wrapper.style.cursor = 'not-allowed';
+          button.style.pointerEvents = 'none';
+        } else {
+          wrapper.removeAttribute('title');
+          wrapper.style.cursor = 'auto';
+          button.style.pointerEvents = 'auto';
+        }
+      }
     });
   }
 
