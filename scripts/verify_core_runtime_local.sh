@@ -773,6 +773,15 @@ for line in sections["response_meta"].splitlines():
     key, value = line.split(":", 1)
     response_meta[key.strip()] = value.strip()
 
+# ⚡ Bolt: Using os.scandir() instead of os.listdir() for performance.
+# It returns an iterator avoiding memory overhead of loading all entries into a list.
+# Additionally, using a generator with sum() is more memory-efficient than building an intermediate list and calling len().
+def _count_json_files(path):
+    if not os.path.isdir(path):
+        return 0
+    with os.scandir(path) as it:
+        return sum(1 for e in it if e.name.endswith('.json'))
+
 def _extract_int(pattern, text, default=0):
     match = re.search(pattern, text, re.MULTILINE)
     return int(match.group(1)) if match else default
@@ -1051,8 +1060,8 @@ details = {
     "session_resume_context_count": _extract_int(r"total_files:\s+(\d+)", sections["session_resume_context_files"]),
     "session_reuse_queue_count": _extract_int(r"total_files:\s+(\d+)", sections["session_reuse_files"]),
     "session_reuse_context_count": _extract_int(r"total_files:\s+(\d+)", sections["session_reuse_context_files"]),
-    "ingress_pending_count": len([name for name in os.listdir("runtime/default/run/ingress/requests") if name.endswith(".json")]) if os.path.isdir("runtime/default/run/ingress/requests") else 0,
-    "ingress_quarantine_count": len([name for name in os.listdir("runtime/default/run/ingress/quarantine") if name.endswith(".json")]) if os.path.isdir("runtime/default/run/ingress/quarantine") else 0,
+    "ingress_pending_count": _count_json_files("runtime/default/run/ingress/requests"),
+    "ingress_quarantine_count": _count_json_files("runtime/default/run/ingress/quarantine"),
 }
 
 lane_truth = {
