@@ -76,6 +76,9 @@ def load_recurring_run_entries(*job_keys):
         return []
     keys = {str(key) for key in job_keys if key}
     entries = []
+    # ⚡ Bolt: Using os.scandir() instead of os.listdir() for performance.
+    # It returns an iterator avoiding memory overhead of loading all entries into a list,
+    # and caches file attributes to avoid extra stat() calls.
     with os.scandir(RECURRING_RUNS_DIR) as it:
         for dir_entry in it:
             if not dir_entry.name.endswith('.json'):

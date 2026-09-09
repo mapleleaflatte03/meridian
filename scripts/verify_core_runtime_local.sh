@@ -773,6 +773,9 @@ for line in sections["response_meta"].splitlines():
     key, value = line.split(":", 1)
     response_meta[key.strip()] = value.strip()
 
+# ⚡ Bolt: Using os.scandir() instead of os.listdir() for performance.
+# It returns an iterator avoiding memory overhead of loading all entries into a list.
+# Additionally, using a generator with sum() is more memory-efficient than building an intermediate list and calling len().
 def _count_json_files(path):
     if not os.path.isdir(path):
         return 0
