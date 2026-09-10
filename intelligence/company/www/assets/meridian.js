@@ -302,6 +302,19 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      if (button.disabled) {
+        button.style.pointerEvents = 'none';
+        if (button.parentElement && button.parentElement.classList.contains('bulk-action-wrapper')) {
+          button.parentElement.title = 'Select items to perform bulk actions';
+          button.parentElement.style.cursor = 'not-allowed';
+        }
+      } else {
+        button.style.pointerEvents = 'auto';
+        if (button.parentElement && button.parentElement.classList.contains('bulk-action-wrapper')) {
+          button.parentElement.title = '';
+          button.parentElement.style.cursor = 'default';
+        }
+      }
     });
   }
 
