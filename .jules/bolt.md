@@ -1,0 +1,3 @@
+## 2024-03-24 - Optimizing Python Directory Traversal
+**Learning:** `os.listdir()` in Python loads all file names in a directory into memory as a list, which can be inefficient for directories with many files. `os.scandir()` returns an iterator of `os.DirEntry` objects, which is faster and more memory-efficient as it avoids building the full list.
+**Action:** Replace `os.listdir()` with `os.scandir()` where possible to improve performance, especially for directories that may grow large (like capsules or runtime requests). Use generator expressions with `sum()` instead of `len(list)` for counting.
