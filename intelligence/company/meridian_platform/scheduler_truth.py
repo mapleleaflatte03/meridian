@@ -76,6 +76,7 @@ def load_recurring_run_entries(*job_keys):
         return []
     keys = {str(key) for key in job_keys if key}
     entries = []
+    # ⚡ Bolt: Use os.scandir to avoid loading full directory list into memory
     with os.scandir(RECURRING_RUNS_DIR) as it:
         for d in it:
             if not d.name.endswith('.json'):

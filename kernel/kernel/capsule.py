@@ -635,6 +635,7 @@ def list_capsules():
     """Return org_ids with real capsule directories plus the legacy aliased org."""
     dirs = []
     if os.path.isdir(CAPSULES_DIR):
+        # ⚡ Bolt: Use os.scandir to avoid loading full directory list and cache stat calls
         with os.scandir(CAPSULES_DIR) as it:
             dirs = [
                 d.name for d in it

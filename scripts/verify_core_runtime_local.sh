@@ -777,6 +777,12 @@ def _extract_int(pattern, text, default=0):
     match = re.search(pattern, text, re.MULTILINE)
     return int(match.group(1)) if match else default
 
+def _count_json(path):
+    if not os.path.isdir(path):
+        return 0
+    with os.scandir(path) as it:
+        return sum(1 for d in it if d.name.endswith(".json"))
+
 def _extract_text(pattern, text, default=""):
     match = re.search(pattern, text, re.MULTILINE)
     return match.group(1).strip() if match else default
@@ -1051,8 +1057,8 @@ details = {
     "session_resume_context_count": _extract_int(r"total_files:\s+(\d+)", sections["session_resume_context_files"]),
     "session_reuse_queue_count": _extract_int(r"total_files:\s+(\d+)", sections["session_reuse_files"]),
     "session_reuse_context_count": _extract_int(r"total_files:\s+(\d+)", sections["session_reuse_context_files"]),
-    "ingress_pending_count": sum(1 for d in os.scandir("runtime/default/run/ingress/requests") if d.name.endswith(".json")) if os.path.isdir("runtime/default/run/ingress/requests") else 0,
-    "ingress_quarantine_count": sum(1 for d in os.scandir("runtime/default/run/ingress/quarantine") if d.name.endswith(".json")) if os.path.isdir("runtime/default/run/ingress/quarantine") else 0,
+    "ingress_pending_count": _count_json("runtime/default/run/ingress/requests"),
+    "ingress_quarantine_count": _count_json("runtime/default/run/ingress/quarantine"),
 }
 
 lane_truth = {
