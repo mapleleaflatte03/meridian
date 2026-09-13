@@ -1,0 +1,3 @@
+## 2026-09-13 - Contextual Disabled States
+**Learning:** When using bulk action UI that defaults to a disabled state (like Trust Ops bulk approve), screen readers announce the element as "disabled" but do not provide context on how to enable it. Applying `aria-describedby` pointing to a hidden instructional message (e.g., "Select items first") gives immediate context to screen reader users.
+**Action:** Always add an instructional description using `aria-describedby` (which is programmatically removed when the button becomes enabled) rather than leaving disabled buttons silently un-actionable, especially when the state depends on another element's interaction (like checkboxes).
