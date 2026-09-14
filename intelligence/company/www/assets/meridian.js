@@ -301,7 +301,16 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       checkbox.checked = selectedQueueIds.has(queueId);
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
-      button.disabled = !selectedCount;
+      var isDisabled = !selectedCount;
+      var decision = button.getAttribute('data-bulk-decision') || '';
+      button.disabled = isDisabled;
+      if (isDisabled) {
+        button.setAttribute('aria-label', decision + ': Select items first');
+        button.setAttribute('title', decision + ': Select items first');
+      } else {
+        button.removeAttribute('aria-label');
+        button.removeAttribute('title');
+      }
     });
   }
 
