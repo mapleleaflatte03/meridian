@@ -1,0 +1,4 @@
+## 2025-02-23 - Prevent SQL Injection in PRAGMA Statement via Environment Variable
+**Vulnerability:** The SQLite PRAGMA journal_mode statement in observability_store.py constructed the query string directly using os.environ.get() without validating the input against a strict allowlist. This allowed potential SQL injection through the MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE environment variable.
+**Learning:** Python's sqlite3 module does not support parameterized queries (e.g., `?`) in PRAGMA statements. Any external input used in PRAGMA statements must be interpolated as a string, making it vulnerable to injection if not explicitly validated.
+**Prevention:** Always validate configuration variables used in PRAGMA string interpolation against a strict, explicit allowlist of known safe values before using them to construct the query.
