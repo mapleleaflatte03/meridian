@@ -1,0 +1,4 @@
+## 2024-09-20 - SQLite PRAGMA Injection Vulnerability
+**Vulnerability:** Found unvalidated environment variable input (`MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE`) passed directly to an SQLite PRAGMA statement (`conn.execute(f'PRAGMA journal_mode={configured_journal_mode}')`).
+**Learning:** SQLite does not support parameterized queries for PRAGMA statements. Using string formatting with unvalidated external input allows SQL injection. A negative check (`not in {'', 'DEFAULT', 'OFF'}`) is insufficient because it doesn't restrict input to safe SQL commands.
+**Prevention:** Always use a strict, positive allowlist (e.g., `{'WAL', 'DELETE', 'TRUNCATE', 'PERSIST', 'MEMORY', 'OFF'}`) when interpolating external strings into SQL PRAGMA statements or anywhere parameterized queries aren't supported.
