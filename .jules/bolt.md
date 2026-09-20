@@ -1,0 +1,3 @@
+## 2024-05-13 - Replace \`os.listdir\` with \`os.scandir\` in \`list_capsules\`
+**Learning:** \`os.listdir\` loads all directory entries into memory at once and requires additional \`os.path.isdir\` calls (which issue extra \`stat()\` system calls) to check if an entry is a directory. For a directory potentially containing many entries (like \`CAPSULES_DIR\`), this can be a performance bottleneck.
+**Action:** Use \`os.scandir\` instead of \`os.listdir\`. It returns an iterator of \`os.DirEntry\` objects, which cache file attributes and provide a fast \`is_dir()\` method, avoiding the extra \`stat()\` calls and reducing memory usage when iterating over large directories.
