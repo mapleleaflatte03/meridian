@@ -1,0 +1,3 @@
+## 2024-05-30 - Focus Indicators and Disabled States
+**Learning:** Interactive elements globally lacked focus-visible indicators, making keyboard navigation nearly impossible, and disabled bulk actions in the Trust Ops queue lacked both visual disabled styling and user context for why they were disabled.
+**Action:** Added global `:focus-visible` styles for keyboard a11y, unified `:disabled` button states (opacity, cursor) using existing element selectors, and used the standard `title` attribute for disabled buttons to provide context on hover instead of static ARIA labels which persist when javascript enables the button.
