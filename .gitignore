@@ -70,3 +70,4 @@ intelligence/company/launch/.env.publish.local
 
 # Benchmark history archive (kept locally; only latest.json is tracked if committed)
 intelligence/output/benchmark/history/
+node_modules/
