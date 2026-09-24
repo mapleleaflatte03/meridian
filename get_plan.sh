@@ -1,0 +1,28 @@
+echo "I am Palette 🎨. I have reviewed the \`intelligence/company/www/trust-ops.html\` file and \`intelligence/company/www/assets/meridian.css\` and \`meridian.js\`."
+echo ""
+echo "I noticed that there are several bulk action buttons that are disabled by default until the user selects items from the queue:"
+echo ""
+echo "\`\`\`html"
+echo '<button type="button" class="operator-action" data-bulk-decision="approve" disabled>approve</button>'
+echo '<button type="button" class="operator-action" data-bulk-decision="stale" disabled>stale</button>'
+echo '<button type="button" class="operator-action" data-bulk-decision="revoke" disabled>revoke</button>'
+echo '<button type="button" class="operator-action" data-bulk-decision="unresolved" disabled>unresolved</button>'
+echo "\`\`\`"
+echo ""
+echo "However, the CSS in \`meridian.css\` does not have any styling for disabled states for these buttons (\`.operator-action:disabled\`), meaning they look identical to enabled buttons."
+echo ""
+echo "Furthermore, they lack a \`title\` attribute to explain why they are disabled, and \`meridian.js\` removes the \`disabled\` attribute but doesn't manage \`title\` (or tooltips)."
+echo ""
+echo "Actually wait, memory states:"
+echo "When styling disabled elements in CSS, avoid applying \`pointer-events: none;\`, as this completely prevents native browser tooltips (such as \`title\` attributes) from rendering for those elements across modern browsers."
+echo "And:"
+echo "When adding static \`aria-label\` attributes or titles to explain disabled states on elements that are dynamically enabled via JavaScript, ensure the JavaScript is updated to remove or reset the label when the element becomes active. Otherwise, the static disabled explanation will incorrectly persist and mislead users when the button is enabled."
+echo "And:"
+echo "While wrapping a disabled HTML element in a container (like a \`span\`) is a known workaround for adding tooltips (by applying \`pointer-events: none\` to the button and \`title\`/\`cursor: not-allowed\` to the wrapper), avoid this approach for elements targeted by direct child CSS combinators (e.g., \`.operator-actions > button\`) or flexbox/grid layouts, as introducing new wrapper elements can break the UI layout."
+echo ""
+echo "My plan:"
+echo "1. Update \`meridian.css\` to add styling for disabled buttons (\`:disabled\`), reducing opacity and showing a \`not-allowed\` cursor."
+echo "2. Update \`trust-ops.html\` to add \`title=\"Select items to perform bulk actions\"\` to the bulk action buttons."
+echo "3. Update \`meridian.js\` so that when \`button.disabled = !selectedCount;\` is called, we also update or remove the \`title\` attribute so it doesn't confusingly persist when the button is enabled."
+echo "4. Complete pre commit steps."
+echo "5. Create a PR with the Palette format."
