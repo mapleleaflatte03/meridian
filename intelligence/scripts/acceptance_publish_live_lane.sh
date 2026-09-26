@@ -57,9 +57,45 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/hn/submit":
             self._send(200, '<html><body><input type="hidden" name="fnid" value="fn-123"></body></html>', "text/html")
             return
+
+        # Mock public truth endpoints
+        if self.path in {"/api/institution/license/catalog", "/api/pilot/intake"}:
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]}))
+            return
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({
+                "proof_bundle_version": "1.0",
+                "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+                "cache": {"state": "fresh"},
+                "live_host_receipt": {"included": True},
+                "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+            }))
+            return
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"runtime_id": "rt_123", "slo": {"status": "healthy"}}))
+            return
+        if self.path == "/":
+            self._send(200, '<html><body><h1>Hero</h1><a href="/pilot">Pilot</a>Core Team local<header></header><footer></footer></body></html>', "text/html")
+            return
+        if self.path == "/proofs":
+            self._send(200, '<html><head><title>proof</title></head><body>/api/runtime-proof<header></header><footer></footer></body></html>', "text/html")
+            return
+        if self.path == "/workflows":
+            self._send(200, '<html><head><title>workflow</title></head><body>/api/workflows/showcase<header></header><footer></footer></body></html>', "text/html")
+            return
+        if self.path in {"/support", "/demo", "/boundary", "/pilot"}:
+            self._send(200, '<html><body><header></header><footer></footer></body></html>', "text/html")
+            return
+
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
         if self.path == "/x/posts":
             self._send(200, json.dumps({"data": {"id": "190000001"}}))
             return
@@ -142,12 +178,14 @@ PY
 #     /pilot path, Core+Team+local tokens, size ceiling).
 # The source-level structural shell contract lives in
 # scripts/ci/check_website_contract.py; this lane verifies the live surface.
-python3 - <<'PY'
+MOCK_PORT="${MOCK_PORT}" python3 - <<'PY'
 import json
 import re
 import urllib.request
+import os
 
-BASE = "https://app.welliam.codes"
+mock_port = os.environ.get("MOCK_PORT")
+BASE = f"http://127.0.0.1:{mock_port}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -176,6 +214,7 @@ BANNED_COMMERCIAL = (
 def fetch(path: str, allow_error: bool = False):
     try:
         req = urllib.request.Request(BASE + path)
+        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)')
         with urllib.request.urlopen(req, timeout=20) as response:
             return response.status, response.read().decode("utf-8", "ignore")
     except urllib.error.HTTPError as e:
@@ -188,7 +227,7 @@ def fetch_post(path: str, payload: dict, allow_error: bool = False):
     req = urllib.request.Request(
         BASE + path,
         data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
+        headers={"Content-Type": "application/json", "Origin": BASE, 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'},
         method="POST",
     )
     try:
