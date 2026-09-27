@@ -1828,6 +1828,12 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   text-align: left;
 }
 
+.operator-action:disabled,
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .operator-chip {
   display: inline-flex;
   align-items: center;
