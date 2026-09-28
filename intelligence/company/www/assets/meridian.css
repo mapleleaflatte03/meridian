@@ -507,6 +507,13 @@ li { padding: 0.2rem 0; }
 .cta-outline:hover { background: rgba(0,212,255,0.08); box-shadow: 0 0 18px rgba(0,212,255,0.15); transform: translateY(-1px); }
 .cta-note { color: var(--dim); font-size: 0.9rem; line-height: 1.7; max-width: 720px; }
 
+.cta:disabled,
+.operator-action:disabled,
+.operator-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── Headings ── */
 h1 { font-family: var(--display); color: #fff; font-size: 2.3rem; line-height: 1.12; letter-spacing: -0.03em; margin-bottom: 0.95rem; text-transform: none; }
 h2 {
