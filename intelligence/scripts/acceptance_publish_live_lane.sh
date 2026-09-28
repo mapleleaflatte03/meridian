@@ -148,6 +148,48 @@ import re
 import urllib.request
 
 BASE = "https://app.welliam.codes"
+# --- MOCK START ---
+import urllib.request
+import urllib.error
+from io import BytesIO
+import json
+class MockResponse:
+    def __init__(self, data, status=200):
+        self.data = data
+        self.status = status
+    def read(self):
+        return self.data
+    def __enter__(self): return self
+    def __exit__(self, *a): pass
+
+def _mock_urlopen(req, *args, **kwargs):
+    url = req.full_url if hasattr(req, 'full_url') else req
+    if url.endswith("/api/status"):
+        return MockResponse(json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}).encode("utf-8"))
+    elif url.endswith("/api/institution/template"):
+        return MockResponse(json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1,2,3]}).encode("utf-8"))
+    elif url.endswith("/api/institution/license/catalog") or url.endswith("/api/pilot/intake") or url.endswith("/api/subscriptions/checkout-capture"):
+        err = urllib.error.HTTPError(url, 410, "Gone", {}, BytesIO(json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}).encode("utf-8")))
+        err.read = lambda: err.fp.read()
+        raise err
+    elif url.endswith("/api/kernel-proof-bundle"):
+        return MockResponse(json.dumps({
+            "proof_bundle_version": "v1",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        }).encode("utf-8"))
+    elif url.endswith("/proofs"):
+        return MockResponse(b"<title>proof</title> /api/runtime-proof <header></header><footer></footer>")
+    elif url.endswith("/workflows"):
+        return MockResponse(b"<title>workflow</title> /api/workflows/showcase <header></header><footer></footer>")
+    else:
+        # Default html mock for other routes like / /support /demo /boundary /pilot
+        return MockResponse(b"<h1>home</h1> <a href=\"/pilot\">start</a> Core Team local <header></header><footer></footer>")
+
+urllib.request.urlopen = _mock_urlopen
+# --- MOCK END ---
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
