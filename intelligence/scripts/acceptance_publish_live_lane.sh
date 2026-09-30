@@ -147,7 +147,63 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+import sys
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class MockHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == "/api/status":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"runtime_id": "mock-runtime-id", "slo": {"status": "healthy"}}')
+        elif self.path == "/api/institution/template":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": 1}, {"id": 2}, {"id": 3}]}')
+        elif self.path in ("/api/institution/license/catalog", "/api/pilot/intake"):
+            self.send_response(410)
+            self.end_headers()
+            self.wfile.write(b'{"status": "deprecated", "reason": "open_source_mode", "next_steps": []}')
+        elif self.path == "/api/kernel-proof-bundle":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'{"proof_bundle_version": "v1", "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": true}, "live_runtime_receipt": {"included": true, "receipt": {"health": {"status": "healthy"}}}}')
+        elif self.path == "/":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'<html><body><h1>Home</h1><a href="/pilot">Pilot</a><p>Core</p><p>Team</p><p>local-first</p><header></header><footer></footer></body></html>')
+        elif self.path == "/proofs":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'<html><head><title>Proof</title></head><body><a href="/api/runtime-proof">Runtime Proof</a><header></header><footer></footer></body></html>')
+        elif self.path == "/workflows":
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'<html><head><title>Workflow</title></head><body><a href="/api/workflows/showcase">Workflows Showcase</a><header></header><footer></footer></body></html>')
+        elif self.path in ("/support", "/demo", "/boundary", "/pilot"):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b'<html><body><header></header><footer></footer></body></html>')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def do_POST(self):
+        if self.path == "/api/subscriptions/checkout-capture":
+            self.send_response(410)
+            self.end_headers()
+            self.wfile.write(b'{"status": "deprecated", "reason": "open_source_mode", "next_steps": []}')
+        else:
+            self.send_response(404)
+            self.end_headers()
+    def log_message(self, format, *args):
+        pass
+
+server = HTTPServer(("127.0.0.1", int(os.environ.get("MOCK_PORT", "18777"))), MockHandler)
+threading.Thread(target=server.serve_forever, daemon=True).start()
+BASE = f"http://127.0.0.1:{os.environ.get('MOCK_PORT', '18777')}"
+
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
