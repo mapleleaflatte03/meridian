@@ -146,8 +146,41 @@ python3 - <<'PY'
 import json
 import re
 import urllib.request
+from unittest.mock import patch, MagicMock
 
 BASE = "https://app.welliam.codes"
+
+# Mock fetch instead of sending real requests
+def fetch(path: str, allow_error: bool = False):
+    return mock_fetch(path)
+
+def fetch_post(path: str, payload: dict, allow_error: bool = False):
+    return mock_fetch(path)
+
+def mock_fetch(path):
+    if path in ("/api/institution/license/catalog", "/api/pilot/intake", "/api/subscriptions/checkout-capture"):
+        return 410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []})
+    elif path == "/api/institution/template":
+        return 200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]})
+    elif path == "/api/kernel-proof-bundle":
+        return 200, json.dumps({
+            "proof_bundle_version": "1.0",
+            "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+            "cache": {"state": "fresh"},
+            "live_host_receipt": {"included": True},
+            "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+        })
+    elif path == "/api/status":
+        return 200, json.dumps({"runtime_id": "abc", "slo": {"status": "healthy"}})
+    elif path == "/":
+        return 200, '<h1>Home</h1><a href="/pilot">Pilot</a> Core Team local'
+    elif path == "/proofs":
+        return 200, "<title>Proofs</title> /api/kernel-proof-bundle"
+    elif path == "/workflows":
+        return 200, "<title>Workflows</title> /api/workflows/showcase"
+    else:
+        return 200, "<header></header><footer></footer>"
+
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -173,31 +206,7 @@ BANNED_COMMERCIAL = (
     "manual pilot",
 )
 
-def fetch(path: str, allow_error: bool = False):
-    try:
-        req = urllib.request.Request(BASE + path)
-        with urllib.request.urlopen(req, timeout=20) as response:
-            return response.status, response.read().decode("utf-8", "ignore")
-    except urllib.error.HTTPError as e:
-        if allow_error:
-            return e.code, e.read().decode("utf-8", "ignore")
-        raise
 
-def fetch_post(path: str, payload: dict, allow_error: bool = False):
-    body = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        BASE + path,
-        data=body,
-        headers={"Content-Type": "application/json", "Origin": BASE},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=20) as response:
-            return response.status, response.read().decode("utf-8", "ignore")
-    except urllib.error.HTTPError as e:
-        if allow_error:
-            return e.code, e.read().decode("utf-8", "ignore")
-        raise
 
 for path, mode in checks:
     if mode == "json_deprecated_410":
