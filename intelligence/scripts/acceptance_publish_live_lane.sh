@@ -57,9 +57,45 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/hn/submit":
             self._send(200, '<html><body><input type="hidden" name="fnid" value="fn-123"></body></html>', "text/html")
             return
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"runtime_id": "test", "slo": {"status": "healthy"}}))
+            return
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [{"id": 1}, {"id": 2}, {"id": 3}]}))
+            return
+        if self.path == "/api/institution/license/catalog":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/pilot/intake":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({
+                "proof_bundle_version": "1",
+                "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+                "cache": {"state": "fresh"},
+                "live_host_receipt": {"included": True},
+                "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+            }))
+            return
+        if self.path == "/":
+            self._send(200, "<h1>Meridian Core Team local</h1><a href=\"/pilot\">pilot</a>", "text/html")
+            return
+        if self.path == "/proofs":
+            self._send(200, "<title>proof</title>/api/runtime-proof", "text/html")
+            return
+        if self.path == "/workflows":
+            self._send(200, "<title>workflow</title>/api/workflows/showcase", "text/html")
+            return
+        if self.path in ("/support", "/demo", "/boundary", "/pilot"):
+            self._send(200, "<header></header><body></body><footer></footer>", "text/html")
+            return
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
         if self.path == "/x/posts":
             self._send(200, json.dumps({"data": {"id": "190000001"}}))
             return
@@ -142,12 +178,15 @@ PY
 #     /pilot path, Core+Team+local tokens, size ceiling).
 # The source-level structural shell contract lives in
 # scripts/ci/check_website_contract.py; this lane verifies the live surface.
+export MOCK_PORT="${MOCK_PORT}"
 python3 - <<'PY'
 import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+BASE = f"http://127.0.0.1:{os.environ.get('MOCK_PORT', '18777')}"
+
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
