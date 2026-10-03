@@ -302,6 +302,14 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      if (button.disabled) {
+        button.setAttribute('title', 'Select items first');
+        var text = button.getAttribute('data-bulk-decision');
+        button.setAttribute('aria-label', text + ': Select items first');
+      } else {
+        button.removeAttribute('title');
+        button.setAttribute('aria-label', button.getAttribute('data-bulk-decision'));
+      }
     });
   }
 

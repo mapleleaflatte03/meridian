@@ -1820,6 +1820,17 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   cursor: pointer;
 }
 
+.operator-action:hover:not(:disabled),
+.operator-link:hover {
+  background: rgba(135,216,255,0.08);
+  border-color: rgba(135,216,255,0.28);
+}
+
+.operator-action:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .operator-link {
   padding: 0;
   border: none;
