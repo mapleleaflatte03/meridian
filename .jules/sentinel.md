@@ -1,0 +1,4 @@
+## 2025-02-14 - Fix SQL injection in SQLite PRAGMA journal_mode configuration
+**Vulnerability:** A SQL injection vulnerability existed in `intelligence/company/meridian_platform/observability_store.py` where an unvalidated environment variable `MERIDIAN_OBSERVABILITY_SQLITE_JOURNAL_MODE` was directly interpolated into a `PRAGMA journal_mode={...}` SQL statement.
+**Learning:** Python's sqlite3 module does not support parameterized queries (e.g., `?`) in PRAGMA statements. Any external input used in PRAGMA statements must be interpolated as a string and strictly validated against an explicit allowlist to prevent SQL injection. The original code used a negative check (`not in {'', 'DEFAULT', 'OFF'}`) which is insufficient.
+**Prevention:** Always use a positive allowlist of valid values when dynamically configuring SQLite PRAGMAs from external inputs (e.g. environment variables or user input).
