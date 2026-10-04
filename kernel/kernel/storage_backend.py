@@ -123,7 +123,27 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
+
+        if tail is not None and tail > 0:
+            with open(path) as f:
+                lines = f.readlines()
+
+            entries: list[dict[str, Any]] = []
+            # Start from the end of the file to avoid loading and parsing every JSON string, significantly reducing execution time for large logs
+            for i in range(len(lines) - 1, -1, -1):
+                line = lines[i].strip()
+                if not line:
+                    continue
+                try:
+                    entries.append(json.loads(line))
+                    if len(entries) == tail:
+                        break
+                except json.JSONDecodeError:
+                    continue
+            entries.reverse()
+            return entries
+
+        entries = []
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -133,8 +153,6 @@ class JsonFileBackend(StorageBackend):
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
         return entries
 
     def exists(self, key: str) -> bool:
