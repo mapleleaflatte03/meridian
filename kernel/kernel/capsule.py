@@ -635,10 +635,15 @@ def list_capsules():
     """Return org_ids with real capsule directories plus the legacy aliased org."""
     dirs = []
     if os.path.isdir(CAPSULES_DIR):
-        dirs = [
-            d for d in os.listdir(CAPSULES_DIR)
-            if os.path.isdir(os.path.join(CAPSULES_DIR, d))
-        ]
+        # OPTIMIZATION: Use os.scandir instead of os.listdir + os.path.isdir.
+        # os.scandir caches file attributes (like whether an entry is a directory),
+        # which avoids an extra stat() system call per entry and significantly
+        # improves performance when listing directories.
+        with os.scandir(CAPSULES_DIR) as it:
+            dirs = [
+                entry.name for entry in it
+                if entry.is_dir()
+            ]
     ids = set(dirs)
     ids.update(_CAPSULE_ALIASES.keys())
     ids.update(_legacy_alias_candidates())
