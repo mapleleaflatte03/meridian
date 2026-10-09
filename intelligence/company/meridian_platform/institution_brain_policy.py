@@ -437,7 +437,7 @@ def configure_policy(
 
 
 def _prune_unreferenced_entries(policy: dict[str, Any]) -> dict[str, Any]:
-    payload = copy.deepcopy(policy)
+    payload = dict(policy)
     provider_registry = dict(payload.get('provider_registry') or {})
     model_registry = dict(payload.get('model_registry') or {})
     auth_profiles = dict(payload.get('auth_profiles') or {})
