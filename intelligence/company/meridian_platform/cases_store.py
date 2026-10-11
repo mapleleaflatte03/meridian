@@ -156,8 +156,8 @@ def _row_to_record(row: sqlite3.Row) -> dict[str, Any]:
     })
 
 
-def _upsert_record(conn: sqlite3.Connection, record: dict[str, Any], org_id: str | None) -> None:
-    conn.execute(
+def _upsert_records(conn: sqlite3.Connection, records: list[dict[str, Any]], org_id: str | None) -> None:
+    conn.executemany(
         """
         INSERT INTO cases (
             case_id, institution_id, source_institution_id, target_host_id,
@@ -186,7 +186,10 @@ def _upsert_record(conn: sqlite3.Connection, record: dict[str, Any], org_id: str
             note=excluded.note,
             metadata_json=excluded.metadata_json
         """,
-        _record_to_row(record, org_id),
+        [
+            _record_to_row(record, org_id)
+            for record in records
+        ],
     )
 
 
@@ -272,8 +275,7 @@ def save_case_store(cases_path: str, payload: dict[str, Any], *, org_id: str | N
             conn.execute('DELETE FROM cases WHERE institution_id = ?', (org_id,))
         else:
             conn.execute('DELETE FROM cases')
-        for record in normalized['cases'].values():
-            _upsert_record(conn, record, org_id)
+        _upsert_records(conn, list(normalized['cases'].values()), org_id)
         conn.commit()
     return normalized
 

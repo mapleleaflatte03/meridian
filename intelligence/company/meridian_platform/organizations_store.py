@@ -66,8 +66,8 @@ def _row_to_org(row: sqlite3.Row) -> dict[str, Any]:
     }
 
 
-def _upsert_org(conn: sqlite3.Connection, org: dict[str, Any], updated_at: str) -> None:
-    conn.execute(
+def _upsert_orgs(conn: sqlite3.Connection, orgs: list[dict[str, Any]], updated_at: str) -> None:
+    conn.executemany(
         """
         INSERT INTO organizations (
             id, name, slug, owner_id, plan, status, charter,
@@ -89,22 +89,25 @@ def _upsert_org(conn: sqlite3.Connection, org: dict[str, Any], updated_at: str) 
             created_at=excluded.created_at,
             updated_at=excluded.updated_at
         """,
-        (
-            org.get('id', ''),
-            org.get('name', ''),
-            org.get('slug', ''),
-            org.get('owner_id', ''),
-            org.get('plan', 'free'),
-            org.get('status', 'active'),
-            org.get('charter', ''),
-            json.dumps(org.get('policy_defaults') or {}, sort_keys=True),
-            org.get('treasury_id'),
-            org.get('lifecycle_state', 'active'),
-            json.dumps(org.get('settings') or {}, sort_keys=True),
-            json.dumps(org.get('members') or [], sort_keys=True),
-            org.get('created_at', updated_at),
-            updated_at,
-        ),
+        [
+            (
+                org.get('id', ''),
+                org.get('name', ''),
+                org.get('slug', ''),
+                org.get('owner_id', ''),
+                org.get('plan', 'free'),
+                org.get('status', 'active'),
+                org.get('charter', ''),
+                json.dumps(org.get('policy_defaults') or {}, sort_keys=True),
+                org.get('treasury_id'),
+                org.get('lifecycle_state', 'active'),
+                json.dumps(org.get('settings') or {}, sort_keys=True),
+                json.dumps(org.get('members') or [], sort_keys=True),
+                org.get('created_at', updated_at),
+                updated_at,
+            )
+            for org in orgs
+        ],
     )
 
 
@@ -140,8 +143,7 @@ def save_orgs(orgs_file: str, data: dict[str, Any]) -> dict[str, Any]:
         current_ids = set(payload['organizations'].keys())
         for org_id in existing_ids - current_ids:
             conn.execute('DELETE FROM organizations WHERE id = ?', (org_id,))
-        for org_id, org in payload['organizations'].items():
-            _upsert_org(conn, org, payload['updatedAt'])
+        _upsert_orgs(conn, list(payload['organizations'].values()), payload['updatedAt'])
         conn.commit()
     return payload
 
