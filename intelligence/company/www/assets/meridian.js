@@ -302,6 +302,11 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      if (!selectedCount) {
+        button.title = 'Select at least one item to perform this action';
+      } else {
+        button.removeAttribute('title');
+      }
     });
   }
 
@@ -1653,6 +1658,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     startDemoHustleButton.addEventListener('click', async function () {
       setAll('[data-hustle-action-status]', 'Requesting budget and court clearance...');
       startDemoHustleButton.disabled = true;
+      startDemoHustleButton.title = 'Side hustle execution is already in progress';
       try {
         var response = await fetch('/api/agent/hustle', { method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1682,6 +1688,7 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
         setAll('[data-hustle-action-status]', 'Error: ' + err.message);
       } finally {
         startDemoHustleButton.disabled = false;
+        startDemoHustleButton.removeAttribute('title');
       }
     });
   }
