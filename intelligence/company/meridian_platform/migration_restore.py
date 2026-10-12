@@ -138,7 +138,7 @@ def extract_archive(state_archive: Path, *, dry_run: bool) -> dict[str, object]:
             raise ValueError(f"unsafe archive members: {unsafe[:5]}")
         if dry_run:
             return {"member_count": len(members), "sample_members": [member.name for member in members[:10]], "restored": False}
-        archive.extractall(path="/")
+        archive.extractall(path="/", filter="data")
         return {"member_count": len(members), "sample_members": [member.name for member in members[:10]], "restored": True}
 
 
