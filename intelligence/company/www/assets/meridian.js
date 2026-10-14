@@ -302,6 +302,13 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
       button.disabled = !selectedCount;
+      if (button.disabled) {
+        var action = button.getAttribute('data-bulk-decision') || 'apply action';
+        var actionText = action === 'stale' ? 'mark stale' : action === 'unresolved' ? 'mark unresolved' : action;
+        button.title = "Select items first to " + actionText;
+      } else {
+        button.title = "";
+      }
     });
   }
 
