@@ -51,6 +51,51 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):  # noqa: N802
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"status": "ok", "runtime_id": "test_rt", "slo": {"status": "healthy"}}))
+            return
+
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({
+                "schema_version": "meridian.institution_template.v1",
+                "court_rule_set": [{"id": "1"}, {"id": "2"}, {"id": "3"}]
+            }))
+            return
+
+        if self.path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+            self._send(410, json.dumps({
+                "status": "deprecated",
+                "reason": "open_source_mode",
+                "next_steps": ["use_source"]
+            }))
+            return
+
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({
+                "proof_bundle_version": "1.0",
+                "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+                "cache": {"state": "fresh"},
+                "live_host_receipt": {"included": True},
+                "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+            }))
+            return
+
+        if self.path == "/":
+            self._send(200, b"<html><head><title>Meridian</title></head><body><header></header><h1>Run AI agents locally.</h1><a href=\"/pilot\">Pilot</a> Core Team local<footer></footer></body></html>".decode("utf-8"), "text/html")
+            return
+
+        if self.path == "/proofs":
+            self._send(200, b"<html><head><title>Meridian proofs</title></head><body><header></header>/api/runtime-proof<footer></footer></body></html>".decode("utf-8"), "text/html")
+            return
+
+        if self.path == "/workflows":
+            self._send(200, b"<html><head><title>Meridian workflows</title></head><body><header></header>/api/workflows/showcase<footer></footer></body></html>".decode("utf-8"), "text/html")
+            return
+
+        if self.path in ["/support", "/demo", "/boundary", "/pilot"]:
+            self._send(200, b"<html><body><header></header>hello<footer></footer></body></html>".decode("utf-8"), "text/html")
+            return
+
         if self.path == "/hn/auth":
             self._send(200, '<html><body><input type="hidden" name="goto" value="news"></body></html>', "text/html")
             return
@@ -78,6 +123,15 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/discord/webhook":
             self._send(200, json.dumps({"ok": True}))
             return
+
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({
+                "status": "deprecated",
+                "reason": "open_source_mode",
+                "next_steps": ["use_source"]
+            }))
+            return
+
         self._send(404, json.dumps({"error": "not_found"}))
 
     def log_message(self, *_args, **_kwargs):  # noqa: D401
@@ -90,7 +144,9 @@ if __name__ == "__main__":
     server.serve_forever()
 PY
 
-MERIDIAN_MOCK_PORT="${MOCK_PORT}" python3 "${MOCK_SERVER_PY}" &
+export MOCK_PORT
+export MERIDIAN_MOCK_PORT="${MOCK_PORT}"
+python3 "${MOCK_SERVER_PY}" &
 MOCK_PID=$!
 trap 'kill ${MOCK_PID} >/dev/null 2>&1 || true; rm -f "${MOCK_SERVER_PY}"; rm -rf "${ARTIFACT_DIR}"' EXIT
 sleep 1
@@ -147,7 +203,9 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+mock_port = os.environ.get("MERIDIAN_MOCK_PORT", "18777")
+BASE = f"http://127.0.0.1:{mock_port}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
