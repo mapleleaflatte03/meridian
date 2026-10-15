@@ -500,11 +500,16 @@ li { padding: 0.2rem 0; }
   transition: background var(--ease-fast), border-color var(--ease-fast), box-shadow var(--ease-soft), transform var(--ease-fast);
 }
 .cta-primary { background: var(--accent); color: #000; }
-.cta-primary:hover { background: #33DDFF; box-shadow: 0 0 24px rgba(0,212,255,0.3); transform: translateY(-1px); }
+.cta-primary:not(:disabled):hover { background: #33DDFF; box-shadow: 0 0 24px rgba(0,212,255,0.3); transform: translateY(-1px); }
 .cta-glow { box-shadow: 0 0 20px rgba(0,212,255,0.25); }
-.cta-glow:hover { box-shadow: 0 0 32px rgba(0,212,255,0.4); }
+.cta-glow:not(:disabled):hover { box-shadow: 0 0 32px rgba(0,212,255,0.4); }
 .cta-outline { background: transparent; border: 2px solid var(--accent); color: var(--accent); }
-.cta-outline:hover { background: rgba(0,212,255,0.08); box-shadow: 0 0 18px rgba(0,212,255,0.15); transform: translateY(-1px); }
+.cta-outline:not(:disabled):hover { background: rgba(0,212,255,0.08); box-shadow: 0 0 18px rgba(0,212,255,0.15); transform: translateY(-1px); }
+
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .cta-note { color: var(--dim); font-size: 0.9rem; line-height: 1.7; max-width: 720px; }
 
 /* ── Headings ── */
@@ -1818,6 +1823,12 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   padding: 0.45rem 0.8rem;
   font: inherit;
   cursor: pointer;
+}
+
+.operator-action:disabled,
+.operator-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .operator-link {
