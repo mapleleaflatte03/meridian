@@ -33,6 +33,7 @@ print(s.getsockname()[1])
 s.close()
 PY
 )"
+export MOCK_PORT
 cat >"${MOCK_SERVER_PY}" <<'PY'
 #!/usr/bin/env python3
 from __future__ import annotations
@@ -51,6 +52,35 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):  # noqa: N802
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"runtime_id": "mock_id", "slo": {"status": "healthy"}}))
+            return
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]}))
+            return
+        if self.path in ("/api/institution/license/catalog", "/api/pilot/intake", "/api/subscriptions/checkout-capture"):
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({
+                "proof_bundle_version": "1.0",
+                "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"},
+                "cache": {"state": "fresh"},
+                "live_host_receipt": {"included": True},
+                "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}
+            }))
+            return
+        if self.path in ("/", "/proofs", "/workflows", "/support", "/demo", "/boundary", "/pilot"):
+            content_html = "<html><head><title>" + self.path + "</title></head><body><header></header>"
+            if self.path == "/":
+                content_html += '<h1>Home</h1><a href="/pilot">pilot</a> Core Team local'
+            elif self.path == "/proofs":
+                content_html += "<title>proof</title> /api/kernel-proof-bundle"
+            elif self.path == "/workflows":
+                content_html += "<title>workflow</title> /api/workflows/showcase"
+            content_html += "<footer></footer></body></html>"
+            self._send(200, content_html, "text/html")
+            return
         if self.path == "/hn/auth":
             self._send(200, '<html><body><input type="hidden" name="goto" value="news"></body></html>', "text/html")
             return
@@ -60,6 +90,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
+        if self.path in ("/api/institution/license/catalog", "/api/pilot/intake", "/api/subscriptions/checkout-capture"):
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
         if self.path == "/x/posts":
             self._send(200, json.dumps({"data": {"id": "190000001"}}))
             return
@@ -147,7 +180,8 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+BASE = f"http://127.0.0.1:{os.environ.get('MOCK_PORT', '18777')}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
