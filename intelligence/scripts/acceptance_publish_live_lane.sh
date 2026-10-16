@@ -8,12 +8,22 @@ ARTIFACT_DIR="$(mktemp -d /tmp/meridian_publish_artifacts.XXXXXX)"
 
 python3 "${WORKSPACE_DIR}/scripts/test_publish_live_lane.py"
 
+MOCK_SERVER_PY="$(mktemp)"
+MOCK_PORT="$(python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+)"
+export MOCK_PORT
 python3 "${LAUNCH_DIR}/publish_live.py" \
   --launch-dir "${LAUNCH_DIR}" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --dry-run \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_dryrun.json
+  --site "http://127.0.0.1:${MOCK_PORT}" >/tmp/meridian_publish_dryrun.json
 
 python3 - <<'PY'
 import json
@@ -24,15 +34,6 @@ for channel in ("x", "reddit", "hn", "discord"):
     assert payload["results_by_channel"][channel]["status"] == "dry_run", payload
 PY
 
-MOCK_SERVER_PY="$(mktemp)"
-MOCK_PORT="$(python3 - <<'PY'
-import socket
-s = socket.socket()
-s.bind(("127.0.0.1", 0))
-print(s.getsockname()[1])
-s.close()
-PY
-)"
 cat >"${MOCK_SERVER_PY}" <<'PY'
 #!/usr/bin/env python3
 from __future__ import annotations
@@ -51,6 +52,30 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):  # noqa: N802
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"status": "healthy", "runtime_id": "mock-runtime-id", "slo": {"status": "healthy"}}))
+            return
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]}))
+            return
+        if self.path == "/":
+            self._send(200, "<html><body><h1>Meridian</h1><a href=\"/pilot\">pilot</a>Core Team local</body></html>", "text/html")
+            return
+        if self.path == "/proofs":
+            self._send(200, "<html><head><title>proofs</title></head><body><header></header><main id='proofs'>proofs page /api/kernel-proof-bundle</main><footer></footer></body></html>", "text/html")
+            return
+        if self.path == "/workflows":
+            self._send(200, "<html><head><title>workflows</title></head><body><header></header><main id='workflows'>workflows page /api/workflows/showcase</main><footer></footer></body></html>", "text/html")
+            return
+        if self.path in ["/support", "/demo", "/boundary", "/pilot"]:
+            self._send(200, "<html><body><header></header><main></main><footer></footer></body></html>", "text/html")
+            return
+        if self.path.startswith("/api/v1/deprecated") or self.path in ["/api/institution/license/catalog", "/api/pilot/intake"]:
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({"proof_bundle_version": 1, "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": True}, "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}}))
+            return
         if self.path == "/hn/auth":
             self._send(200, '<html><body><input type="hidden" name="goto" value="news"></body></html>', "text/html")
             return
@@ -60,6 +85,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
         if self.path == "/x/posts":
             self._send(200, json.dumps({"data": {"id": "190000001"}}))
             return
@@ -113,7 +141,7 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --launch-dir "${LAUNCH_DIR}" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_mock_live.json
+  --site "http://127.0.0.1:${MOCK_PORT}" >/tmp/meridian_publish_mock_live.json
 
 python3 - <<'PY'
 import json
@@ -147,7 +175,8 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+BASE = f"http://127.0.0.1:{os.environ['MOCK_PORT']}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
