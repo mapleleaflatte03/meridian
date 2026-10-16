@@ -81,11 +81,8 @@ def _settlement_ref_keys(ref):
 def _settlement_ref_matches(existing_ref, candidate_ref):
     existing_keys = _settlement_ref_keys(existing_ref)
     candidate_keys = _settlement_ref_keys(candidate_ref)
-    for candidate_field, candidate_value in candidate_keys:
-        for existing_field, existing_value in existing_keys:
-            if candidate_field == existing_field and candidate_value == existing_value:
-                return True
-    return False
+    # ⚡ Bolt optimization: Replace O(n²) nested loop with O(n) set lookup
+    return not set(candidate_keys).isdisjoint(existing_keys)
 
 
 def _federation_ref_keys(ref):
@@ -106,11 +103,8 @@ def _federation_ref_keys(ref):
 def _federation_ref_matches(existing_ref, candidate_ref):
     existing_keys = _federation_ref_keys(existing_ref)
     candidate_keys = _federation_ref_keys(candidate_ref)
-    for candidate_field, candidate_value in candidate_keys:
-        for existing_field, existing_value in existing_keys:
-            if candidate_field == existing_field and candidate_value == existing_value:
-                return True
-    return False
+    # ⚡ Bolt optimization: Replace O(n²) nested loop with O(n) set lookup
+    return not set(candidate_keys).isdisjoint(existing_keys)
 
 
 def _commitment_state_rank(state):
