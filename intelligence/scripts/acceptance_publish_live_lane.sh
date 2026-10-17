@@ -163,6 +163,12 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/subscriptions/checkout-capture":
             self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
             return
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
         if self.path == "/api/status":
             self._send(200, json.dumps({"runtime_id": "mock_id", "slo": {"status": "healthy"}}))
             return
@@ -280,8 +286,10 @@ import os
 import os
 import os
 import os
+import os
+import os
 
-BASE = "http://127.0.0.1:" + os.environ["MOCK_PORT"]
+BASE = "http://127.0.0.1:" + os.environ["MERIDIAN_MOCK_PORT"]
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
@@ -429,6 +437,8 @@ for path, mode in checks:
         assert re.search(r"<footer[\s>]", body, flags=re.IGNORECASE), f"Missing <footer> on {path}"
 PY
 
+export MERIDIAN_BRAND_CONTRACT_URL="http://127.0.0.1:${MERIDIAN_MOCK_PORT}"
+export MERIDIAN_BRAND_CONTRACT_URL="http://127.0.0.1:${MERIDIAN_MOCK_PORT}"
 python3 "${WORKSPACE_DIR}/company/www/scripts/verify_brand_contract.py" --output human >/tmp/meridian_brand_contract_check.txt
 grep -Eq "status:[[:space:]]*pass" /tmp/meridian_brand_contract_check.txt
 
