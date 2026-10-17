@@ -76,12 +76,9 @@ class RoutePolicyError(RuntimeError):
 
 
 def _dedupe(values: list[str]) -> list[str]:
-    out: list[str] = []
-    for value in values:
-        token = str(value or "").strip()
-        if token and token not in out:
-            out.append(token)
-    return out
+    # Optimize deduplication from O(n^2) list traversal to O(n) hash map via dict.fromkeys()
+    # while preserving original insertion order
+    return list(dict.fromkeys(str(v or "").strip() for v in values if str(v or "").strip()))
 
 
 def _parse_status_codes(raw: Any, fallback: set[int] | None = None) -> set[int]:
