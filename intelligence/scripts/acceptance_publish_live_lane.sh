@@ -25,7 +25,7 @@ for channel in ("x", "reddit", "hn", "discord"):
 PY
 
 MOCK_SERVER_PY="$(mktemp)"
-MOCK_PORT="$(python3 - <<'PY'
+export MOCK_PORT="$(python3 - <<'PY'
 import socket
 s = socket.socket()
 s.bind(("127.0.0.1", 0))
@@ -57,6 +57,29 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/hn/submit":
             self._send(200, '<html><body><input type="hidden" name="fnid" value="fn-123"></body></html>', "text/html")
             return
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"runtime_id": "mock", "slo": {"status": "healthy"}}))
+            return
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]}))
+            return
+        if self.path in ("/api/institution/license/catalog", "/api/pilot/intake", "/api/subscriptions/checkout-capture"):
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({"proof_bundle_version": "1", "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": True}, "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}}))
+            return
+        if self.path in ("/", "/proofs", "/workflows", "/support", "/demo", "/boundary", "/pilot"):
+            html = '''<html><head><title>proof workflow</title></head><body>
+            <header></header>
+            <h1>Test</h1>
+            <a href="/pilot">pilot</a>
+            Core Team local local-first
+            /api/runtime-proof /api/workflows/showcase
+            <footer></footer>
+            </body></html>'''
+            self._send(200, html, "text/html")
+            return
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
@@ -77,6 +100,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/discord/webhook":
             self._send(200, json.dumps({"ok": True}))
+            return
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
             return
         self._send(404, json.dumps({"error": "not_found"}))
 
@@ -113,7 +139,7 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --launch-dir "${LAUNCH_DIR}" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_mock_live.json
+  --site "http://127.0.0.1:${MOCK_PORT}" >/tmp/meridian_publish_mock_live.json
 
 python3 - <<'PY'
 import json
@@ -147,7 +173,8 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os
+BASE = f"http://127.0.0.1:{os.environ['MOCK_PORT']}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
