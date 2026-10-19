@@ -1809,6 +1809,13 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   gap: 0.45rem;
 }
 
+.operator-action:disabled,
+.operator-link:disabled,
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .operator-action,
 .operator-link {
   border: 1px solid rgba(255,255,255,0.12);
