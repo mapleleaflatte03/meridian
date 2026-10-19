@@ -25,7 +25,7 @@ for channel in ("x", "reddit", "hn", "discord"):
 PY
 
 MOCK_SERVER_PY="$(mktemp)"
-MOCK_PORT="$(python3 - <<'PY'
+export MOCK_PORT="$(python3 - <<'PY'
 import socket
 s = socket.socket()
 s.bind(("127.0.0.1", 0))
@@ -57,9 +57,42 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/hn/submit":
             self._send(200, '<html><body><input type="hidden" name="fnid" value="fn-123"></body></html>', "text/html")
             return
+        if self.path == "/api/status":
+            self._send(200, json.dumps({"runtime_id": "mock-runtime", "slo": {"status": "healthy"}}))
+            return
+        if self.path == "/api/institution/template":
+            self._send(200, json.dumps({"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]}))
+            return
+        if self.path == "/api/institution/license/catalog":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/pilot/intake":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
+        if self.path == "/api/kernel-proof-bundle":
+            self._send(200, json.dumps({"proof_bundle_version": "v1", "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": True}, "live_runtime_receipt": {"included": True, "receipt": {"health": {"status": "healthy"}}}}))
+            return
+        if self.path in ["/", "/proofs", "/workflows", "/support", "/demo", "/boundary", "/pilot"]:
+            body = "<html><head><title>" + ("Proof" if "proof" in self.path else "Workflow" if "workflow" in self.path else "Page") + "</title></head><body>"
+            body += "<header></header>"
+            body += "<h1>Test Page</h1>"
+            if self.path == "/":
+                body += "<a href=\"/pilot\">Pilot</a> Core Team local"
+            if self.path == "/proofs":
+                body += "/api/kernel-proof-bundle"
+            if self.path == "/workflows":
+                body += "/api/workflows/showcase"
+            body += "<footer></footer>"
+            body += "</body></html>"
+            self._send(200, body, "text/html")
+            return
+
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, json.dumps({"status": "deprecated", "reason": "open_source_mode", "next_steps": []}))
+            return
         if self.path == "/x/posts":
             self._send(200, json.dumps({"data": {"id": "190000001"}}))
             return
@@ -146,8 +179,10 @@ python3 - <<'PY'
 import json
 import re
 import urllib.request
+import os
 
-BASE = "https://app.welliam.codes"
+mock_port = os.environ.get("MOCK_PORT")
+BASE = f"http://127.0.0.1:{mock_port}" if mock_port else "https://app.welliam.codes"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
