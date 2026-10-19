@@ -5848,10 +5848,13 @@ def _specialist_history_context(request: str, session_key: str, plan: dict[str, 
     reason = str(plan.get("reason") or "").strip()
     if reason == "skill_routed_request" and (_short_prompt_skill_candidate(request) or _autonomy_skill_candidate(request)):
         return ""
-    if _explicitly_requested_specialists(request):
+
+    explicit_specialists = _explicitly_requested_specialists(request)
+    if explicit_specialists:
         return ""
+
     limit = 12 if reason == "skill_routed_request" else 20
-    max_chars = 2400 if _explicitly_requested_specialists(request) else 4000
+    max_chars = 4000
     return _trim_history_context(_full_session_history_context(session_key, limit=limit), max_chars=max_chars)
 
 

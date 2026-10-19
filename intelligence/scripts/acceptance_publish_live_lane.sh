@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export MOCK_PORT=$(python3 -c 'import random; print(random.randint(10000, 20000))')
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -13,7 +14,7 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --dry-run \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_dryrun.json
+  --site "http://127.0.0.1:${MOCK_PORT}" >/tmp/meridian_publish_dryrun.json
 
 python3 - <<'PY'
 import json
@@ -51,6 +52,23 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def do_GET(self):  # noqa: N802
+        routes = {
+            "/api/status": '{"runtime_id": "mock_id", "slo": {"status": "healthy"}}',
+            "/api/institution/template": '{"schema_version": "meridian.institution_template.v1", "court_rule_set": [1, 2, 3]}',
+            "/api/institution/license/catalog": '{"status": "deprecated", "reason": "open_source_mode", "next_steps": []}',
+            "/api/pilot/intake": '{"status": "deprecated", "reason": "open_source_mode", "next_steps": []}',
+            "/api/kernel-proof-bundle": '{"proof_bundle_version": "v1", "public_routes": {"kernel_proof_bundle": "/api/kernel-proof-bundle"}, "cache": {"state": "fresh"}, "live_host_receipt": {"included": true}, "live_runtime_receipt": {"included": true, "receipt": {"health": {"status": "healthy"}}}}',
+            "/": '<!DOCTYPE html><html><head><title>Mock</title></head><body><h1>Meridian</h1><a href="/pilot">Pilot</a>Core Team local <header></header><footer></footer></body></html>',
+            "/proofs": '<!DOCTYPE html><html><head><title>Proof</title></head><body>/api/runtime-proof <header></header><footer></footer></body></html>',
+            "/workflows": '<!DOCTYPE html><html><head><title>Workflow</title></head><body>/api/workflows/showcase <header></header><footer></footer></body></html>',
+            "/support": '<!DOCTYPE html><html><head><title>Mock</title></head><body><header></header><footer></footer></body></html>',
+            "/demo": '<!DOCTYPE html><html><head><title>Mock</title></head><body><header></header><footer></footer></body></html>',
+            "/boundary": '<!DOCTYPE html><html><head><title>Mock</title></head><body><header></header><footer></footer></body></html>',
+            "/pilot": '<!DOCTYPE html><html><head><title>Mock</title></head><body><header></header><footer></footer></body></html>',
+        }
+        if self.path in routes:
+            self._send(200 if "deprecated" not in routes[self.path] else 410, routes[self.path], "application/json" if "api" in self.path else "text/html")
+            return
         if self.path == "/hn/auth":
             self._send(200, '<html><body><input type="hidden" name="goto" value="news"></body></html>', "text/html")
             return
@@ -60,6 +78,9 @@ class Handler(BaseHTTPRequestHandler):
         self._send(404, json.dumps({"error": "not_found"}))
 
     def do_POST(self):  # noqa: N802
+        if self.path == "/api/subscriptions/checkout-capture":
+            self._send(410, '{"status": "deprecated", "reason": "open_source_mode", "next_steps": []}', "application/json")
+            return
         if self.path == "/x/posts":
             self._send(200, json.dumps({"data": {"id": "190000001"}}))
             return
@@ -113,7 +134,7 @@ python3 "${LAUNCH_DIR}/publish_live.py" \
   --launch-dir "${LAUNCH_DIR}" \
   --artifact-dir "${ARTIFACT_DIR}" \
   --channels x,reddit,hn,discord \
-  --site "https://app.welliam.codes" >/tmp/meridian_publish_mock_live.json
+  --site "http://127.0.0.1:${MOCK_PORT}" >/tmp/meridian_publish_mock_live.json
 
 python3 - <<'PY'
 import json
@@ -147,7 +168,7 @@ import json
 import re
 import urllib.request
 
-BASE = "https://app.welliam.codes"
+import os; BASE = f"http://127.0.0.1:{os.environ['MOCK_PORT']}"
 checks = [
     ("/api/status", "json_status_clean"),
     ("/api/institution/template", "json_template"),
