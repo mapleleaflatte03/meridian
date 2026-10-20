@@ -4430,37 +4430,57 @@ def _list_warrants_compat(
 
 
 def _warrant_summary(org_id, *, include_archived=True, archived_only=False, expired_only=False):
-    warrants = _list_warrants_compat(
-        org_id,
-        include_archived=include_archived,
-        archived_only=archived_only,
-        expired_only=expired_only,
-    )
+    # Performance Optimization (Bolt):
+    # Retrieve all warrants once and perform filtering and counting in a single O(n) pass.
+    # Eliminates a duplicate _list_warrants_compat call and prevents multiple iterations over the list.
     all_warrants = _list_warrants_compat(org_id, include_archived=True)
+
     pending_review = 0
     executable = 0
     executed = 0
     expired_ready = 0
-    for record in warrants:
-        if record.get('court_review_state') == 'pending_review':
+    archived_count = 0
+    filtered_warrants_count = 0
+
+    for record in all_warrants:
+        is_archived = bool(record.get('archived'))
+        if is_archived:
+            archived_count += 1
+
+        if not include_archived and is_archived:
+            continue
+        if archived_only and not is_archived:
+            continue
+
+        is_expired = bool(record.get('expired'))
+        if expired_only and not is_expired:
+            continue
+
+        filtered_warrants_count += 1
+
+        review_state = record.get('court_review_state')
+        exec_state = record.get('execution_state')
+
+        if review_state == 'pending_review':
             pending_review += 1
         if (
-            record.get('court_review_state') in ('auto_issued', 'approved')
-            and record.get('execution_state') == 'ready'
-            and not bool(record.get('expired'))
+            review_state in ('auto_issued', 'approved')
+            and exec_state == 'ready'
+            and not is_expired
         ):
             executable += 1
-        if record.get('execution_state') == 'ready' and bool(record.get('expired')):
+        if exec_state == 'ready' and is_expired:
             expired_ready += 1
-        if record.get('execution_state') == 'executed':
+        if exec_state == 'executed':
             executed += 1
+
     return {
-        'total': len(warrants),
+        'total': filtered_warrants_count,
         'pending_review': pending_review,
         'executable': executable,
         'executed': executed,
         'expired_ready': expired_ready,
-        'archived_count': len([record for record in all_warrants if bool(record.get('archived'))]),
+        'archived_count': archived_count,
     }
 
 
