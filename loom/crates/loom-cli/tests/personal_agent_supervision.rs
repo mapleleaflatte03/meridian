@@ -446,6 +446,7 @@ fn always_policy_recovers_after_single_injected_crash() {
         .unwrap_or(false));
 
     let log = fs::read_to_string(harness.log_path()).expect("read supervisor log");
+    assert!(log.contains("chaos injected phase=after_tick mode=once exit_code=92"));
     assert!(log.contains("worker exit unexpected=true reason=worker exited with code 92"));
     assert!(log.contains("worker spawned pid="));
 
