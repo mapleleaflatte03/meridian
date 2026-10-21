@@ -123,7 +123,13 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
+
+        import collections
+        # ⚡ Bolt: Memory optimization.
+        # Uses a bounded deque when `tail` is provided, dropping old entries immediately.
+        # This reduces memory from O(N) to O(tail) for large log files, preventing the
+        # entire file from being parsed and held in memory before slicing.
+        entries = collections.deque(maxlen=tail) if tail is not None and tail > 0 else []
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -133,9 +139,7 @@ class JsonFileBackend(StorageBackend):
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
-        return entries
+        return list(entries)
 
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
