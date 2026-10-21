@@ -15802,7 +15802,7 @@ class WebAPIAdapter(ChannelAdapter):
                 if request_path.startswith('/assets/'):
                     asset_path = (COMPANY_DIR / 'www' / 'assets' / request_path.removeprefix('/assets/')).resolve()
                     assets_root = (COMPANY_DIR / 'www').resolve()
-                    if not str(asset_path).startswith(str(assets_root)) or not asset_path.is_file():
+                    if not asset_path.is_relative_to(assets_root) or not asset_path.is_file():
                         self.send_response(404)
                         self.end_headers()
                         return
@@ -15844,7 +15844,7 @@ class WebAPIAdapter(ChannelAdapter):
                 if request_path.startswith('/assets/'):
                     asset_path = (COMPANY_DIR / 'www' / 'assets' / request_path.removeprefix('/assets/')).resolve()
                     assets_root = (COMPANY_DIR / 'www').resolve()
-                    if not str(asset_path).startswith(str(assets_root)) or not asset_path.is_file():
+                    if not asset_path.is_relative_to(assets_root) or not asset_path.is_file():
                         self._send_json(404, {"status": "error", "output": "not_found"})
                         return
                     suffix = asset_path.suffix.lower()
