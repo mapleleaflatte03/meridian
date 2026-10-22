@@ -4350,6 +4350,18 @@ def _routing_planner_snapshot(bound_org_id, *, requested_org_ids=None, host_iden
         )
         for requested_org_id in candidates
     ]
+    local_count = 0
+    remote_count = 0
+    blocked_count = 0
+    for item in decisions:
+        kind = item.get('route_kind')
+        if kind == 'local':
+            local_count += 1
+        elif kind == 'remote':
+            remote_count += 1
+        elif kind == 'blocked':
+            blocked_count += 1
+
     return {
         'bound_org_id': bound_org_id,
         'host_id': getattr(host_identity, 'host_id', '') if host_identity else '',
@@ -4357,9 +4369,9 @@ def _routing_planner_snapshot(bound_org_id, *, requested_org_ids=None, host_iden
         'requested_org_ids': candidates,
         'summary': {
             'total': len(decisions),
-            'local': len([item for item in decisions if item['route_kind'] == 'local']),
-            'remote': len([item for item in decisions if item['route_kind'] == 'remote']),
-            'blocked': len([item for item in decisions if item['route_kind'] == 'blocked']),
+            'local': local_count,
+            'remote': remote_count,
+            'blocked': blocked_count,
         },
         'decisions': decisions,
     }
@@ -4818,6 +4830,21 @@ def _routing_handoff_preview_snapshot(bound_org_id, *, requested_org_ids=None,
             preview['remote_execution_claimed'] = False
         handoff_candidates.append(preview)
 
+    local_count = 0
+    remote_count = 0
+    blocked_count = 0
+    previewed_count = 0
+    for item in handoff_candidates:
+        kind = item.get('route_kind')
+        if kind == 'local':
+            local_count += 1
+        elif kind == 'remote':
+            remote_count += 1
+        elif kind == 'blocked':
+            blocked_count += 1
+        if item.get('handoff_state') == 'previewed':
+            previewed_count += 1
+
     return {
         'bound_org_id': bound_org_id,
         'host_id': getattr(host_identity, 'host_id', '') if host_identity else '',
@@ -4825,10 +4852,10 @@ def _routing_handoff_preview_snapshot(bound_org_id, *, requested_org_ids=None,
         'routing_planner': routing_planner,
         'summary': {
             'total': len(handoff_candidates),
-            'local': len([item for item in handoff_candidates if item['route_kind'] == 'local']),
-            'remote': len([item for item in handoff_candidates if item['route_kind'] == 'remote']),
-            'blocked': len([item for item in handoff_candidates if item['route_kind'] == 'blocked']),
-            'remote_previewed': len([item for item in handoff_candidates if item['handoff_state'] == 'previewed']),
+            'local': local_count,
+            'remote': remote_count,
+            'blocked': blocked_count,
+            'remote_previewed': previewed_count,
         },
         'handoff_candidates': handoff_candidates,
     }
