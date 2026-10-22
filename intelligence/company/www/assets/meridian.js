@@ -301,7 +301,14 @@ window.__meridianFetchJsonWithTimeout = window.__meridianFetchJsonWithTimeout ||
       checkbox.checked = selectedQueueIds.has(queueId);
     });
     Array.prototype.forEach.call(shell.querySelectorAll('[data-bulk-decision]'), function (button) {
-      button.disabled = !selectedCount;
+      var isDisabled = !selectedCount;
+      button.disabled = isDisabled;
+      button.setAttribute('aria-disabled', isDisabled ? 'true' : 'false');
+      if (isDisabled) {
+        button.title = 'Select at least one item to apply action';
+      } else {
+        button.removeAttribute('title');
+      }
     });
   }
 
