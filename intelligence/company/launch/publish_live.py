@@ -86,7 +86,9 @@ def _request_text(
     data: bytes | None = None,
     timeout: float = NETWORK_TIMEOUT_SECONDS,
 ) -> tuple[int, str, str]:
-    req = Request(url, method=method, headers=headers or {}, data=data)
+    h = headers or {}
+    h.setdefault("User-Agent", "Meridian-Acceptance-Test/1.0")
+    req = Request(url, method=method, headers=h, data=data)
     try:
         with urlopen(req, timeout=timeout) as resp:  # noqa: S310
             body = resp.read().decode("utf-8", errors="replace")
