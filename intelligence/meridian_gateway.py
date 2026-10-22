@@ -12282,7 +12282,10 @@ def _extract_json_value(text: str) -> Any:
         try:
             parsed = json.loads(candidate)
         except json.JSONDecodeError:
-            continue
+            try:
+                parsed = ast.literal_eval(candidate)
+            except Exception:
+                continue
         if isinstance(parsed, (dict, list)):
             return parsed
     return None
