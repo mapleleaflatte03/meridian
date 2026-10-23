@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+import collections
 import subprocess
 import threading
 from abc import ABC, abstractmethod
@@ -123,7 +124,9 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
+
+        # ⚡ Bolt: Use a bounded deque to avoid loading the entire file into memory before slicing
+        entries: collections.deque[dict[str, Any]] | list[dict[str, Any]] = collections.deque(maxlen=tail) if (tail is not None and tail > 0) else []
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -133,9 +136,7 @@ class JsonFileBackend(StorageBackend):
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
-        return entries
+        return list(entries)
 
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
