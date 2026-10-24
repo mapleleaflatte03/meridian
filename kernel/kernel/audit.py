@@ -18,6 +18,7 @@ import datetime
 import json
 import os
 import uuid
+from collections import deque
 
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 AUDIT_FILE = os.environ.get(
@@ -85,7 +86,7 @@ def query_events(org_id=None, agent_id=None, action=None, since=None,
     if not os.path.exists(AUDIT_FILE):
         return []
 
-    results = []
+    results = deque(maxlen=limit)
     with open(AUDIT_FILE) as f:
         for line in f:
             line = line.strip()
@@ -110,8 +111,9 @@ def query_events(org_id=None, agent_id=None, action=None, since=None,
             results.append(event)
 
     # Return most recent first, limited
-    results.reverse()
-    return results[:limit]
+    res = list(results)
+    res.reverse()
+    return res
 
 
 def tail_events(limit=20, org_id=None):
@@ -119,7 +121,7 @@ def tail_events(limit=20, org_id=None):
     if not os.path.exists(AUDIT_FILE):
         return []
 
-    events = []
+    events = deque(maxlen=limit)
     with open(AUDIT_FILE) as f:
         for line in f:
             line = line.strip()
@@ -133,7 +135,7 @@ def tail_events(limit=20, org_id=None):
                 continue
             events.append(event)
 
-    return events[-limit:]
+    return list(events)
 
 
 def tail_runtime_events(limit=20, org_id=None):
@@ -141,7 +143,7 @@ def tail_runtime_events(limit=20, org_id=None):
     if not os.path.exists(RUNTIME_AUDIT_FILE):
         return []
 
-    events = []
+    events = deque(maxlen=limit)
     with open(RUNTIME_AUDIT_FILE) as f:
         for line in f:
             line = line.strip()
@@ -155,7 +157,7 @@ def tail_runtime_events(limit=20, org_id=None):
                 continue
             events.append(event)
 
-    return events[-limit:]
+    return list(events)
 
 
 def _runtime_event_counts(events):
@@ -263,10 +265,15 @@ def stats(org_id):
     outcomes = {}
     agents = set()
     for e in events:
-        actions[e['action']] = actions.get(e['action'], 0) + 1
-        outcomes[e['outcome']] = outcomes.get(e['outcome'], 0) + 1
-        if e.get('agent_id'):
-            agents.add(e['agent_id'])
+        action = e['action']
+        actions[action] = actions.get(action, 0) + 1
+
+        outcome = e['outcome']
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+
+        agent_id = e.get('agent_id')
+        if agent_id:
+            agents.add(agent_id)
 
     return {
         'org_id': org_id,
