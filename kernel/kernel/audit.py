@@ -18,6 +18,7 @@ import datetime
 import json
 import os
 import uuid
+import collections
 
 PLATFORM_DIR = os.path.dirname(os.path.abspath(__file__))
 AUDIT_FILE = os.environ.get(
@@ -85,7 +86,10 @@ def query_events(org_id=None, agent_id=None, action=None, since=None,
     if not os.path.exists(AUDIT_FILE):
         return []
 
-    results = []
+    # Using deque to bound memory when a limit is provided, avoiding memory spikes
+    # for large audit logs. We keep the maxlen bound on the accumulated *filtered* data.
+    results = collections.deque(maxlen=limit) if limit is not None else []
+
     with open(AUDIT_FILE) as f:
         for line in f:
             line = line.strip()
@@ -110,8 +114,9 @@ def query_events(org_id=None, agent_id=None, action=None, since=None,
             results.append(event)
 
     # Return most recent first, limited
-    results.reverse()
-    return results[:limit]
+    results_list = list(results)
+    results_list.reverse()
+    return results_list
 
 
 def tail_events(limit=20, org_id=None):
@@ -119,7 +124,7 @@ def tail_events(limit=20, org_id=None):
     if not os.path.exists(AUDIT_FILE):
         return []
 
-    events = []
+    events = collections.deque(maxlen=limit)
     with open(AUDIT_FILE) as f:
         for line in f:
             line = line.strip()
@@ -133,7 +138,7 @@ def tail_events(limit=20, org_id=None):
                 continue
             events.append(event)
 
-    return events[-limit:]
+    return list(events)
 
 
 def tail_runtime_events(limit=20, org_id=None):
@@ -141,7 +146,7 @@ def tail_runtime_events(limit=20, org_id=None):
     if not os.path.exists(RUNTIME_AUDIT_FILE):
         return []
 
-    events = []
+    events = collections.deque(maxlen=limit)
     with open(RUNTIME_AUDIT_FILE) as f:
         for line in f:
             line = line.strip()
@@ -155,7 +160,7 @@ def tail_runtime_events(limit=20, org_id=None):
                 continue
             events.append(event)
 
-    return events[-limit:]
+    return list(events)
 
 
 def _runtime_event_counts(events):
