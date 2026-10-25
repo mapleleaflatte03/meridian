@@ -1,0 +1,4 @@
+## 2024-05-30 - Fix Path Traversal Vulnerability in Gateway
+**Vulnerability:** A path traversal vulnerability existed in `intelligence/meridian_gateway.py` where a request to `/assets/../../www_evil/secret.txt` would incorrectly pass path validation.
+**Learning:** This occurred because the validation logic used string prefix matching: `str(asset_path).startswith(str(assets_root))`. This is insecure because a malicious path like `/tmp/company/www_evil/secret.txt` starts with the prefix `/tmp/company/www`, completely bypassing the boundary check despite pointing to a sibling directory.
+**Prevention:** Always use structural path validation rather than string manipulation. In Python, use `asset_path.is_relative_to(assets_root)` which correctly checks if the resolved target path lies within the intended directory hierarchy.
