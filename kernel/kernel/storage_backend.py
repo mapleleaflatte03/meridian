@@ -123,19 +123,24 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
+
+        import collections
+        if tail is not None and tail > 0:
+            entries: collections.deque | list = collections.deque(maxlen=tail)
+        else:
+            entries = []
+
         with open(path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 try:
+                    # Optimized: O(tail) memory usage instead of O(N) by using deque
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
-        return entries
+        return list(entries)
 
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
