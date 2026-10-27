@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import collections
 import json
 import os
 import sqlite3
@@ -123,19 +124,17 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
+        entries_deque: collections.deque[dict[str, Any]] = collections.deque(maxlen=tail if tail is not None and tail > 0 else None)
         with open(path) as f:
             for line in f:
                 line = line.strip()
                 if not line:
                     continue
                 try:
-                    entries.append(json.loads(line))
+                    entries_deque.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
-        return entries
+        return list(entries_deque)
 
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
