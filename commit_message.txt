@@ -1,0 +1,4 @@
+Fix intelligence/scripts/acceptance_publish_live_lane.sh User-Agent
+
+The script failed in CI with an HTTP 403 Forbidden because it used the default urllib User-Agent, which is blocked by Cloudflare.
+Added a custom User-Agent to the urllib.request.Request calls to bypass the 403 error, as detailed in the instructions.
