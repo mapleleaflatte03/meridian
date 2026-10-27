@@ -499,6 +499,11 @@ li { padding: 0.2rem 0; }
   text-decoration: none; font-weight: 700; font-size: 1rem;
   transition: background var(--ease-fast), border-color var(--ease-fast), box-shadow var(--ease-soft), transform var(--ease-fast);
 }
+.cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .cta-primary { background: var(--accent); color: #000; }
 .cta-primary:hover { background: #33DDFF; box-shadow: 0 0 24px rgba(0,212,255,0.3); transform: translateY(-1px); }
 .cta-glow { box-shadow: 0 0 20px rgba(0,212,255,0.25); }
@@ -1807,6 +1812,12 @@ h3 { font-family: var(--display); color: #fff; font-size: 1rem; margin: 1.1rem 0
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+}
+
+.operator-action:disabled,
+.operator-link:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .operator-action,
