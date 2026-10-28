@@ -24,6 +24,7 @@ import subprocess
 import threading
 from abc import ABC, abstractmethod
 from typing import Any
+from collections import deque
 
 
 class StorageBackend(ABC):
@@ -123,7 +124,11 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
+
+        # Optimize memory usage for tail reads by using deque to keep only the last N elements
+        # This prevents loading the entire log file into memory before slicing
+        entries: list[dict[str, Any]] | deque[dict[str, Any]] = [] if tail is None or tail <= 0 else deque(maxlen=tail)
+
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -133,9 +138,8 @@ class JsonFileBackend(StorageBackend):
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
-        return entries
+
+        return list(entries) if tail is not None and tail > 0 else entries
 
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
