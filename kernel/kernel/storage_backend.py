@@ -123,19 +123,34 @@ class JsonFileBackend(StorageBackend):
         path = self._path(key)
         if not os.path.exists(path):
             return []
-        entries: list[dict[str, Any]] = []
-        with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
+
+        if tail is not None and tail > 0:
+            import collections
+            lines = collections.deque(maxlen=tail)
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        lines.append(line)
+            entries: list[dict[str, Any]] = []
+            for line in lines:
                 try:
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
-                    continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
-        return entries
+                    pass
+            return entries
+        else:
+            entries = []
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+            return entries
 
     def exists(self, key: str) -> bool:
         return os.path.exists(self._path(key))
