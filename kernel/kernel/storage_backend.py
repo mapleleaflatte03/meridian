@@ -120,10 +120,29 @@ class JsonFileBackend(StorageBackend):
             os.fsync(f.fileno())
 
     def read_log(self, key: str, tail: int | None = None) -> list[dict[str, Any]]:
+        import collections
         path = self._path(key)
         if not os.path.exists(path):
             return []
+
         entries: list[dict[str, Any]] = []
+
+        if tail is not None and tail > 0:
+            raw_lines = collections.deque(maxlen=tail)
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    raw_lines.append(line)
+
+            for line in raw_lines:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            return entries
+
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -133,8 +152,7 @@ class JsonFileBackend(StorageBackend):
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
+
         return entries
 
     def exists(self, key: str) -> bool:
