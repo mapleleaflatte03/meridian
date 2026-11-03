@@ -223,13 +223,12 @@ def _contract_digest(snapshot):
 
 
 def _find_free_port():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
+    import socket
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(('127.0.0.1', 0))
-        sock.listen(1)
-        return sock.getsockname()[1]
-    finally:
-        sock.close()
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        port = sock.getsockname()[1]
+    return port
 
 
 def _auth_header(user, password):
