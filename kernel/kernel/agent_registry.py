@@ -396,20 +396,25 @@ def sync_from_economy(org_id=None):
     data = load_registry()
     synced = 0
 
+    # Optimization: pre-compute a map of lowercased names to ledger agents for O(1) lookups
+    ledger_agents = ledger.get('agents', {})
+    ledger_agents_by_name = {
+        la.get('name', '').lower(): la
+        for la in ledger_agents.values()
+        if la.get('name')
+    }
+
     for agent in data['agents'].values():
         if org_id is not None and agent.get('org_id') != org_id:
             continue
         # Match by economy_key first, then by name
         ledger_agent = None
         ekey = agent.get('economy_key')
-        if ekey and ekey in ledger.get('agents', {}):
-            ledger_agent = ledger['agents'][ekey]
+        if ekey and ekey in ledger_agents:
+            ledger_agent = ledger_agents[ekey]
         else:
             agent_name = agent['name'].lower()
-            for lk, la in ledger.get('agents', {}).items():
-                if la.get('name', '').lower() == agent_name:
-                    ledger_agent = la
-                    break
+            ledger_agent = ledger_agents_by_name.get(agent_name)
 
         if ledger_agent:
             agent['reputation_units'] = ledger_agent.get('reputation_units', agent['reputation_units'])
