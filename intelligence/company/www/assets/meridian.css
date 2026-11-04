@@ -487,6 +487,16 @@ li { padding: 0.2rem 0; }
   animation: scanLine 8s linear infinite;
 }
 
+/* ── Disabled states ── */
+button:disabled,
+input:disabled,
+.cta:disabled,
+.operator-action:disabled,
+[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ── CTA buttons ── */
 .cta-group { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; margin-bottom: 1rem; }
 .cta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
