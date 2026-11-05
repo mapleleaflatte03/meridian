@@ -1,0 +1,3 @@
+## 2025-01-28 - Optimization: Deferring expensive operations in file tailing
+**Learning:** In Python, iterating over lines in a file and unconditionally parsing every line (e.g., `json.loads`) before applying a slice (like `entries[-tail:]`) wastes CPU cycles and memory on large log files. When appending entries dynamically over time, the `tail` logic is heavily utilized.
+**Action:** Use `collections.deque(maxlen=tail)` to first filter and collect raw lines, discarding the unwanted prefix *before* performing expensive parsing operations on only the remaining lines. This ensures we only pay the cost of `json.loads` for exactly `tail` lines.
