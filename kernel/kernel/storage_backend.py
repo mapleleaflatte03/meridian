@@ -23,6 +23,7 @@ import sqlite3
 import subprocess
 import threading
 from abc import ABC, abstractmethod
+from collections import deque
 from typing import Any
 
 
@@ -124,6 +125,25 @@ class JsonFileBackend(StorageBackend):
         if not os.path.exists(path):
             return []
         entries: list[dict[str, Any]] = []
+
+        # Optimization: When tailing a large log, avoid loading the entire file into memory.
+        # Use a deque to efficiently collect only the last N raw strings, deferring the
+        # expensive json.loads() operation until *after* the unwanted lines are discarded.
+        if tail is not None and tail > 0:
+            raw_lines = deque(maxlen=tail)
+            with open(path) as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    raw_lines.append(line)
+            for line in raw_lines:
+                try:
+                    entries.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+            return entries
+
         with open(path) as f:
             for line in f:
                 line = line.strip()
@@ -133,8 +153,6 @@ class JsonFileBackend(StorageBackend):
                     entries.append(json.loads(line))
                 except json.JSONDecodeError:
                     continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
         return entries
 
     def exists(self, key: str) -> bool:
