@@ -15,6 +15,7 @@ Usage:
 """
 import argparse
 import datetime
+import collections
 import json
 import os
 import uuid
@@ -119,21 +120,35 @@ def tail_events(limit=20, org_id=None):
     if not os.path.exists(AUDIT_FILE):
         return []
 
-    events = []
-    with open(AUDIT_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
+    events = collections.deque(maxlen=limit)
+    if org_id:
+        with open(AUDIT_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get('org_id') != org_id:
+                    continue
+                events.append(event)
+    else:
+        raw_lines = collections.deque(maxlen=limit)
+        with open(AUDIT_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                raw_lines.append(line)
+        for line in raw_lines:
             try:
-                event = json.loads(line)
+                events.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-            if org_id and event.get('org_id') != org_id:
-                continue
-            events.append(event)
 
-    return events[-limit:]
+    return list(events)
 
 
 def tail_runtime_events(limit=20, org_id=None):
@@ -141,21 +156,35 @@ def tail_runtime_events(limit=20, org_id=None):
     if not os.path.exists(RUNTIME_AUDIT_FILE):
         return []
 
-    events = []
-    with open(RUNTIME_AUDIT_FILE) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
+    events = collections.deque(maxlen=limit)
+    if org_id:
+        with open(RUNTIME_AUDIT_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if event.get('org_id') != org_id:
+                    continue
+                events.append(event)
+    else:
+        raw_lines = collections.deque(maxlen=limit)
+        with open(RUNTIME_AUDIT_FILE) as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                raw_lines.append(line)
+        for line in raw_lines:
             try:
-                event = json.loads(line)
+                events.append(json.loads(line))
             except json.JSONDecodeError:
                 continue
-            if org_id and event.get('org_id') != org_id:
-                continue
-            events.append(event)
 
-    return events[-limit:]
+    return list(events)
 
 
 def _runtime_event_counts(events):
