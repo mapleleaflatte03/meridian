@@ -17,6 +17,7 @@ Usage:
 
 from __future__ import annotations
 
+import collections
 import json
 import os
 import sqlite3
@@ -125,16 +126,30 @@ class JsonFileBackend(StorageBackend):
             return []
         entries: list[dict[str, Any]] = []
         with open(path) as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    entries.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-        if tail is not None and tail > 0:
-            entries = entries[-tail:]
+            if tail is not None and tail > 0:
+                # OPTIMIZATION: Defer json.loads until after tail slicing.
+                # Uses deque to keep only the last N raw strings in memory.
+                # Expected Impact: Reduces memory usage from O(N) to O(tail)
+                # and parsing CPU time from O(N) to O(tail) for large log files.
+                raw_lines = collections.deque(maxlen=tail)
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        raw_lines.append(line)
+                for line in raw_lines:
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+            else:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        entries.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
         return entries
 
     def exists(self, key: str) -> bool:
